@@ -1,0 +1,48 @@
+{
+  "name": "xuefu",
+  "version": "0.0.0",
+  "description": "血符 XueFu: a terminal developer cockpit",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "xuefu": "src/main.ts"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "scripts": {
+    "prepare": "lefthook install",
+    "start": "bun src/main.ts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "deadcode": "knip",
+    "test": "bun test ./tests",
+    "test:unit": "bun test ./tests/unit",
+    "test:integration": "bun test ./tests/integration",
+    "test:contract": "bun test ./tests/contract --pass-with-no-tests",
+    "test:e2e": "bun test ./tests/e2e",
+    "test:arch": "bun test ./tests/architecture",
+    "test:coverage": "bun test ./tests/unit ./tests/integration ./tests/architecture --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "build": "bun scripts/build.ts",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:contract && bun run test:e2e"
+  },
+  "dependencies": {
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
+    "@commitlint/types": "21.2.3",
+    "@types/bun": "1.4.2",
+    "fast-check": "4.10.2",
+    "knip": "6.39.0",
+    "lefthook": "2.1.17",
+    "typescript": "7.0.2"
+  }
+}

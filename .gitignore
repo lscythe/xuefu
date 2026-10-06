@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+# local runtime state created by manual runs
+.xuefu-local/

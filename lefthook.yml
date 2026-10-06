@@ -1,0 +1,20 @@
+# Git hooks. Install with `bun install` (runs `lefthook install` via prepare).
+pre-commit:
+  parallel: true
+  jobs:
+    - name: biome
+      glob: "*.{ts,tsx,js,json,jsonc}"
+      run: bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+    - name: typecheck
+      glob: "*.{ts,tsx}"
+      run: bun run typecheck
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: bunx commitlint --edit {1}
+
+pre-push:
+  jobs:
+    - name: quality-gate
+      run: bun run check

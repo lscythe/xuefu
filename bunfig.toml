@@ -1,0 +1,7 @@
+[install]
+exact = true
+
+[test]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["tests/**", "scripts/**"]
+coverageThreshold = { lines = 0.9, functions = 0.9 }
