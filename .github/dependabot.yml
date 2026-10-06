@@ -1,18 +1,8 @@
 version: 2
+# Bun dependencies are not listed: Dependabot rejects bun.lock lockfileVersion 2
+# (written by Bun 1.4) and fails every run. Re-add the bun ecosystem once it is
+# supported; until then update with `bun update` and review the lockfile diff.
 updates:
-  - package-ecosystem: bun
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: build
-      include: scope
-    groups:
-      tooling:
-        dependency-type: development
-    labels: [dependencies]
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
