@@ -6,6 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/lscythe/xuefu/main/package.json&query=%24.devDependencies.typescript&label=typescript&logo=typescript&color=7bdff2&labelColor=14141c&logoColor=e8e3d9)](https://www.typescriptlang.org)
 [![Conventional Commits](https://img.shields.io/badge/conventional%20commits-1.0.0-b14aed?logo=conventionalcommits&labelColor=14141c&logoColor=e8e3d9)](https://www.conventionalcommits.org)
 [![Biome](https://img.shields.io/badge/code%20style-biome-a6f0ff?logo=biome&labelColor=14141c&logoColor=e8e3d9)](https://biomejs.dev)
+[![License](https://img.shields.io/github/license/lscythe/xuefu?color=c1121f&labelColor=14141c)](LICENSE)
 
 A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooling and timesheets
 around a single **Work Context**.
@@ -46,3 +47,7 @@ releases are cut by release-please.
 | Logs     | `~/.local/share/xuefu/logs/`    | (follows data dir) |
 
 Secrets are never stored in config files. Reference them via environment variables or the OS keychain.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.

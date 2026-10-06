@@ -4,7 +4,7 @@
   "description": "血符 XueFu: a terminal developer cockpit",
   "private": true,
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "bin": {
     "xuefu": "src/main.ts"
   },
