@@ -6,6 +6,7 @@ process.exitCode = await runCli({
   argv: Bun.argv.slice(2),
   env: process.env,
   home: homedir(),
+  cwd: process.cwd(),
   version: pkg.version,
   stdout: process.stdout,
   stderr: process.stderr,

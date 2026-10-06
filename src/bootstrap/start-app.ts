@@ -5,17 +5,26 @@ import { EventBus } from "../application/events/event-bus";
 import type { Logger } from "../application/ports/logger";
 import type { Redactor } from "../application/security/redaction";
 import {
+  registerWorkspaceCommands,
+  type WorkspaceCommands,
+  workspaceCommands,
+} from "../application/workspace/commands";
+import { WorkspaceQueries } from "../application/workspace/queries";
+import {
   type ConfigurationError,
   type FileSystemError,
   fileSystemError,
   type MigrationError,
   type StorageError,
+  type UnexpectedError,
+  unexpected,
 } from "../domain/shared/errors";
 import { err, fromThrowable, ok, type Result } from "../domain/shared/result";
 import { type ConfigSource, loadConfig } from "../infrastructure/config/load-config";
 import { resolvePaths, type XueFuPaths } from "../infrastructure/config/paths";
 import { readConfigFile } from "../infrastructure/config/read-config-file";
 import type { GlobalConfig } from "../infrastructure/config/schema";
+import { fsWorkspaceProbe } from "../infrastructure/filesystem/workspace-probe";
 import { JsonLinesFileSink } from "../infrastructure/logging/file-sink";
 import { createLogger } from "../infrastructure/logging/logger";
 import { MIGRATIONS } from "../infrastructure/persistence/migrations/catalog";
@@ -23,10 +32,16 @@ import { type MigrationReport, migrate } from "../infrastructure/persistence/mig
 import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
+import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
 
-export type BootError = ConfigurationError | FileSystemError | StorageError | MigrationError;
+export type BootError =
+  | ConfigurationError
+  | FileSystemError
+  | StorageError
+  | MigrationError
+  | UnexpectedError;
 
 export interface StartOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -49,6 +64,8 @@ export interface App {
   readonly eventBus: EventBus;
   readonly unitOfWork: SqliteUnitOfWork;
   readonly ledger: SqliteEventLedger;
+  readonly workspaceCommands: WorkspaceCommands;
+  readonly workspaces: WorkspaceQueries;
   close(): void;
 }
 
@@ -119,6 +136,19 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
   const unitOfWork = new SqliteUnitOfWork(database, ledger, eventBus);
   const commandBus = new CommandBus({ logger, clock: systemClock, ids: uuidV7Ids });
 
+  const workspaceRepository = new SqliteWorkspaceRepository(database);
+  const workspaces = workspaceCommands({
+    repository: workspaceRepository,
+    probe: fsWorkspaceProbe,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
+  const registered = registerWorkspaceCommands(commandBus, workspaces);
+  if (!registered.ok) {
+    database.close();
+    return err(unexpected("Command registration failed", new Error(registered.error.message)));
+  }
+
   logger.info("XueFu started", {
     version: options.version,
     pid: process.pid,
@@ -138,6 +168,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     eventBus,
     unitOfWork,
     ledger,
+    workspaceCommands: workspaces,
+    workspaces: new WorkspaceQueries(workspaceRepository, fsWorkspaceProbe),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();
