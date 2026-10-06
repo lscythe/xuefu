@@ -1,7 +1,11 @@
+# Compiles Solid JSX for OpenTUI when running sources and tests.
+preload = ["@opentui/solid/preload"]
+
 [install]
 exact = true
 
 [test]
+preload = ["@opentui/solid/preload"]
 coverageSkipTestFiles = true
 coveragePathIgnorePatterns = ["tests/**", "scripts/**"]
 coverageThreshold = { lines = 0.9, functions = 0.9 }

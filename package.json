@@ -32,6 +32,9 @@
     "check": "bun run format:check && bun run lint && bun run lint:workflows && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:contract && bun run test:e2e"
   },
   "dependencies": {
+    "@opentui/core": "0.5.14",
+    "@opentui/solid": "0.5.14",
+    "solid-js": "1.9.12",
     "yaml": "2.9.1",
     "zod": "4.6.5"
   },

@@ -4,6 +4,8 @@
     "module": "Preserve",
     "moduleResolution": "bundler",
     "lib": ["ESNext"],
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
     "types": ["bun"],
     "noEmit": true,
     "allowImportingTsExtensions": true,
