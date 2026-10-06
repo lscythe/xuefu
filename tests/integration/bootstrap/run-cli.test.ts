@@ -318,7 +318,7 @@ describe("runCli: workspaces", () => {
     expect(JSON.parse((await run(["workspace", "list", "--json"])).stdout)).toEqual([]);
   });
 
-  test("the cockpit names the workspace it was opened in", async () => {
+  test("the cockpit names the workspace it was opened in and lists it in the switcher", async () => {
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
     const nested = join(mobile, "app");
     mkdirSync(nested);
@@ -326,6 +326,12 @@ describe("runCli: workspaces", () => {
     const running = run([], {}, nested, terminal.host);
     const screen = await terminal.screen;
     expect(await screen.waitForFrame((f) => f.includes("XUEFU"))).toContain("Mobile Banking");
+    screen.mockInput.pressKey("w", { ctrl: true });
+    const switcher = await screen.waitForFrame((f) => f.includes("1 of 1"));
+    expect(switcher).toContain("● current");
+    screen.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await screen.waitForFrame((f) => !f.includes("Switch workspace"));
     screen.mockInput.pressKey("q");
     expect((await running).code).toBe(EXIT.ok);
   });

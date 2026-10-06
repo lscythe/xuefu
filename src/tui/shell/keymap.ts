@@ -1,6 +1,14 @@
 import type { IconSet } from "../theme/status";
 
-export type ShellAction = "nav.previous" | "nav.next" | "nav.first" | "nav.last" | "quit";
+export type ShellAction =
+  | "nav.previous"
+  | "nav.next"
+  | "nav.first"
+  | "nav.last"
+  | "switcher.open"
+  | "quit"
+  /** Ctrl+C: quits from anywhere, including while an overlay owns the keyboard. */
+  | "interrupt";
 
 /** The parts of a terminal key event the shell cares about; OpenTUI's KeyEvent satisfies it. */
 export interface KeyPress {
@@ -21,7 +29,9 @@ const BINDINGS: Readonly<Record<ShellAction, readonly string[]>> = {
   "nav.next": ["down", "j"],
   "nav.first": ["home"],
   "nav.last": ["end"],
-  quit: ["q", "ctrl+c"],
+  "switcher.open": ["ctrl+w"],
+  quit: ["q"],
+  interrupt: ["ctrl+c"],
 };
 
 function chordOf(key: KeyPress): string {
@@ -42,6 +52,7 @@ export function actionFor(key: KeyPress): ShellAction | null {
 export function keyHints(icons: IconSet): readonly KeyHint[] {
   return [
     { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
+    { keys: "^W", label: "workspaces" },
     { keys: "q", label: "quit" },
   ];
 }

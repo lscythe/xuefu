@@ -18,7 +18,8 @@ describe("actionFor", () => {
     [press("home"), "nav.first"],
     [press("end"), "nav.last"],
     [press("q"), "quit"],
-    [press("c", { ctrl: true }), "quit"],
+    [press("c", { ctrl: true }), "interrupt"],
+    [press("w", { ctrl: true }), "switcher.open"],
   ] as const)("%o → %s", (key, action) => {
     expect(actionFor(key)).toBe(action);
   });
@@ -38,6 +39,7 @@ describe("keyHints", () => {
   test("every hint names a bound action", () => {
     expect(keyHints("unicode")).toEqual([
       { keys: "↑↓", label: "navigate" },
+      { keys: "^W", label: "workspaces" },
       { keys: "q", label: "quit" },
     ]);
   });
