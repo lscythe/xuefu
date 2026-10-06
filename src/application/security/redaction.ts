@@ -46,7 +46,7 @@ const SENSITIVE_KEYS = new Set([
   "credentials",
   "sessionid",
   "jsessionid",
-  "pwd",
+  // Not "pwd": $PWD is the working directory, and redacting it hides every path.
   "passwd",
 ]);
 

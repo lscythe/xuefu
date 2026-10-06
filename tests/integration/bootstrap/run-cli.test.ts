@@ -113,6 +113,12 @@ describe("runCli", () => {
 });
 
 describe("registerEnvironmentSecrets", () => {
+  test("regression: PWD and OLDPWD are working directories, not passwords", () => {
+    const registry = new SecretRegistry();
+    registerEnvironmentSecrets({ PWD: "/Users/dev/project", OLDPWD: "/Users/dev" }, registry);
+    expect(registry.values()).toEqual([]);
+  });
+
   test("registers values of credential-named variables for masking", () => {
     const registry = new SecretRegistry();
     const count = registerEnvironmentSecrets(

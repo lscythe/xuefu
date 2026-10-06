@@ -114,6 +114,13 @@ describe("redactValue: structures", () => {
     expect(out["at"]).toBe("1970-01-01T00:00:00.000Z");
   });
 
+  test("regression: PWD-style keys are not treated as credentials", () => {
+    expect(redactor().redactValue({ PWD: "/Users/dev", cwd: "/tmp" })).toEqual({
+      PWD: "/Users/dev",
+      cwd: "/tmp",
+    });
+  });
+
   test("redacts sensitive keys whose values are objects", () => {
     expect(redactor().redactValue({ credentials: { user: "a", pass: "b" } })).toEqual({
       credentials: REDACTED,
