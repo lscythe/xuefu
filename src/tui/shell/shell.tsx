@@ -2,13 +2,14 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
 import type { Clock } from "../../application/ports/clock";
 import { assertNever } from "../../domain/shared/assert-never";
+import { cycle } from "../list-navigation";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
 import { Nav } from "./nav";
-import { cycle, SECTIONS } from "./sections";
+import { SECTIONS } from "./sections";
 import { fitsTerminal } from "./terminal-size";
 import { TooSmall } from "./too-small";
 

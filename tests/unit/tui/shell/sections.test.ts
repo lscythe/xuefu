@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import fc from "fast-check";
-import { cycle, SECTIONS, sectionIcon } from "../../../../src/tui/shell/sections";
+import { SECTIONS, sectionIcon } from "../../../../src/tui/shell/sections";
 
 describe("SECTIONS", () => {
   test("lists the cockpit areas in navigation order, starting at the dashboard", () => {
@@ -30,28 +29,5 @@ describe("SECTIONS", () => {
     expect(sectionIcon(dashboard, "unicode")).toBe("⌂");
     expect(sectionIcon(dashboard, "nerd")).toBe("⌂");
     expect(sectionIcon(dashboard, "ascii")).toBeNull();
-  });
-});
-
-describe("cycle", () => {
-  test("wraps at both ends", () => {
-    expect(cycle(0, -1, 10)).toBe(9);
-    expect(cycle(9, 1, 10)).toBe(0);
-    expect(cycle(3, 1, 10)).toBe(4);
-  });
-
-  test("property: always lands inside the list", () => {
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 1, max: 50 }),
-        fc.nat(),
-        fc.integer({ min: -100, max: 100 }),
-        (count, start, delta) => {
-          const next = cycle(start % count, delta, count);
-          expect(next).toBeGreaterThanOrEqual(0);
-          expect(next).toBeLessThan(count);
-        },
-      ),
-    );
   });
 });
