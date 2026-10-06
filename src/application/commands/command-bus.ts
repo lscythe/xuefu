@@ -131,6 +131,21 @@ export class CommandBus {
     return result;
   }
 
+  /**
+   * Typed `dispatch` for callers holding the definition. Only the exact registered definition is
+   * accepted, which is what makes narrowing the output to `O` sound.
+   */
+  async invoke<I, O>(
+    command: CommandDefinition<I, O>,
+    rawInput: unknown,
+    options: DispatchOptions = {},
+  ): Promise<Result<O, AppError>> {
+    if (this.#commands.get(command.name) !== (command as AnyCommand)) {
+      return err(commandNotFound(command.name));
+    }
+    return (await this.dispatch(command.name, rawInput, options)) as Result<O, AppError>;
+  }
+
   private execute(
     command: AnyCommand,
     input: unknown,

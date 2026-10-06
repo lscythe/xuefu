@@ -165,6 +165,34 @@ describe("CommandBus: dispatch", () => {
   });
 });
 
+describe("CommandBus: invoke", () => {
+  test("runs a registered definition through the same pipeline with typed output", async () => {
+    const { bus } = registered(status);
+    const result = await bus.invoke(status, {});
+    if (!result.ok) throw new Error(result.error.message);
+    const flag: boolean = result.value.includeUntracked;
+    expect(flag).toBe(true);
+    expectErrorKind(await bus.invoke(status, { includeUntracked: "yes" }), "validation");
+  });
+
+  test("still enforces confirmation", async () => {
+    const { bus } = registered(forcePush);
+    const input = { remote: "origin", branch: "main" };
+    const first = expectErrorKind(await bus.invoke(forcePush, input), "confirmation-required");
+    if (first?.kind !== "confirmation-required") return;
+    const confirmed = await bus.invoke(forcePush, input, {
+      confirmation: confirmationTokenFor(first),
+    });
+    expect(confirmed).toEqual({ ok: true, value: "pushed main" });
+  });
+
+  test("a definition that is not the registered one is not found", async () => {
+    const { bus } = registered(status);
+    const impostor = defineCommand({ ...status, handler: async () => ok({ hijacked: true }) });
+    expectErrorKind(await bus.invoke(impostor, {}), "command-not-found");
+  });
+});
+
 describe("CommandBus: confirmation gate", () => {
   const input = { remote: "origin", branch: "feature/MOB-2841" };
 

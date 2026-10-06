@@ -1,6 +1,8 @@
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
 import type { Redactor } from "../application/security/redaction";
+import type { WorkspaceView } from "../application/workspace/queries";
+import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 
 export function helpText(version: string): string {
   return `血符 XueFu ${version}: terminal developer cockpit
@@ -9,14 +11,26 @@ Usage:
   xuefu [options] <command>
 
 Commands:
-  diagnostics        Show paths, configuration sources and database state
-                       --json   machine-readable output
+  diagnostics                   Show paths, configuration sources and database state
+                                  --json             machine-readable output
+  workspace [list]              List workspaces with their tools and folders
+                                  --json             machine-readable output
+  workspace add [path]          Register a folder (default: the current directory)
+                                  --name <name>      display name (default: folder name)
+                                  --id <id>          short id (default: derived from the name)
+                                  --group <group>    group shown in the switcher
+  workspace remove <id>         Stop tracking a workspace; the folder is kept
+                                  -y, --yes          confirm without asking
+  workspace group <id> <group>  Put a workspace in a group
+  workspace ungroup <id>        Take a workspace out of its group
+  workspace which [path]        Print the workspace that contains a folder
+                                  --json             machine-readable output
 
 Options:
-  -h, --help         Show this help
-  -v, --version      Print the version
-      --debug        Shorthand for --log-level debug
-      --log-level    trace | debug | info | warn | error
+  -h, --help                    Show this help
+  -v, --version                 Print the version
+      --debug                   Shorthand for --log-level debug
+      --log-level <level>       trace | debug | info | warn | error
 
 Environment:
   XUEFU_CONFIG_DIR   Config directory (default ~/.config/xuefu)
@@ -51,6 +65,72 @@ export function formatDiagnostics(report: DiagnosticsReport): string {
     row("Telemetry", config.telemetry ? "enabled" : "disabled"),
   ];
   return `${lines.join("\n")}\n`;
+}
+
+// East Asian wide and fullwidth ranges: these characters take two terminal columns.
+const WIDE =
+  /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}]/u;
+
+function displayWidth(value: string): number {
+  let width = 0;
+  for (const char of value) width += WIDE.test(char) ? 2 : 1;
+  return width;
+}
+
+function table(rows: readonly (readonly string[])[]): string {
+  const widths: number[] = [];
+  for (const row of rows) {
+    row.forEach((cell, i) => {
+      widths[i] = Math.max(widths[i] ?? 0, displayWidth(cell));
+    });
+  }
+  const lines = rows.map((row) =>
+    row
+      .map((cell, i) =>
+        i === row.length - 1 ? cell : cell + " ".repeat((widths[i] ?? 0) - displayWidth(cell) + 2),
+      )
+      .join(""),
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+function tools(view: WorkspaceView): string {
+  if (view.status === "missing") return "missing";
+  const found = [view.capabilities.git ? "git" : null, view.capabilities.gradle ? "gradle" : null];
+  const names = found.filter((name) => name !== null);
+  return names.length === 0 ? "-" : names.join(" ");
+}
+
+export function formatWorkspaceList(views: readonly WorkspaceView[]): string {
+  if (views.length === 0) {
+    return "No workspaces yet. Add one with: xuefu workspace add [path]\n";
+  }
+  return table([
+    ["ID", "NAME", "GROUP", "TOOLS", "PATH"],
+    ...views.map((view) => [
+      view.workspace.id,
+      view.workspace.name,
+      view.workspace.group ?? "-",
+      tools(view),
+      view.workspace.path,
+    ]),
+  ]);
+}
+
+/** A confirmation the CLI cannot ask interactively, with how to approve it. */
+export function formatConfirmation(prompt: ConfirmationPrompt, howToConfirm: string): string {
+  const width = Math.max(...prompt.details.map((d) => displayWidth(d.label)));
+  const details = prompt.details.map(
+    (d) => `  ${d.label}${" ".repeat(width - displayWidth(d.label))}  ${d.value}`,
+  );
+  return [
+    `? ${prompt.title}`,
+    ...details,
+    "",
+    `  ${prompt.consequence}`,
+    `  ${howToConfirm}`,
+    "",
+  ].join("\n");
 }
 
 function issueLines(error: AppError): string[] {

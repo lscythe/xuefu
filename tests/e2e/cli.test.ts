@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
+import { MIGRATIONS } from "../../src/infrastructure/persistence/migrations/catalog";
 import { makeTempDir } from "../support/temp-dir";
 
 const ENTRY = join(import.meta.dir, "..", "..", "src", "main.ts");
@@ -12,8 +13,9 @@ beforeEach(() => {
 });
 afterEach(() => dir.cleanup());
 
-async function xuefu(...args: string[]) {
+async function xuefuIn(cwd: string, ...args: string[]) {
   const proc = Bun.spawn([process.execPath, ENTRY, ...args], {
+    cwd,
     env: {
       PATH: process.env["PATH"] ?? "",
       HOME: dir.path,
@@ -31,6 +33,8 @@ async function xuefu(...args: string[]) {
   return { code, stdout, stderr };
 }
 
+const xuefu = (...args: string[]) => xuefuIn(dir.path, ...args);
+
 describe("xuefu entrypoint", () => {
   test("prints the package version", async () => {
     const result = await xuefu("--version");
@@ -40,11 +44,24 @@ describe("xuefu entrypoint", () => {
   test("diagnostics works against isolated directories", async () => {
     const result = await xuefu("diagnostics", "--json");
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).database.schemaVersion).toBe(1);
+    expect(JSON.parse(result.stdout).database.schemaVersion).toBe(MIGRATIONS.length);
     expect(existsSync(join(dir.path, "data", "xuefu.db"))).toBe(true);
   });
 
   test("usage errors exit with 64", async () => {
     expect((await xuefu("--definitely-not-a-flag")).code).toBe(64);
+  });
+
+  test("registers the current folder as a workspace and finds it from a subfolder", async () => {
+    const project = join(realpathSync(dir.path), "mobile-banking");
+    mkdirSync(join(project, ".git", "refs"), { recursive: true });
+    expect((await xuefuIn(project, "workspace", "add", "--name", "Mobile Banking")).code).toBe(0);
+    expect(await xuefuIn(join(project, ".git", "refs"), "workspace", "which")).toEqual({
+      code: 0,
+      stdout: "mobile-banking\n",
+      stderr: "",
+    });
+    const listed = JSON.parse((await xuefu("workspace", "list", "--json")).stdout);
+    expect(listed).toMatchObject([{ id: "mobile-banking", capabilities: { git: true } }]);
   });
 });

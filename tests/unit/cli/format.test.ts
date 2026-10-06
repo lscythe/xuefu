@@ -1,8 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import type { DiagnosticsReport } from "../../../src/application/diagnostics";
 import { createRedactor, SecretRegistry } from "../../../src/application/security/redaction";
-import { formatDiagnostics, formatError, helpText } from "../../../src/cli/format";
+import type { WorkspaceView } from "../../../src/application/workspace/queries";
+import {
+  formatConfirmation,
+  formatDiagnostics,
+  formatError,
+  formatWorkspaceList,
+  helpText,
+} from "../../../src/cli/format";
 import { configurationError, unexpected } from "../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../src/domain/shared/path";
+import type { Timestamp } from "../../../src/domain/shared/time";
+import type { GroupName, WorkspaceName } from "../../../src/domain/workspace/workspace";
 
 const report: DiagnosticsReport = {
   version: "0.1.0",
@@ -85,8 +96,95 @@ describe("helpText", () => {
       "--debug",
       "--log-level",
       "--version",
+      "workspace add [path]",
+      "workspace remove <id>",
+      "workspace which [path]",
     ]) {
       expect(text).toContain(fragment);
     }
+  });
+});
+
+function view(
+  id: string,
+  name: string,
+  path: string,
+  options: Partial<Pick<WorkspaceView, "status" | "capabilities">> & { group?: string } = {},
+): WorkspaceView {
+  return {
+    workspace: {
+      id: id as WorkspaceId,
+      name: name as WorkspaceName,
+      path: path as AbsolutePath,
+      group: (options.group ?? null) as GroupName | null,
+      addedAt: 0 as Timestamp,
+    },
+    status: options.status ?? "ready",
+    capabilities: options.capabilities ?? { git: false, gradle: false },
+  };
+}
+
+describe("formatWorkspaceList", () => {
+  test("renders an aligned table with tools, groups and missing folders", () => {
+    const text = formatWorkspaceList([
+      view("mobile-banking", "Mobile Banking", "/work/mobile", {
+        group: "Client",
+        capabilities: { git: true, gradle: true },
+      }),
+      view("api", "API", "/work/api", { capabilities: { git: true, gradle: false } }),
+      view("old", "Old", "/gone", { status: "missing" }),
+    ]);
+    expect(text).toBe(
+      [
+        "ID              NAME            GROUP   TOOLS       PATH",
+        "mobile-banking  Mobile Banking  Client  git gradle  /work/mobile",
+        "api             API             -       git         /work/api",
+        "old             Old             -       missing     /gone",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("aligns names written in wide characters", () => {
+    const lines = formatWorkspaceList([
+      view("xuefu", "血符", "/a"),
+      view("ab", "abcd", "/b"),
+    ]).split("\n");
+    // 血符 occupies four terminal columns, the same as "abcd".
+    expect(lines[1]).toBe("xuefu  血符  -      -      /a");
+    expect(lines[2]).toBe("ab     abcd  -      -      /b");
+  });
+
+  test("explains how to add the first workspace", () => {
+    expect(formatWorkspaceList([])).toContain("xuefu workspace add");
+  });
+});
+
+describe("formatConfirmation", () => {
+  test("shows the prompt details, consequence and how to confirm", () => {
+    const text = formatConfirmation(
+      {
+        title: "Remove workspace",
+        severity: "confirm",
+        details: [
+          { label: "Workspace", value: "Mobile (mobile)" },
+          { label: "Folder", value: "/work/mobile" },
+        ],
+        consequence: "The folder is not deleted.",
+        confirmLabel: "Remove",
+      },
+      "Re-run with --yes to confirm.",
+    );
+    expect(text).toBe(
+      [
+        "? Remove workspace",
+        "  Workspace  Mobile (mobile)",
+        "  Folder     /work/mobile",
+        "",
+        "  The folder is not deleted.",
+        "  Re-run with --yes to confirm.",
+        "",
+      ].join("\n"),
+    );
   });
 });
