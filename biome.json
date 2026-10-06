@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/coverage", "!CHANGELOG.md"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!CHANGELOG.md",
+      "!.release-please-manifest.json"
+    ]
   },
   "formatter": {
     "enabled": true,
