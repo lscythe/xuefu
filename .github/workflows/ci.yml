@@ -43,6 +43,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Lint workflows
+        run: bun run lint:workflows
+
       - name: Typecheck
         run: bun run typecheck
 

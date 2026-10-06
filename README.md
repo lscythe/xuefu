@@ -24,6 +24,7 @@ bun run start -- --help
 | `bun run test:arch`     | layer-boundary and import-cycle enforcement     |
 | `bun run test:e2e`      | spawns the real entrypoint against temp dirs    |
 | `bun run lint:fix`      | Biome lint + format with autofix                |
+| `bun run lint:workflows` | actionlint (with shellcheck) on GitHub workflows |
 | `bun run build`         | compile a standalone binary into `dist/`        |
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org) (enforced by commitlint);

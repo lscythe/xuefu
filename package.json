@@ -17,6 +17,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "lint:workflows": "mise exec -- actionlint",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "deadcode": "knip",
@@ -28,7 +29,7 @@
     "test:arch": "bun test ./tests/architecture",
     "test:coverage": "bun test ./tests/unit ./tests/integration ./tests/architecture --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "build": "bun scripts/build.ts",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:contract && bun run test:e2e"
+    "check": "bun run format:check && bun run lint && bun run lint:workflows && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:contract && bun run test:e2e"
   },
   "dependencies": {
     "yaml": "2.9.1",
