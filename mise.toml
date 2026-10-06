@@ -1,0 +1,6 @@
+# Toolchain for local development and CI (jdx/mise-action reads this file).
+# Run `mise install` once, then `bun install`.
+[tools]
+bun = "1.4.2"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"

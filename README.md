@@ -7,9 +7,11 @@ around a single **Work Context**.
 
 ## Development
 
-Requires [Bun](https://bun.sh) (see `.bun-version`) and git.
+Requires [mise](https://mise.jdx.dev) and git. `mise.toml` pins Bun, actionlint and shellcheck for
+local work and CI alike.
 
 ```bash
+mise install         # Bun, actionlint, shellcheck
 bun install          # also installs git hooks via lefthook
 bun run check        # full local quality gate (same as CI)
 bun run start -- --help
