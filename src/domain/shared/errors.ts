@@ -59,6 +59,18 @@ export interface FileSystemError extends ErrorShape<"filesystem"> {
   readonly operation: string;
 }
 
+export interface NotFoundError extends ErrorShape<"not-found"> {
+  /** What was looked up, e.g. "workspace". */
+  readonly entity: string;
+  readonly key: string;
+}
+
+/** The change would break a uniqueness rule (duplicate id, path already registered, ...). */
+export interface ConflictError extends ErrorShape<"conflict"> {
+  readonly entity: string;
+  readonly key: string;
+}
+
 export interface CommandNotFoundError extends ErrorShape<"command-not-found"> {
   readonly command: string;
 }
@@ -88,6 +100,8 @@ export type CoreError =
   | StorageError
   | MigrationError
   | FileSystemError
+  | NotFoundError
+  | ConflictError
   | CommandNotFoundError
   | DuplicateCommandError
   | ConfirmationRequiredError
@@ -159,6 +173,31 @@ export function fileSystemError(
   options: ErrorOptions = {},
 ): FileSystemError {
   return Object.freeze({ ...base("filesystem", message, options), path, operation });
+}
+
+export function notFound(
+  entity: string,
+  key: string,
+  options: Omit<ErrorOptions, "context"> = {},
+): NotFoundError {
+  return Object.freeze({
+    ...base("not-found", `No ${entity} named ${key}`, { ...options, context: { entity, key } }),
+    entity,
+    key,
+  });
+}
+
+export function conflict(
+  message: string,
+  entity: string,
+  key: string,
+  options: Omit<ErrorOptions, "context"> = {},
+): ConflictError {
+  return Object.freeze({
+    ...base("conflict", message, { ...options, context: { entity, key } }),
+    entity,
+    key,
+  });
 }
 
 export function commandNotFound(command: string): CommandNotFoundError {

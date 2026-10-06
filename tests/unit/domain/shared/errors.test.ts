@@ -3,7 +3,9 @@ import { assertNever } from "../../../../src/domain/shared/assert-never";
 import {
   type CoreError,
   cancelled,
+  conflict,
   describeCause,
+  notFound,
   timeout,
   unexpected,
   validationError,
@@ -46,6 +48,31 @@ describe("errors", () => {
     expect("cause" in error).toBe(false);
   });
 
+  test("notFound names the missing entity and key", () => {
+    const error = notFound("workspace", "mobile-banking", { hint: "Run: xuefu workspace list" });
+    expect(error).toEqual({
+      kind: "not-found",
+      message: "No workspace named mobile-banking",
+      entity: "workspace",
+      key: "mobile-banking",
+      context: { entity: "workspace", key: "mobile-banking" },
+      hint: "Run: xuefu workspace list",
+    });
+    expect(Object.isFrozen(error)).toBe(true);
+  });
+
+  test("conflict names the entity and the clashing key", () => {
+    const error = conflict("Path is already registered", "workspace", "/work/mobile");
+    expect(error).toMatchObject({
+      kind: "conflict",
+      message: "Path is already registered",
+      entity: "workspace",
+      key: "/work/mobile",
+      context: { entity: "workspace", key: "/work/mobile" },
+    });
+    expect(Object.isFrozen(error)).toBe(true);
+  });
+
   test("CoreError kinds can be handled exhaustively", () => {
     const label = (e: CoreError): string => {
       switch (e.kind) {
@@ -54,6 +81,8 @@ describe("errors", () => {
         case "storage":
         case "migration":
         case "filesystem":
+        case "not-found":
+        case "conflict":
         case "command-not-found":
         case "duplicate-command":
         case "confirmation-required":
