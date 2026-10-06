@@ -40,6 +40,9 @@ const result = await Bun.build({
   plugins: [solidPlugin],
   compile: {
     outfile,
+    // The binary runs inside users' projects; their bunfig preloads and .env must not leak in.
+    autoloadBunfig: false,
+    autoloadDotenv: false,
     ...(target === undefined ? {} : { target }),
   },
 });
