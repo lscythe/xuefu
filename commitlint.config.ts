@@ -2,6 +2,8 @@ import type { UserConfig } from "@commitlint/types";
 
 const config: UserConfig = {
   extends: ["@commitlint/config-conventional"],
+  // Dependabot writes long release-note lines and its own scopes; its PR title is still linted.
+  ignores: [(message) => message.includes("Signed-off-by: dependabot[bot]")],
   rules: {
     "header-max-length": [2, "always", 100],
     "body-max-line-length": [2, "always", 100],
@@ -34,6 +36,7 @@ const config: UserConfig = {
         "ci",
         "release",
         "deps",
+        "deps-dev",
         "tooling",
         "docs",
       ],
