@@ -1,5 +1,11 @@
 # 血符 XueFu
 
+[![CI](https://img.shields.io/github/actions/workflow/status/lscythe/xuefu/ci.yml?branch=main&label=CI&logo=githubactions&labelColor=14141c&logoColor=e8e3d9)](https://github.com/lscythe/xuefu/actions/workflows/ci.yml)
+[![Bun](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/lscythe/xuefu/main/mise.toml&query=%24.tools.bun&label=bun&logo=bun&color=e0a458&labelColor=14141c&logoColor=e8e3d9)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/lscythe/xuefu/main/package.json&query=%24.devDependencies.typescript&label=typescript&logo=typescript&color=7bdff2&labelColor=14141c&logoColor=e8e3d9)](https://www.typescriptlang.org)
+[![Conventional Commits](https://img.shields.io/badge/conventional%20commits-1.0.0-b14aed?logo=conventionalcommits&labelColor=14141c&logoColor=e8e3d9)](https://www.conventionalcommits.org)
+[![Biome](https://img.shields.io/badge/code%20style-biome-a6f0ff?logo=biome&labelColor=14141c&logoColor=e8e3d9)](https://biomejs.dev)
+
 A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooling and timesheets
 around a single **Work Context**.
 
