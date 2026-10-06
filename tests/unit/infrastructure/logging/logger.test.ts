@@ -45,6 +45,16 @@ describe("logger", () => {
     ]);
   });
 
+  test("every level method writes a record at that level", () => {
+    const { logger, sink } = setup();
+    logger.trace("t");
+    logger.debug("d");
+    logger.info("i");
+    logger.warn("w");
+    logger.error("e");
+    expect(sink.records().map((r) => r.level)).toEqual(["trace", "debug", "info", "warn", "error"]);
+  });
+
   test("filters records below the configured level", () => {
     const { logger, sink } = setup("warn");
     logger.debug("hidden");

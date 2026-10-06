@@ -160,6 +160,17 @@ describe("migrate", () => {
     expect(backup.value.query("SELECT body FROM notes").all()).toEqual([{ body: "keep me" }]);
   });
 
+  test("a failed backup aborts the upgrade without touching the database", async () => {
+    const db = open();
+    run(db, [m1]);
+    const blocker = join(dir.path, "backups");
+    await Bun.write(blocker, "a file where the backup directory should be");
+    const result = run(db, [m1, m2], blocker);
+    expect(!result.ok && result.error.reason).toBe("backup-failed");
+    expect(tables(db)).not.toContain("tags");
+    expect(appliedVersions(db)).toEqual([1]);
+  });
+
   test("does not create a backup for a fresh database or when nothing is pending", () => {
     const db = open();
     const backupDir = join(dir.path, "backups");

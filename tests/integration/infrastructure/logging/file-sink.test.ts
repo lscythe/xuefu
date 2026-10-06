@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JsonLinesFileSink } from "../../../../src/infrastructure/logging/file-sink";
@@ -62,6 +62,22 @@ describe("JsonLinesFileSink", () => {
       .trim()
       .split("\n");
     expect(lines).toHaveLength(2);
+  });
+
+  test("reports a filesystem error when the log directory cannot be created", () => {
+    writeFileSync(join(dir, "blocker"), "");
+    const result = JsonLinesFileSink.open({
+      path: join(dir, "blocker", "logs", "xuefu.log"),
+      maxBytes: 100,
+      maxFiles: 1,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.operation).toBe("open");
+  });
+
+  test("rejects an invalid rotation count", () => {
+    const result = JsonLinesFileSink.open({ path: join(dir, "x.log"), maxBytes: 10, maxFiles: 0 });
+    expect(result.ok).toBe(false);
   });
 
   test("rejects invalid limits", () => {

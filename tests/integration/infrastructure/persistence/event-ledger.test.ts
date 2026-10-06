@@ -99,6 +99,16 @@ describe("SqliteEventLedger", () => {
     expect(last.nextCursor).toBeNull();
   });
 
+  test("corrupt rows are reported instead of being returned", () => {
+    db.run(
+      `INSERT INTO events (id, type, version, occurred_at, workspace_id, correlation_id, payload)
+       VALUES ('not a valid id', 'WorkStarted', 1, 0, NULL, 'corr-1', '{}')`,
+    );
+    const result = ledger.list({ limit: 10 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain("corrupt");
+  });
+
   test("rejects unreasonable page sizes", () => {
     expect(ledger.list({ limit: 0 }).ok).toBe(false);
     expect(ledger.list({ limit: 10_001 }).ok).toBe(false);

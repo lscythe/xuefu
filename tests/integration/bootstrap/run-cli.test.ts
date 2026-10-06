@@ -42,6 +42,34 @@ describe("runCli", () => {
     expect(await run(["--version"])).toEqual({ code: EXIT.ok, stdout: "9.9.9\n", stderr: "" });
   });
 
+  test("no arguments prints help", async () => {
+    const result = await run([]);
+    expect(result.code).toBe(EXIT.ok);
+    expect(result.stdout).toContain("Usage");
+  });
+
+  test("diagnostics lists environment overrides as a source", async () => {
+    const report = JSON.parse(
+      (await run(["diagnostics", "--json"], { XUEFU_LOG_LEVEL: "warn" })).stdout,
+    );
+    expect(report.config.sources).toContain("environment (XUEFU_LOG_LEVEL)");
+  });
+
+  test("a data directory that cannot be created exits 74", async () => {
+    const blocker = join(dir.path, "not-a-directory");
+    writeFileSync(blocker, "");
+    const result = await run(["diagnostics"], { XUEFU_DATA_DIR: join(blocker, "data") });
+    expect(result.code).toBe(EXIT.io);
+    expect(result.stderr).toContain("Unable to create directory");
+  });
+
+  test("a failing log sink warns once on stderr and the command still succeeds", async () => {
+    mkdirSync(join(dir.path, "data", "logs", "xuefu.log"), { recursive: true });
+    const result = await run(["--debug", "diagnostics"]);
+    expect(result.code).toBe(EXIT.ok);
+    expect(result.stderr.match(/warning: log sink "file" failed/g)).toHaveLength(1);
+  });
+
   test("usage errors exit 64 and print help to stderr", async () => {
     const result = await run(["--bogus"]);
     expect(result.code).toBe(EXIT.usage);
