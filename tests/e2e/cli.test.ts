@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
+import { MIGRATIONS } from "../../src/infrastructure/persistence/migrations/catalog";
 import { makeTempDir } from "../support/temp-dir";
 
 const ENTRY = join(import.meta.dir, "..", "..", "src", "main.ts");
@@ -40,7 +41,7 @@ describe("xuefu entrypoint", () => {
   test("diagnostics works against isolated directories", async () => {
     const result = await xuefu("diagnostics", "--json");
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).database.schemaVersion).toBe(1);
+    expect(JSON.parse(result.stdout).database.schemaVersion).toBe(MIGRATIONS.length);
     expect(existsSync(join(dir.path, "data", "xuefu.db"))).toBe(true);
   });
 

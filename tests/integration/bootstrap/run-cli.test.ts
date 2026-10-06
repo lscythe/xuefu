@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SecretRegistry } from "../../../src/application/security/redaction";
 import { EXIT, registerEnvironmentSecrets, runCli } from "../../../src/bootstrap/run-cli";
+import { MIGRATIONS } from "../../../src/infrastructure/persistence/migrations/catalog";
 import { makeTempDir } from "../../support/temp-dir";
 
 let dir: { path: string; cleanup: () => void };
@@ -83,8 +84,8 @@ describe("runCli", () => {
     const report = JSON.parse(result.stdout);
     expect(report.version).toBe("9.9.9");
     expect(report.database).toEqual({
-      schemaVersion: 1,
-      migrationsAppliedNow: [1],
+      schemaVersion: MIGRATIONS.length,
+      migrationsAppliedNow: MIGRATIONS.map((m) => m.version),
       backupPath: null,
     });
     expect(report.config.fileFound).toBe(false);
