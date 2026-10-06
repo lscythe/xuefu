@@ -1,8 +1,34 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { type FileSystemError, fileSystemError } from "../../domain/shared/errors";
 import { err, fromThrowable, map, type Result } from "../../domain/shared/result";
 import type { LogRecord, LogSink } from "./logger";
+
+function isMissingFile(thrown: unknown): boolean {
+  return (
+    typeof thrown === "object" && thrown !== null && "code" in thrown && thrown.code === "ENOENT"
+  );
+}
+
+// Use-then-handle instead of check-then-use: the TUI and a CLI invocation can share the log file,
+// so a file seen by existsSync may be renamed by the other process before it is used.
+function sizeOrZero(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch (thrown) {
+    if (isMissingFile(thrown)) return 0;
+    throw thrown;
+  }
+}
+
+function renameIfPresent(from: string, to: string): void {
+  try {
+    renameSync(from, to);
+  } catch (thrown) {
+    // Already rotated away (by us earlier or by another process): nothing to move.
+    if (!isMissingFile(thrown)) throw thrown;
+  }
+}
 
 export interface FileSinkOptions {
   readonly path: string;
@@ -31,7 +57,7 @@ export class JsonLinesFileSink implements LogSink {
     const prepared = fromThrowable(
       () => {
         mkdirSync(dirname(options.path), { recursive: true, mode: 0o700 });
-        return existsSync(options.path) ? statSync(options.path).size : 0;
+        return sizeOrZero(options.path);
       },
       (thrown) =>
         fileSystemError("Unable to prepare log file", options.path, "open", { cause: thrown }),
@@ -50,9 +76,9 @@ export class JsonLinesFileSink implements LogSink {
   private rotate(): void {
     const { path, maxFiles } = this.options;
     for (let i = maxFiles - 1; i >= 1; i -= 1) {
-      if (existsSync(`${path}.${i}`)) renameSync(`${path}.${i}`, `${path}.${i + 1}`);
+      renameIfPresent(`${path}.${i}`, `${path}.${i + 1}`);
     }
-    renameSync(path, `${path}.1`);
+    renameIfPresent(path, `${path}.1`);
     this.size = 0;
   }
 }
