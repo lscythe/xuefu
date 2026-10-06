@@ -4,6 +4,7 @@
  * Release builds run on native runners per platform (OpenTUI ships native libraries).
  */
 import { parseArgs } from "node:util";
+import solidPlugin from "@opentui/solid/bun-plugin";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -35,8 +36,13 @@ const result = await Bun.build({
   entrypoints: ["src/main.ts"],
   minify: true,
   sourcemap: "linked",
+  // Compiles the TUI's Solid JSX; the bunfig preload only covers `bun run` and `bun test`.
+  plugins: [solidPlugin],
   compile: {
     outfile,
+    // The binary runs inside users' projects; their bunfig preloads and .env must not leak in.
+    autoloadBunfig: false,
+    autoloadDotenv: false,
     ...(target === undefined ? {} : { target }),
   },
 });

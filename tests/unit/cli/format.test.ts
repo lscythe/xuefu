@@ -91,6 +91,7 @@ describe("helpText", () => {
     const text = helpText("0.1.0");
     for (const fragment of [
       "Usage",
+      "Open the cockpit",
       "diagnostics",
       "--json",
       "--debug",

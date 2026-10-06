@@ -8,6 +8,7 @@ export function helpText(version: string): string {
   return `血符 XueFu ${version}: terminal developer cockpit
 
 Usage:
+  xuefu [options]               Open the cockpit (needs an interactive terminal)
   xuefu [options] <command>
 
 Commands:

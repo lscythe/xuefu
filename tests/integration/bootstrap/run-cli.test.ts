@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
 import type { AppError } from "../../../src/application/errors";
 import { SecretRegistry } from "../../../src/application/security/redaction";
 import {
@@ -9,6 +10,7 @@ import {
   registerEnvironmentSecrets,
   runCli,
 } from "../../../src/bootstrap/run-cli";
+import type { TuiHost } from "../../../src/bootstrap/run-tui";
 import * as errors from "../../../src/domain/shared/errors";
 import { MIGRATIONS } from "../../../src/infrastructure/persistence/migrations/catalog";
 import { makeTempDir } from "../../support/temp-dir";
@@ -19,7 +21,33 @@ beforeEach(() => {
 });
 afterEach(() => dir.cleanup());
 
-async function run(argv: string[], extraEnv: Record<string, string> = {}, cwd = dir.path) {
+const NO_TERMINAL: TuiHost = {
+  interactive: false,
+  createRenderer: () => Promise.reject(new Error("not a terminal")),
+};
+
+/** A headless terminal; `screen` resolves once the cockpit has a renderer to draw on. */
+function headlessTerminal(): { host: TuiHost; screen: Promise<TestRendererSetup> } {
+  const { promise: screen, resolve } = Promise.withResolvers<TestRendererSetup>();
+  return {
+    host: {
+      interactive: true,
+      createRenderer: async () => {
+        const setup = await createTestRenderer({ width: 100, height: 30 });
+        resolve(setup);
+        return setup.renderer;
+      },
+    },
+    screen,
+  };
+}
+
+async function run(
+  argv: string[],
+  extraEnv: Record<string, string> = {},
+  cwd = dir.path,
+  tui: TuiHost = NO_TERMINAL,
+) {
   let stdout = "";
   let stderr = "";
   const code = await runCli({
@@ -32,6 +60,7 @@ async function run(argv: string[], extraEnv: Record<string, string> = {}, cwd = 
     home: dir.path,
     cwd,
     version: "9.9.9",
+    tui,
     stdout: {
       write: (s) => {
         stdout += s;
@@ -51,10 +80,36 @@ describe("runCli", () => {
     expect(await run(["--version"])).toEqual({ code: EXIT.ok, stdout: "9.9.9\n", stderr: "" });
   });
 
-  test("no arguments prints help", async () => {
+  test("no command outside a terminal explains itself without touching any state", async () => {
     const result = await run([]);
-    expect(result.code).toBe(EXIT.ok);
-    expect(result.stdout).toContain("Usage");
+    expect(result.code).toBe(EXIT.usage);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("needs an interactive terminal");
+    expect(result.stderr).toContain("xuefu --help");
+    expect(existsSync(join(dir.path, "data"))).toBe(false);
+  });
+
+  test("no command opens the cockpit, which exits 0 when the user quits", async () => {
+    const terminal = headlessTerminal();
+    const running = run([], {}, dir.path, terminal.host);
+    const screen = await terminal.screen;
+    const frame = await screen.waitForFrame((f) => f.includes("XUEFU"));
+    expect(frame).toContain("No workspace");
+    expect(frame).toContain("Dashboard");
+    screen.mockInput.pressKey("q");
+    expect(await running).toEqual({ code: EXIT.ok, stdout: "", stderr: "" });
+    const log = readFileSync(join(dir.path, "data", "logs", "xuefu.log"), "utf8");
+    expect(log).toContain("Cockpit opened");
+    expect(log).toContain("Cockpit closed");
+  });
+
+  test("a terminal that cannot be set up exits 70", async () => {
+    const result = await run([], {}, dir.path, {
+      interactive: true,
+      createRenderer: () => Promise.reject(new Error("no tty attributes")),
+    });
+    expect(result.code).toBe(EXIT.software);
+    expect(result.stderr).toContain("Unable to start the terminal UI");
   });
 
   test("diagnostics lists environment overrides as a source", async () => {
@@ -261,6 +316,18 @@ describe("runCli: workspaces", () => {
     expect(removed.stdout).toContain("✓ Removed workspace mobile. The folder was not touched.");
     expect(existsSync(mobile)).toBe(true);
     expect(JSON.parse((await run(["workspace", "list", "--json"])).stdout)).toEqual([]);
+  });
+
+  test("the cockpit names the workspace it was opened in", async () => {
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    const nested = join(mobile, "app");
+    mkdirSync(nested);
+    const terminal = headlessTerminal();
+    const running = run([], {}, nested, terminal.host);
+    const screen = await terminal.screen;
+    expect(await screen.waitForFrame((f) => f.includes("XUEFU"))).toContain("Mobile Banking");
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
   });
 
   test("removing an unknown workspace exits 66 with a hint", async () => {

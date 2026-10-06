@@ -4,6 +4,8 @@ import { err, ok, type Result } from "../domain/shared/result";
 
 /** A command that needs the application started. Paths are raw; bootstrap resolves them. */
 export type CliCommand =
+  /** No command given: open the interactive cockpit. */
+  | { readonly kind: "cockpit" }
   | { readonly kind: "diagnostics"; readonly json: boolean }
   | { readonly kind: "workspace.list"; readonly json: boolean }
   | {
@@ -114,6 +116,14 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   },
 };
 
+const COCKPIT: CommandSpec = {
+  usage: "",
+  minArgs: 0,
+  maxArgs: 0,
+  flags: [],
+  build: () => ({ kind: "cockpit" }),
+};
+
 function lookup(name: string): CommandSpec | undefined {
   // Own keys only: "constructor" or "toString" must not resolve to Object.prototype members.
   return Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : undefined;
@@ -127,6 +137,7 @@ function resolveCommand(
   positionals: readonly string[],
 ): Result<{ name: string; spec: CommandSpec; args: readonly string[] }, ValidationError> {
   const [command, ...rest] = positionals;
+  if (command === undefined) return ok({ name: "xuefu", spec: COCKPIT, args: [] });
   if (command === "workspace") {
     const [sub = "list", ...args] = rest;
     const name = `workspace ${sub}`;
@@ -134,9 +145,9 @@ function resolveCommand(
     if (spec === undefined) return err(usage(`Unknown workspace command: ${sub}`));
     return ok({ name, spec, args });
   }
-  const spec = command === undefined ? undefined : lookup(command);
-  if (command === undefined || spec === undefined || command.includes(" ")) {
-    return err(usage(`Unknown command: ${String(command)}`));
+  const spec = lookup(command);
+  if (spec === undefined || command.includes(" ")) {
+    return err(usage(`Unknown command: ${command}`));
   }
   return ok({ name: command, spec, args: rest });
 }
@@ -168,7 +179,6 @@ export function parseArgs(argv: readonly string[]): Result<CliInvocation, Valida
   const { values, positionals } = parsed;
   if (values["help"] === true) return ok({ kind: "help" });
   if (values["version"] === true) return ok({ kind: "version" });
-  if (positionals.length === 0) return ok({ kind: "help" });
 
   const resolved = resolveCommand(positionals);
   if (!resolved.ok) return resolved;

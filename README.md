@@ -16,6 +16,7 @@ around a single **Work Context**.
 ## Usage
 
 ```bash
+xuefu                                                          # open the cockpit (↑↓ or j/k move, q quits)
 xuefu workspace add ~/work/mobile-banking --group "Client A"  # register a project folder
 xuefu workspace                                                # list workspaces and detected tools
 xuefu workspace which                                          # the workspace containing this folder
@@ -25,6 +26,7 @@ xuefu diagnostics                                              # paths, config s
 
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, which makes it usable in shell prompts.
+The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 
 ## Development
 
