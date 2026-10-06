@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Git hooks are a local convenience; CI runs the same checks explicitly.
+  LEFTHOOK: "0"
+
+jobs:
+  quality:
+    name: Quality gate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Format
+        run: bun run format:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Dead code and unused dependencies
+        run: bun run deadcode
+
+      - name: Architecture boundaries
+        run: bun run test:arch
+
+      - name: Unit and integration tests (coverage gate)
+        run: bun run test:coverage
+
+      - name: Contract tests
+        run: bun run test:contract
+
+      - name: End-to-end tests
+        run: bun run test:e2e
+
+      - name: Build and smoke-test binary
+        env:
+          XUEFU_CONFIG_DIR: ${{ runner.temp }}/xuefu-config
+          XUEFU_DATA_DIR: ${{ runner.temp }}/xuefu-data
+        run: |
+          bun run build
+          ./dist/xuefu --version
+          ./dist/xuefu diagnostics --json
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          retention-days: 14
+
+  commits:
+    name: Conventional commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Lint commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bunx commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+
+      - name: Lint pull request title
+        env:
+          # Passed via env, never interpolated into the script, to avoid injection.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | bunx commitlint --verbose
