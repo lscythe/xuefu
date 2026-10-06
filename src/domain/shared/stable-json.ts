@@ -11,9 +11,20 @@ function canonicalise(value: unknown): unknown {
   if (value !== null && typeof value === "object" && !(value instanceof Date)) {
     const sorted: Record<string, unknown> = {};
     for (const key of Object.keys(value).sort()) {
-      sorted[key] = canonicalise((value as Record<string, unknown>)[key]);
+      // defineProperty, not assignment: assigning "__proto__" would set the prototype instead.
+      defineField(sorted, key, canonicalise((value as Record<string, unknown>)[key]));
     }
     return sorted;
   }
   return value;
+}
+
+/** Creates an own enumerable property even for keys like "__proto__". */
+export function defineField(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
 }

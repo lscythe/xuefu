@@ -13,6 +13,11 @@ describe("stableStringify", () => {
     expect(stableStringify({ a: undefined, b: 1 })).toBe('{"b":1}');
   });
 
+  test("regression: an own __proto__ key is preserved, not turned into a prototype", () => {
+    const value = JSON.parse('{"__proto__": "", "a": 1}');
+    expect(stableStringify(value)).toBe('{"__proto__":"","a":1}');
+  });
+
   test("property: output does not depend on key insertion order", () => {
     fc.assert(
       fc.property(fc.dictionary(fc.string(), fc.jsonValue()), (obj) => {

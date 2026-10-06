@@ -1,3 +1,5 @@
+import { defineField } from "../../domain/shared/stable-json";
+
 export const REDACTED = "[REDACTED]";
 
 /** Shorter values would mask ordinary words and still leak little; real credentials are longer. */
@@ -144,9 +146,8 @@ export function createRedactor(registry: SecretRegistry): Redactor {
       if (Array.isArray(value)) return value.map((item) => redactValue(item, depth + 1, seen));
       const out: Record<string, unknown> = {};
       for (const [key, inner] of Object.entries(value)) {
-        out[redactString(key)] = isSensitiveKey(key)
-          ? REDACTED
-          : redactValue(inner, depth + 1, seen);
+        const redacted = isSensitiveKey(key) ? REDACTED : redactValue(inner, depth + 1, seen);
+        defineField(out, redactString(key), redacted);
       }
       return out;
     } finally {

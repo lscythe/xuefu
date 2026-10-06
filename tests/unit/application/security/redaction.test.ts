@@ -121,6 +121,27 @@ describe("redactValue: structures", () => {
     });
   });
 
+  test("keeps primitives and describes symbols", () => {
+    expect(
+      redactor().redactValue({
+        n: 1,
+        b: true,
+        u: undefined,
+        nil: null,
+        s: Symbol("x"),
+        a: [1, "x"],
+      }),
+    ).toEqual({ n: 1, b: true, u: undefined, nil: null, s: "Symbol(x)", a: [1, "x"] });
+  });
+
+  test("regression: __proto__ keys from external data stay plain fields", () => {
+    const hostile = JSON.parse('{"__proto__": {"polluted": "yes"}, "ok": 1}');
+    const out = redactor().redactValue(hostile) as Record<string, unknown>;
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(out["polluted"]).toBeUndefined();
+    expect(JSON.stringify(out)).toBe('{"__proto__":{"polluted":"yes"},"ok":1}');
+  });
+
   test("redacts sensitive keys whose values are objects", () => {
     expect(redactor().redactValue({ credentials: { user: "a", pass: "b" } })).toEqual({
       credentials: REDACTED,
