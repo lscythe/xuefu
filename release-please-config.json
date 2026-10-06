@@ -48,7 +48,8 @@
   ],
   "packages": {
     ".": {
-      "package-name": "xuefu"
+      "package-name": "xuefu",
+      "initial-version": "0.1.0"
     }
   }
 }
