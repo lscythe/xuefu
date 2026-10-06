@@ -11,7 +11,7 @@ interface Subscription {
   readonly handler: EventHandler;
 }
 
-export const ANY_EVENT = "*";
+const ANY_EVENT = "*";
 
 /**
  * In-process pub/sub for committed events. Delivery is sequential and ordered; a failing

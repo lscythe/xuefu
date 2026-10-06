@@ -9,7 +9,7 @@ export interface CauseSummary {
   readonly message: string;
 }
 
-export interface ErrorShape<K extends string> {
+interface ErrorShape<K extends string> {
   readonly kind: K;
   readonly message: string;
   readonly context: ErrorContext;

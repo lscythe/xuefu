@@ -1,4 +1,4 @@
-export type ConfirmationSeverity = "confirm" | "destructive";
+type ConfirmationSeverity = "confirm" | "destructive";
 
 /** Everything a user must see before approving a consequential action. */
 export interface ConfirmationPrompt {

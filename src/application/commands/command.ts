@@ -29,11 +29,11 @@ interface CommandBase<I, O> {
   handler(input: I, context: CommandContext): Promise<Result<O, AppError>>;
 }
 
-export interface SafeCommand<I, O> extends CommandBase<I, O> {
+interface SafeCommand<I, O> extends CommandBase<I, O> {
   readonly safety: "safe";
 }
 
-export interface GuardedCommand<I, O> extends CommandBase<I, O> {
+interface GuardedCommand<I, O> extends CommandBase<I, O> {
   readonly safety: "confirm" | "destructive";
   /** Exactly what will happen, shown to the user before they approve. */
   describe(input: I): ConfirmationPrompt;

@@ -1,6 +1,6 @@
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
-export const LOG_LEVELS: readonly LogLevel[] = ["trace", "debug", "info", "warn", "error"];
+const LOG_LEVELS: readonly LogLevel[] = ["trace", "debug", "info", "warn", "error"];
 
 export type LogFields = Readonly<Record<string, unknown>>;
 

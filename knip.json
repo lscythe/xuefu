@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/main.ts", "tests/**/*.test.ts", "scripts/*.ts"],
-  "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
-  "ignoreDependencies": ["@commitlint/config-conventional"]
+  "entry": ["tests/**/*.test.ts", "scripts/*.ts"],
+  "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }
