@@ -52,7 +52,8 @@ const SENSITIVE_KEYS = new Set([
 
 const SENSITIVE_SUFFIXES = ["token", "secret", "password"];
 
-function isSensitiveKey(key: string): boolean {
+/** True for keys whose values are credentials (`jiraToken`, `API_KEY`, `Authorization`, …). */
+export function isSensitiveKey(key: string): boolean {
   const normalised = key.toLowerCase().replace(/[-_.\s]/g, "");
   return (
     SENSITIVE_KEYS.has(normalised) ||
