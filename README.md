@@ -13,6 +13,19 @@ around a single **Work Context**.
 
 > Status: **early development.** The terminal UI is not available yet.
 
+## Usage
+
+```bash
+xuefu workspace add ~/work/mobile-banking --group "Client A"  # register a project folder
+xuefu workspace                                                # list workspaces and detected tools
+xuefu workspace which                                          # the workspace containing this folder
+xuefu workspace remove mobile-banking --yes                    # stop tracking it; the folder is kept
+xuefu diagnostics                                              # paths, config sources, database state
+```
+
+Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
+`workspace which` exits `1` outside every workspace, which makes it usable in shell prompts.
+
 ## Development
 
 Requires [mise](https://mise.jdx.dev) and git. `mise.toml` pins Bun, actionlint and shellcheck for
