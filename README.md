@@ -1,6 +1,7 @@
 # 血符 XueFu
 
 [![CI](https://img.shields.io/github/actions/workflow/status/lscythe/xuefu/ci.yml?branch=main&label=CI&logo=githubactions&labelColor=14141c&logoColor=e8e3d9)](https://github.com/lscythe/xuefu/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/coverallsCoverage/github/lscythe/xuefu?branch=main&logo=coveralls&labelColor=14141c&logoColor=e8e3d9)](https://coveralls.io/github/lscythe/xuefu?branch=main)
 [![Bun](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/lscythe/xuefu/main/mise.toml&query=%24.tools.bun&label=bun&logo=bun&color=e0a458&labelColor=14141c&logoColor=e8e3d9)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/lscythe/xuefu/main/package.json&query=%24.devDependencies.typescript&label=typescript&logo=typescript&color=7bdff2&labelColor=14141c&logoColor=e8e3d9)](https://www.typescriptlang.org)
 [![Conventional Commits](https://img.shields.io/badge/conventional%20commits-1.0.0-b14aed?logo=conventionalcommits&labelColor=14141c&logoColor=e8e3d9)](https://www.conventionalcommits.org)

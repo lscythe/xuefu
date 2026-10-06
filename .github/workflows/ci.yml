@@ -58,6 +58,21 @@ jobs:
       - name: Unit and integration tests (coverage gate)
         run: bun run test:coverage
 
+      - name: Report coverage to Coveralls
+        # Fork and Dependabot pull requests do not receive repository secrets.
+        if: >-
+          matrix.os == 'ubuntu-24.04' &&
+          github.actor != 'dependabot[bot]' &&
+          (github.event_name == 'push' ||
+           github.event.pull_request.head.repo.full_name == github.repository)
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
+        with:
+          github-token: ${{ secrets.COVERALLS_REPO_TOKEN }}
+          file: coverage/lcov.info
+          format: lcov
+          # The coverage threshold above is the gate; a Coveralls outage must not block merges.
+          fail-on-error: false
+
       - name: Contract tests
         run: bun run test:contract
 
@@ -72,14 +87,6 @@ jobs:
           bun run build
           ./dist/xuefu --version
           ./dist/xuefu diagnostics --json
-
-      - name: Upload coverage report
-        if: matrix.os == 'ubuntu-24.04'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage-lcov
-          path: coverage/lcov.info
-          retention-days: 14
 
   commits:
     name: Conventional commits
