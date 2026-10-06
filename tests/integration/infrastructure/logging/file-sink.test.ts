@@ -46,12 +46,12 @@ describe("JsonLinesFileSink", () => {
     const sink = open(200, 2);
     for (let i = 0; i < 20; i += 1) sink.write(record(`message number ${i}`));
     const base = join(dir, "logs", "xuefu.log");
-    expect(existsSync(base)).toBe(true);
     expect(existsSync(`${base}.1`)).toBe(true);
     expect(existsSync(`${base}.2`)).toBe(true);
     expect(existsSync(`${base}.3`)).toBe(false);
-    expect(statSync(base).size).toBeLessThanOrEqual(200);
-    const newest = readFileSync(base, "utf8").trim().split("\n").at(-1) ?? "";
+    const active = readFileSync(base, "utf8");
+    expect(Buffer.byteLength(active)).toBeLessThanOrEqual(200);
+    const newest = active.trim().split("\n").at(-1) ?? "";
     expect(JSON.parse(newest).msg).toBe("message number 19");
   });
 
@@ -78,6 +78,20 @@ describe("JsonLinesFileSink", () => {
   test("rejects an invalid rotation count", () => {
     const result = JsonLinesFileSink.open({ path: join(dir, "x.log"), maxBytes: 10, maxFiles: 0 });
     expect(result.ok).toBe(false);
+  });
+
+  test("rotation tolerates rotated files that are already gone", () => {
+    const sink = open(120, 3);
+    for (let i = 0; i < 10; i += 1) sink.write(record(`message ${i}`));
+    rmSync(join(dir, "logs", "xuefu.log.2"), { force: true });
+    expect(() => {
+      for (let i = 10; i < 20; i += 1) sink.write(record(`message ${i}`));
+    }).not.toThrow();
+    const newest = readFileSync(join(dir, "logs", "xuefu.log"), "utf8")
+      .trim()
+      .split("\n")
+      .at(-1);
+    expect(JSON.parse(newest ?? "{}").msg).toBe("message 19");
   });
 
   test("rejects invalid limits", () => {
