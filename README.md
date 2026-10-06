@@ -16,7 +16,7 @@ around a single **Work Context**.
 ## Usage
 
 ```bash
-xuefu                                                          # open the cockpit (↑↓ or j/k move, q quits)
+xuefu                                                          # open the cockpit (^W switches workspace, q quits)
 xuefu workspace add ~/work/mobile-banking --group "Client A"  # register a project folder
 xuefu workspace                                                # list workspaces and detected tools
 xuefu workspace which                                          # the workspace containing this folder
