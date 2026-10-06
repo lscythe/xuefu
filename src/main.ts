@@ -8,6 +8,14 @@ process.exitCode = await runCli({
   home: homedir(),
   cwd: process.cwd(),
   version: pkg.version,
+  tui: {
+    interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+    // Imported on demand: OpenTUI loads a native library that plain commands do not need.
+    createRenderer: async () => {
+      const { createCliRenderer } = await import("@opentui/core");
+      return createCliRenderer({ exitOnCtrlC: false, useMouse: false, targetFps: 30 });
+    },
+  },
   stdout: process.stdout,
   stderr: process.stderr,
 });

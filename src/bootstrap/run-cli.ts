@@ -21,6 +21,7 @@ import { assertNever } from "../domain/shared/assert-never";
 import { absolutePath } from "../domain/shared/path";
 import type { Workspace } from "../domain/workspace/workspace";
 import type { ConfigSource } from "../infrastructure/config/load-config";
+import { runTui, type TuiHost } from "./run-tui";
 import { type App, startApp } from "./start-app";
 
 /**
@@ -51,6 +52,7 @@ export interface CliRuntime {
   /** Relative paths given on the command line are resolved against this. */
   readonly cwd: string;
   readonly version: string;
+  readonly tui: TuiHost;
   readonly stdout: Writer;
   readonly stderr: Writer;
 }
@@ -273,8 +275,15 @@ async function whichWorkspace(
   return workspace === null ? EXIT.none : EXIT.ok;
 }
 
+async function openCockpit(app: App, out: Output): Promise<number> {
+  const closed = await runTui(app, out.runtime.tui, out.runtime.cwd);
+  return closed.ok ? EXIT.ok : fail(out, closed.error);
+}
+
 function runCommand(app: App, out: Output, command: CliCommand): Promise<number> | number {
   switch (command.kind) {
+    case "cockpit":
+      return openCockpit(app, out);
     case "diagnostics": {
       const report = diagnostics(app, out.runtime.version);
       return command.json ? printJson(out, report) : print(out, formatDiagnostics(report));
@@ -318,6 +327,14 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
       break;
     default:
       return assertNever(invocation.value);
+  }
+
+  if (invocation.value.command.kind === "cockpit" && !runtime.tui.interactive) {
+    runtime.stderr.write(
+      "xuefu needs an interactive terminal to open the cockpit.\n" +
+        "Run xuefu --help to see the commands that work in scripts.\n",
+    );
+    return EXIT.usage;
   }
 
   const started = await startApp({

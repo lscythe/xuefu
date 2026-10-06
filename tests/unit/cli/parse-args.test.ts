@@ -9,7 +9,8 @@ const run = (command: CliCommand, overrides: Record<string, unknown> = {}): CliI
 
 describe("parseArgs", () => {
   test.each([
-    [[], { kind: "help" }],
+    [[], run({ kind: "cockpit" })],
+    [["--debug"], run({ kind: "cockpit" }, { logging: { level: "debug" } })],
     [["--help"], { kind: "help" }],
     [["-h"], { kind: "help" }],
     [["workspace", "add", "--help"], { kind: "help" }],
@@ -107,6 +108,7 @@ describe("parseArgs: workspace", () => {
     [["workspace", "add", "a", "b"], "workspace add expects [path]"],
     [["workspace", "list", "--yes"], "--yes does not apply to workspace list"],
     [["diagnostics", "--name", "x"], "--name does not apply to diagnostics"],
+    [["--json"], "--json does not apply to xuefu"],
   ])("rejects %p", (argv, message) => {
     const result = parseArgs(argv);
     expect(result.ok).toBe(false);

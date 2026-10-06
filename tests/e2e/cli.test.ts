@@ -48,6 +48,12 @@ describe("xuefu entrypoint", () => {
     expect(existsSync(join(dir.path, "data", "xuefu.db"))).toBe(true);
   });
 
+  test("without a terminal, a bare invocation explains the cockpit needs one", async () => {
+    const result = await xuefu();
+    expect(result.code).toBe(64);
+    expect(result.stderr).toContain("needs an interactive terminal");
+  });
+
   test("usage errors exit with 64", async () => {
     expect((await xuefu("--definitely-not-a-flag")).code).toBe(64);
   });
