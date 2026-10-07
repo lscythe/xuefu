@@ -523,6 +523,21 @@ describe("runCli: timer", () => {
     );
   });
 
+  test("the cockpit shows a running timer, and t and shift+t drive it", async () => {
+    await run(["timer", "start"], {}, mobile);
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => /Timer \d\d:\d\d:\d\d/.test(f));
+    screen.mockInput.pressKey("t");
+    await screen.waitForFrame((f) => /Paused \d\d:\d\d:\d\d/.test(f));
+    await screen.mockInput.typeText("T");
+    await screen.waitForFrame((f) => !f.includes("Paused"));
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+    expect((await run(["timer"])).code).toBe(EXIT.none);
+  });
+
   test("outside every workspace, start needs --workspace", async () => {
     const outside = await run(["timer", "start"]);
     expect(outside.code).toBe(EXIT.usage);

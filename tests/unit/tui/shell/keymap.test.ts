@@ -24,6 +24,8 @@ describe("actionFor", () => {
     [alt("1"), { kind: "tab.focus", position: 1 }],
     [alt("9"), { kind: "tab.focus", position: 9 }],
     [alt("w"), { kind: "tab.close" }],
+    [press("t"), { kind: "timer.toggle" }],
+    [press("t", { shift: true }), { kind: "timer.stop" }],
   ] as const)("%o → %o", (key, action) => {
     expect(actionFor(key)).toEqual(action);
   });
@@ -43,12 +45,12 @@ describe("actionFor", () => {
 
 describe("keyHints", () => {
   test("every hint names a bound action; tab keys only show with tabs open", () => {
-    expect(keyHints("unicode", { tabs: false })).toEqual([
+    expect(keyHints("unicode", { tabs: false, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "q", label: "quit" },
     ]);
-    expect(keyHints("unicode", { tabs: true })).toEqual([
+    expect(keyHints("unicode", { tabs: true, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "alt+1-9", label: "tabs" },
@@ -57,8 +59,20 @@ describe("keyHints", () => {
     ]);
   });
 
+  test("the timer key shows when it has something to do", () => {
+    expect(keyHints("unicode", { tabs: false, timer: true })).toContainEqual({
+      keys: "t",
+      label: "timer",
+    });
+  });
+
   test("ascii icons avoid arrow glyphs", () => {
-    expect(keyHints("ascii", { tabs: false })[0]).toEqual({ keys: "j/k", label: "navigate" });
-    expect(keyHints("nerd", { tabs: true })).toEqual(keyHints("unicode", { tabs: true }));
+    expect(keyHints("ascii", { tabs: false, timer: false })[0]).toEqual({
+      keys: "j/k",
+      label: "navigate",
+    });
+    expect(keyHints("nerd", { tabs: true, timer: false })).toEqual(
+      keyHints("unicode", { tabs: true, timer: false }),
+    );
   });
 });

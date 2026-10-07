@@ -2,9 +2,11 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, Show } from "solid-js";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
+import type { TimerView } from "../../application/timesheet/queries";
 import type { OpenTabs, WorkspaceView } from "../../application/workspace/queries";
 import { assertNever } from "../../domain/shared/assert-never";
 import type { Result } from "../../domain/shared/result";
+import { timerToggle } from "../../domain/timesheet/timer";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
@@ -35,6 +37,13 @@ export interface ShellProps {
     workspace: Workspace,
     section: string,
   ) => Promise<Result<unknown, AppError>>;
+  /** The running or paused timer when the cockpit opened. */
+  readonly timer: TimerView | null;
+  /** Starts, pauses or resumes the timer for the workspace in front; null if nothing changed. */
+  readonly toggleTimer: (
+    workspace: Workspace | null,
+  ) => Promise<Result<TimerView | null, AppError>>;
+  readonly stopTimer: () => Promise<Result<unknown, AppError>>;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
@@ -46,6 +55,7 @@ export function Shell(props: ShellProps) {
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [notice, setNotice] = createSignal<AppError | null>(null);
+  const [timer, setTimer] = createSignal(props.timer);
   // Each workspace keeps its own place in the navigation; "" is the no-workspace screen.
   const [sections, setSections] = createSignal<ReadonlyMap<string, number>>(
     new Map(
@@ -74,6 +84,18 @@ export function Shell(props: ShellProps) {
     const changed = await change;
     if (changed.ok) setTabs(changed.value);
     else setNotice(changed.error);
+  };
+
+  const toggleTimer = async () => {
+    const toggled = await props.toggleTimer(workspace());
+    if (!toggled.ok) setNotice(toggled.error);
+    else if (toggled.value !== null) setTimer(toggled.value);
+  };
+
+  const stopTimer = async () => {
+    const stopped = await props.stopTimer();
+    if (stopped.ok) setTimer(null);
+    else setNotice(stopped.error);
   };
 
   const move = (to: "previous" | "next" | "first" | "last") => {
@@ -115,6 +137,12 @@ export function Shell(props: ShellProps) {
         if (current !== null) void changeTabs(props.closeTab(current));
         return;
       }
+      case "timer.toggle":
+        void toggleTimer();
+        return;
+      case "timer.stop":
+        void stopTimer();
+        return;
       case "quit":
       case "interrupt":
         props.onQuit();
@@ -135,7 +163,9 @@ export function Shell(props: ShellProps) {
           timeZone={props.timeZone}
           tickMs={props.tickMs ?? 1000}
           icons={props.icons}
-          workspaceName={workspace()?.name ?? null}
+          workspace={workspace()}
+          timer={timer()}
+          width={dimensions().width}
         />
         <Show when={tabs().open.length > 0}>
           <TabBar tabs={tabs()} width={dimensions().width} />
@@ -162,7 +192,12 @@ export function Shell(props: ShellProps) {
             </box>
           )}
         </Show>
-        <KeyBar hints={keyHints(props.icons, { tabs: tabs().open.length > 0 })} />
+        <KeyBar
+          hints={keyHints(props.icons, {
+            tabs: tabs().open.length > 0,
+            timer: timerToggle(timer()?.timer ?? null, workspace()?.id ?? null) !== null,
+          })}
+        />
         <Show when={switcherOpen()}>
           <Switcher
             load={props.loadWorkspaces}

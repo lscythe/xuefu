@@ -5,6 +5,7 @@ import { storageError } from "../../../src/domain/shared/errors";
 import { err, ok } from "../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { fakeTabs } from "../../support/fake-tabs";
+import { fakeTimer } from "../../support/fake-timer";
 import { ManualClock } from "../../support/manual-clock";
 import { expectScreenshot } from "../../support/screenshot";
 import { view } from "../../support/workspace-views";
@@ -41,6 +42,9 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         closeTab={tabs.close}
         navigation={new Map()}
         saveNavigation={() => Promise.resolve(ok(undefined))}
+        timer={null}
+        toggleTimer={() => Promise.resolve(ok(null))}
+        stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => undefined}
         {...props}
       />
@@ -49,6 +53,24 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
   );
   await setup.renderOnce();
   return setup;
+}
+
+const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+
+/** A timer for `workspace` that ran for `ran` ms, then (if given) sat paused for `paused` ms. */
+async function trackedTimer(workspace: string, ran: number, paused?: number) {
+  const clock = new ManualClock(NOW - ran - (paused ?? 0));
+  const timer = fakeTimer(
+    clock,
+    VIEWS.map((v) => v.workspace),
+  );
+  await timer.toggle(VIEWS.find((v) => v.workspace.id === workspace)?.workspace ?? null);
+  clock.advance(ran);
+  if (paused !== undefined) {
+    await timer.toggle(null);
+    clock.advance(paused);
+  }
+  return { clock, timer: timer.current() };
 }
 
 async function openSwitcher(screen: TestRendererSetup, query = "") {
@@ -90,6 +112,20 @@ describe("screenshots", () => {
     screen.mockInput.pressKey("w", { meta: true });
     await screen.waitForFrame((f) => f.includes("Unable to save open tabs"));
     expectScreenshot("tabs-error", screen.captureSpans());
+  });
+
+  test("timer running", async () => {
+    const screen = await shell(await trackedTimer("mobile-banking", 6_138_000));
+    expectScreenshot("timer", screen.captureSpans());
+  });
+
+  test("timer paused in another workspace, at 80 columns", async () => {
+    const tabs = fakeTabs(VIEWS, "auth-service", "mobile-banking");
+    const screen = await shell(
+      { tabs: tabs.initial, ...(await trackedTimer("auth-service", 2_700_000, 1_200_000)) },
+      { width: 80, height: 24 },
+    );
+    expectScreenshot("timer-elsewhere", screen.captureSpans());
   });
 
   test("terminal too small", async () => {

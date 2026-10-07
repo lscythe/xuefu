@@ -41,6 +41,8 @@ export async function runTui(
   if (!tabs.ok) return tabs;
   const navigation = app.workspaces.navigation();
   if (!navigation.ok) return navigation;
+  const timer = app.timers.active();
+  if (!timer.ok) return timer;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
   const { openShell } = await import("../tui/open-shell");
@@ -68,6 +70,10 @@ export async function runTui(
           id: workspace.id,
           navigation: section,
         }),
+      timer: timer.value,
+      toggleTimer: (front) =>
+        app.commandBus.invoke(app.timerCommands.toggle, { workspace: front?.id ?? null }),
+      stopTimer: () => app.commandBus.invoke(app.timerCommands.stop, {}),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {
