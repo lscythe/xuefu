@@ -14,10 +14,13 @@ import {
   formatConfirmation,
   formatDiagnostics,
   formatError,
+  formatStartedTimer,
   formatTimerStatus,
+  formatWorkList,
   formatWorkspaceList,
   helpText,
   timerSubject,
+  workSubject,
 } from "../cli/format";
 import { type CliCommand, parseArgs } from "../cli/parse-args";
 import { assertNever } from "../domain/shared/assert-never";
@@ -113,6 +116,7 @@ export function exitCodeFor(error: AppError): number {
 const HINTS: Readonly<Record<string, string>> = {
   workspace: "List registered workspaces with: xuefu workspace list",
   timer: "Start one with: xuefu timer start",
+  work: "Start some with: xuefu work start <issue>",
 };
 
 function withHint(error: AppError): AppError {
@@ -316,7 +320,7 @@ function timerStatus(app: App, out: Output, json: boolean): number {
 }
 
 /** The workspace named on the command line, else the one containing the current directory. */
-async function timerWorkspace(
+async function targetWorkspace(
   app: App,
   out: Output,
   given: string | null,
@@ -339,33 +343,19 @@ async function startTimer(
   out: Output,
   command: Extract<CliCommand, { kind: "timer.start" }>,
 ): Promise<number> {
-  const workspace = await timerWorkspace(app, out, command.workspace);
+  const workspace = await targetWorkspace(app, out, command.workspace);
   if (!workspace.ok) return fail(out, workspace.error);
+  // Without --issue, time the work in progress there, if any.
+  const work = command.issue === null ? app.work.inProgress() : null;
+  if (work !== null && !work.ok) return fail(out, work.error);
+  const issue =
+    command.issue ?? work?.value.find((v) => v.work.workspaceId === workspace.value)?.work.issueKey;
   const started = await app.commandBus.invoke(app.timerCommands.start, {
     workspace: workspace.value,
-    ...(command.issue === null ? {} : { issue: command.issue }),
+    ...(issue === undefined ? {} : { issue }),
   });
   if (!started.ok) return fail(out, started.error);
-  const { timer, replaced } = started.value;
-  const resumed = timer.timer.segments.length > 1;
-  return print(
-    out,
-    [
-      ...(replaced === null
-        ? []
-        : [
-            `✓ Stopped the timer for ${timerSubject(replaced)} after ${clockDuration(
-              elapsed(replaced.timer, replaced.timer.updatedAt),
-            )}`,
-          ]),
-      resumed
-        ? `✓ Resumed the timer for ${timerSubject(timer)} at ${clockDuration(
-            elapsed(timer.timer, timer.timer.updatedAt),
-          )}`
-        : `✓ Started a timer for ${timerSubject(timer)}`,
-      "",
-    ].join("\n"),
-  );
+  return print(out, `${formatStartedTimer(started.value).join("\n")}\n`);
 }
 
 async function changeTimer(
@@ -383,6 +373,82 @@ async function changeTimer(
   const done = { pause: "Paused", resume: "Resumed", stop: "Stopped" }[action];
   const when = action === "stop" ? "after" : "at";
   return print(out, `✓ ${done} the timer for ${timerSubject(view)} ${when} ${total}\n`);
+}
+
+function workStatus(app: App, out: Output, json: boolean): number {
+  const listed = app.work.inProgress();
+  if (!listed.ok) return fail(out, listed.error);
+  const views = listed.value;
+  if (json) {
+    printJson(
+      out,
+      views.map(({ work, workspace }) => ({
+        id: work.id,
+        workspaceId: work.workspaceId,
+        workspaceName: workspace?.name ?? null,
+        issueKey: work.issueKey,
+        title: work.title,
+        startedAt: new Date(work.startedAt).toISOString(),
+      })),
+    );
+  } else if (views.length === 0) {
+    out.runtime.stderr.write("No work in progress. Start with: xuefu work start <issue>\n");
+  } else {
+    print(out, formatWorkList(views));
+  }
+  return views.length === 0 ? EXIT.none : EXIT.ok;
+}
+
+async function startWork(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "work.start" }>,
+): Promise<number> {
+  const workspace = await targetWorkspace(app, out, command.workspace);
+  if (!workspace.ok) return fail(out, workspace.error);
+  const started = await app.commandBus.invoke(app.workCommands.start, {
+    workspace: workspace.value,
+    issue: command.issue,
+    ...(command.title === null ? {} : { title: command.title }),
+  });
+  if (!started.ok) return fail(out, started.error);
+  const { work, finished, timer } = started.value;
+  const where = work.workspace?.name ?? work.work.workspaceId;
+  return print(
+    out,
+    [
+      ...(finished === null ? [] : [`✓ Finished ${finished.issueKey} in ${where}`]),
+      `✓ Working on ${workSubject(work)} in ${where}`,
+      ...(timer === null ? [] : formatStartedTimer(timer)),
+      "",
+    ].join("\n"),
+  );
+}
+
+async function finishWork(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "work.finish" }>,
+): Promise<number> {
+  const workspace = await targetWorkspace(app, out, command.workspace);
+  if (!workspace.ok) return fail(out, workspace.error);
+  const finished = await app.commandBus.invoke(app.workCommands.finish, {
+    workspace: workspace.value,
+  });
+  if (!finished.ok) return fail(out, finished.error);
+  const { work, timer } = finished.value;
+  return print(
+    out,
+    [
+      `✓ Finished ${workSubject(work)} in ${work.workspace?.name ?? work.work.workspaceId}`,
+      ...(timer === null
+        ? []
+        : [
+            `✓ Stopped the timer after ${clockDuration(elapsed(timer.timer, timer.timer.updatedAt))}`,
+          ]),
+      "",
+    ].join("\n"),
+  );
 }
 
 async function openCockpit(app: App, out: Output): Promise<number> {
@@ -414,6 +480,12 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return startTimer(app, out, command);
     case "timer.change":
       return changeTimer(app, out, command.action);
+    case "work.status":
+      return workStatus(app, out, command.json);
+    case "work.start":
+      return startWork(app, out, command);
+    case "work.finish":
+      return finishWork(app, out, command);
     default:
       return assertNever(command);
   }

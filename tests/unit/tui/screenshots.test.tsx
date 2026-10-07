@@ -3,11 +3,13 @@ import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { storageError } from "../../../src/domain/shared/errors";
 import { err, ok } from "../../../src/domain/shared/result";
+import type { IssueKey } from "../../../src/domain/work/issue-key";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { ManualClock } from "../../support/manual-clock";
 import { expectScreenshot } from "../../support/screenshot";
+import { workIn } from "../../support/work";
 import { view } from "../../support/workspace-views";
 
 /**
@@ -43,6 +45,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         navigation={new Map()}
         saveNavigation={() => Promise.resolve(ok(undefined))}
         timer={null}
+        work={new Map()}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => undefined}
@@ -58,13 +61,21 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
 const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
 
 /** A timer for `workspace` that ran for `ran` ms, then (if given) sat paused for `paused` ms. */
-async function trackedTimer(workspace: string, ran: number, paused?: number) {
+async function trackedTimer(
+  workspace: string,
+  ran: number,
+  paused?: number,
+  issue: string | null = null,
+) {
   const clock = new ManualClock(NOW - ran - (paused ?? 0));
   const timer = fakeTimer(
     clock,
     VIEWS.map((v) => v.workspace),
   );
-  await timer.toggle(VIEWS.find((v) => v.workspace.id === workspace)?.workspace ?? null);
+  await timer.toggle(
+    VIEWS.find((v) => v.workspace.id === workspace)?.workspace ?? null,
+    issue as IssueKey | null,
+  );
   clock.advance(ran);
   if (paused !== undefined) {
     await timer.toggle(null);
@@ -126,6 +137,39 @@ describe("screenshots", () => {
       { width: 80, height: 24 },
     );
     expectScreenshot("timer-elsewhere", screen.captureSpans());
+  });
+
+  test("work in progress, timed", async () => {
+    const screen = await shell({
+      work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 6_138_000),
+      ...(await trackedTimer("mobile-banking", 6_138_000, undefined, "MOB-2841")),
+    });
+    screen.mockInput.pressKey("j");
+    await screen.waitForFrame((f) => f.includes("▍WORK"));
+    expectScreenshot("work", screen.captureSpans());
+  });
+
+  test("work in progress at 80 columns: the title gives way", async () => {
+    const screen = await shell(
+      {
+        work: workIn(
+          "mobile-banking",
+          "MOB-2841",
+          "Add biometric authentication to the login screen",
+          NOW - 600_000,
+        ),
+        ...(await trackedTimer("mobile-banking", 600_000, undefined, "MOB-2841")),
+      },
+      { width: 80, height: 24 },
+    );
+    expectScreenshot("work-narrow", screen.captureSpans());
+  });
+
+  test("nothing in progress", async () => {
+    const screen = await shell();
+    screen.mockInput.pressKey("j");
+    await screen.waitForFrame((f) => f.includes("▍WORK"));
+    expectScreenshot("work-none", screen.captureSpans());
   });
 
   test("terminal too small", async () => {

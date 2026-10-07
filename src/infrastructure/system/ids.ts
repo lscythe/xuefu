@@ -6,6 +6,8 @@ import {
   eventId,
   type TimerId,
   timerId,
+  type WorkId,
+  workId,
 } from "../../domain/shared/ids";
 
 function mustParse<T>(
@@ -22,4 +24,5 @@ export const uuidV7Ids: IdGenerator = {
   eventId: (): EventId => mustParse(eventId, Bun.randomUUIDv7()),
   correlationId: (): CorrelationId => mustParse(correlationId, Bun.randomUUIDv7()),
   timerId: (): TimerId => mustParse(timerId, Bun.randomUUIDv7()),
+  workId: (): WorkId => mustParse(workId, Bun.randomUUIDv7()),
 };

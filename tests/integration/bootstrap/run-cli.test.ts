@@ -548,6 +548,102 @@ describe("runCli: timer", () => {
   });
 });
 
+describe("runCli: work", () => {
+  let mobile: string;
+  let api: string;
+  beforeEach(async () => {
+    const projects = join(realpathSync(dir.path), "projects");
+    mobile = join(projects, "mobile");
+    api = join(projects, "api");
+    mkdirSync(mobile, { recursive: true });
+    mkdirSync(api, { recursive: true });
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["workspace", "add", api, "--name", "Payments API"]);
+  });
+
+  test("nothing in progress: status exits 1 and finish explains how to start", async () => {
+    expect(await run(["work"])).toEqual({
+      code: EXIT.none,
+      stdout: "",
+      stderr: "No work in progress. Start with: xuefu work start <issue>\n",
+    });
+    expect(await run(["work", "--json"])).toMatchObject({ code: EXIT.none, stdout: "[]\n" });
+    const finished = await run(["work", "finish"], {}, mobile);
+    expect(finished.code).toBe(EXIT.noInput);
+    expect(finished.stderr).toContain("No work in progress in Mobile Banking");
+    expect(finished.stderr).toContain("xuefu work start <issue>");
+  });
+
+  test("start works on an issue here and times it; finish stops both", async () => {
+    expect(
+      await run(["work", "start", "mob-2841", "--title", "Add biometric login"], {}, mobile),
+    ).toEqual({
+      code: EXIT.ok,
+      stdout:
+        "✓ Working on MOB-2841 (Add biometric login) in Mobile Banking\n" +
+        "✓ Started a timer for Mobile Banking (MOB-2841)\n",
+      stderr: "",
+    });
+    const listed = await run(["work"]);
+    expect(listed.stdout).toMatch(
+      /^WORKSPACE {7}ISSUE {5}STARTED {11}TITLE\nMobile Banking {2}MOB-2841 {2}\w{3} \d\d \w{3} \d\d:\d\d {2}Add biometric login\n$/,
+    );
+    expect(JSON.parse((await run(["work", "--json"])).stdout)).toMatchObject([
+      { workspaceId: "mobile-banking", workspaceName: "Mobile Banking", issueKey: "MOB-2841" },
+    ]);
+    expect((await run(["timer"])).stdout).toContain("Issue        MOB-2841");
+
+    const finished = await run(["work", "finish"], {}, mobile);
+    expect(finished.stdout).toMatch(
+      /^✓ Finished MOB-2841 \(Add biometric login\) in Mobile Banking\n✓ Stopped the timer after \d\d:\d\d:\d\d\n$/,
+    );
+    expect((await run(["timer"])).code).toBe(EXIT.none);
+  });
+
+  test("a new issue finishes the old one; the timer follows the latest work", async () => {
+    await run(["work", "start", "MOB-1"], {}, mobile);
+    await run(["work", "start", "PAY-7", "-w", "payments-api"]);
+    const switched = await run(["work", "start", "MOB-2"], {}, mobile);
+    expect(switched.stdout).toMatch(
+      /^✓ Finished MOB-1 in Mobile Banking\n✓ Working on MOB-2 in Mobile Banking\n✓ Stopped the timer for Payments API \(PAY-7\) after .+\n✓ Started a timer for Mobile Banking \(MOB-2\)\n$/,
+    );
+    expect((await run(["work"])).stdout).toContain("PAY-7");
+    expect((await run(["work", "start", "MOB-2"], {}, mobile)).stderr).toContain(
+      "Already working on MOB-2 in Mobile Banking",
+    );
+  });
+
+  test("timer start without --issue times the work in progress", async () => {
+    await run(["work", "start", "MOB-1"], {}, mobile);
+    await run(["timer", "stop"]);
+    expect((await run(["timer", "start"], {}, mobile)).stdout).toBe(
+      "✓ Started a timer for Mobile Banking (MOB-1)\n",
+    );
+    const finished = await run(["work", "finish", "-w", "mobile-banking"]);
+    expect(finished.stdout).toContain("✓ Stopped the timer after");
+    await run(["work", "start", "MOB-3"], {}, mobile);
+    await run(["timer", "stop"]);
+    expect((await run(["work", "finish"], {}, mobile)).stdout).toBe(
+      "✓ Finished MOB-3 in Mobile Banking\n",
+    );
+  });
+
+  test("work outlives a removed workspace", async () => {
+    await run(["work", "start", "MOB-1"], {}, mobile);
+    await run(["workspace", "remove", "mobile-banking", "--yes"]);
+    expect((await run(["work"])).stdout).toContain("mobile-banking (removed)");
+    expect((await run(["work", "finish", "-w", "mobile-banking"])).stdout).toContain(
+      "✓ Finished MOB-1 in mobile-banking",
+    );
+  });
+
+  test("bad input and missing workspaces are reported", async () => {
+    expect((await run(["work", "start", "nope"], {}, mobile)).code).toBe(EXIT.usage);
+    expect((await run(["work", "start", "MOB-1"])).stderr).toContain("Not inside a workspace");
+    expect((await run(["work", "finish"])).code).toBe(EXIT.usage);
+  });
+});
+
 describe("exitCodeFor", () => {
   const prompt = {
     title: "t",

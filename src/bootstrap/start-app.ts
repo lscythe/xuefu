@@ -11,6 +11,12 @@ import {
 } from "../application/timesheet/commands";
 import { TimerQueries } from "../application/timesheet/queries";
 import {
+  registerWorkCommands,
+  type WorkCommands,
+  workCommands,
+} from "../application/work/commands";
+import { WorkQueries } from "../application/work/queries";
+import {
   registerWorkspaceCommands,
   type WorkspaceCommands,
   workspaceCommands,
@@ -39,6 +45,7 @@ import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
 import { SqliteTimerRepository } from "../infrastructure/persistence/sqlite/timer-repository";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
+import { SqliteWorkContextRepository } from "../infrastructure/persistence/sqlite/work-context-repository";
 import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
 import { SqliteWorkspaceSessionRepository } from "../infrastructure/persistence/sqlite/workspace-session-repository";
 import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sqlite/workspace-tabs-repository";
@@ -77,6 +84,8 @@ export interface App {
   readonly workspaces: WorkspaceQueries;
   readonly timerCommands: TimerCommands;
   readonly timers: TimerQueries;
+  readonly workCommands: WorkCommands;
+  readonly work: WorkQueries;
   close(): void;
 }
 
@@ -165,13 +174,25 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     unitOfWork,
     ids: uuidV7Ids,
   });
-  const registered = registerWorkspaceCommands(commandBus, workspaces);
-  const timersRegistered = registered.ok ? registerTimerCommands(commandBus, timers) : registered;
-  if (!timersRegistered.ok) {
+  const workRepository = new SqliteWorkContextRepository(database);
+  const work = workCommands({
+    contexts: workRepository,
+    timers: timerRepository,
+    workspaces: workspaceRepository,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
+  const registered = [
+    () => registerWorkspaceCommands(commandBus, workspaces),
+    () => registerTimerCommands(commandBus, timers),
+    () => registerWorkCommands(commandBus, work),
+  ].reduce<ReturnType<typeof registerWorkCommands>>(
+    (result, next) => (result.ok ? next() : result),
+    ok(undefined),
+  );
+  if (!registered.ok) {
     database.close();
-    return err(
-      unexpected("Command registration failed", new Error(timersRegistered.error.message)),
-    );
+    return err(unexpected("Command registration failed", new Error(registered.error.message)));
   }
 
   logger.info("XueFu started", {
@@ -202,6 +223,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     ),
     timerCommands: timers,
     timers: new TimerQueries(timerRepository, workspaceRepository),
+    workCommands: work,
+    work: new WorkQueries(workRepository, workspaceRepository),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();

@@ -12,6 +12,7 @@ import {
   type Timer,
   timerToggle,
 } from "../../src/domain/timesheet/timer";
+import type { IssueKey } from "../../src/domain/work/issue-key";
 import type { Workspace } from "../../src/domain/workspace/workspace";
 
 function unwrap<T>(result: Result<T, unknown>): T {
@@ -30,7 +31,10 @@ export function fakeTimer(clock: Clock, workspaces: readonly Workspace[]) {
 
   return {
     current: (): TimerView | null => (active === null ? null : view(active)),
-    toggle: (front: Workspace | null): Promise<Result<TimerView | null, AppError>> => {
+    toggle: (
+      front: Workspace | null,
+      issue: IssueKey | null = null,
+    ): Promise<Result<TimerView | null, AppError>> => {
       const now = clock.now();
       const action = timerToggle(active, front?.id ?? null);
       if (action === "pause" && active !== null) active = unwrap(pauseTimer(active, now));
@@ -38,7 +42,7 @@ export function fakeTimer(clock: Clock, workspaces: readonly Workspace[]) {
       else if (action === "start" && front !== null) {
         created += 1;
         active = startTimer(
-          { id: `tmr-${created}` as TimerId, workspaceId: front.id, issueKey: null },
+          { id: `tmr-${created}` as TimerId, workspaceId: front.id, issueKey: issue },
           now,
         );
       }

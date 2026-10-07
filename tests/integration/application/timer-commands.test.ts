@@ -216,6 +216,13 @@ describe("timer.toggle", () => {
     expect(ledgerTypes()).toEqual(["TimerStarted", "TimerPaused", "TimerResumed"]);
   });
 
+  test("a timer it starts can be for an issue", async () => {
+    const toggled = unwrap(
+      await bus.invoke(commands.toggle, { workspace: "mobile-banking", issue: "MOB-5" }),
+    );
+    expect(toggled?.timer).toMatchObject({ workspaceId: "mobile-banking", issueKey: "MOB-5" });
+  });
+
   test("in another workspace it starts that workspace's timer", async () => {
     await bus.invoke(commands.start, { workspace: "mobile-banking", issue: "MOB-1" });
     const toggled = unwrap(await bus.invoke(commands.toggle, { workspace: "auth-service" }));

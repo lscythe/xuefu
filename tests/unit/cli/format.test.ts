@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { DiagnosticsReport } from "../../../src/application/diagnostics";
 import { createRedactor, SecretRegistry } from "../../../src/application/security/redaction";
+import type { WorkView } from "../../../src/application/work/queries";
 import type { WorkspaceView } from "../../../src/application/workspace/queries";
 import {
   formatConfirmation,
   formatDiagnostics,
   formatError,
+  formatWorkList,
   formatWorkspaceList,
   helpText,
 } from "../../../src/cli/format";
@@ -185,6 +187,39 @@ describe("formatConfirmation", () => {
         "",
         "  The folder is not deleted.",
         "  Re-run with --yes to confirm.",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("formatWorkList", () => {
+  const work = (title: string | null, workspace: WorkView["workspace"]): WorkView => ({
+    work: {
+      id: "w1" as WorkView["work"]["id"],
+      workspaceId: "mobile-banking" as WorkspaceId,
+      issueKey: "MOB-2841" as WorkView["work"]["issueKey"],
+      title: title as WorkView["work"]["title"],
+      startedAt: Date.UTC(2026, 9, 6, 9, 14) as Timestamp,
+      endedAt: null,
+    },
+    workspace,
+  });
+
+  test("lists workspace, issue, start time and title in the given zone", () => {
+    const workspace = {
+      id: "mobile-banking" as WorkspaceId,
+      name: "Mobile Banking" as WorkspaceName,
+      path: "/work/m" as AbsolutePath,
+      group: null,
+      addedAt: 0 as Timestamp,
+      lastActiveAt: null,
+    };
+    expect(formatWorkList([work("Biometrics", workspace), work(null, null)], "UTC")).toBe(
+      [
+        "WORKSPACE                 ISSUE     STARTED           TITLE",
+        "Mobile Banking            MOB-2841  Tue 06 Oct 09:14  Biometrics",
+        "mobile-banking (removed)  MOB-2841  Tue 06 Oct 09:14  -",
         "",
       ].join("\n"),
     );

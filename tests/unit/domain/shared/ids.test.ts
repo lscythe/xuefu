@@ -1,18 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { correlationId, eventId, timerId, workspaceId } from "../../../../src/domain/shared/ids";
+import {
+  correlationId,
+  eventId,
+  timerId,
+  workId,
+  workspaceId,
+} from "../../../../src/domain/shared/ids";
 
-describe("EventId / CorrelationId / TimerId", () => {
+describe("EventId / CorrelationId / TimerId / WorkId", () => {
   test("accept UUIDs and token-like ids", () => {
     expect(eventId("0199b6f2-6a3e-7c1d-9f00-1a2b3c4d5e6f").ok).toBe(true);
     expect(correlationId("cmd_abc-123").ok).toBe(true);
     expect(timerId("0199b6f2-6a3e-7c1d-9f00-1a2b3c4d5e6f").ok).toBe(true);
+    expect(workId("wrk_1").ok).toBe(true);
   });
 
   test.each(["", " ", "has space", "semi;colon", "x".repeat(129), "ünïcode"])("reject %p", (v) => {
     expect(eventId(v).ok).toBe(false);
     expect(correlationId(v).ok).toBe(false);
     expect(timerId(v).ok).toBe(false);
+    expect(workId(v).ok).toBe(false);
   });
 });
 
