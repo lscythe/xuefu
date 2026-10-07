@@ -1,4 +1,5 @@
 import type { WorkspaceId } from "../shared/ids";
+import { lastActiveWorkspace, type WorkspaceRegistry } from "./registry";
 
 /** Workspaces open side by side in the cockpit, in tab order, and the one in front. */
 export interface WorkspaceTabs {
@@ -49,4 +50,20 @@ export function tabAt(tabs: WorkspaceTabs, position: number): WorkspaceId | null
 /** Drops tabs whose workspace was removed, refocusing as if each had been closed. */
 export function retainTabs(tabs: WorkspaceTabs, existing: ReadonlySet<WorkspaceId>): WorkspaceTabs {
   return tabs.open.filter((id) => !existing.has(id)).reduce(closeTab, tabs);
+}
+
+/**
+ * Tabs as stored (`open`, in order) applied to the registry: removed workspaces drop out, and the
+ * front tab is the open workspace activated most recently (the first one if none has been).
+ */
+export function currentTabs(
+  registry: WorkspaceRegistry,
+  open: readonly WorkspaceId[],
+): WorkspaceTabs {
+  const workspaces = open.flatMap((id) => registry.workspaces.filter((w) => w.id === id));
+  const front = lastActiveWorkspace({ workspaces }) ?? workspaces[0] ?? null;
+  return tabsOf(
+    workspaces.map((w) => w.id),
+    front?.id ?? null,
+  );
 }

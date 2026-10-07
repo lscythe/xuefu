@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../../src/domain/shared/path";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import { createRegistry } from "../../../../src/domain/workspace/registry";
 import {
   closeTab,
+  currentTabs,
   MAX_TABS,
   NO_TABS,
   openTab,
@@ -10,8 +14,10 @@ import {
   tabAt,
   type WorkspaceTabs,
 } from "../../../../src/domain/workspace/tabs";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 
 const id = (raw: string) => raw as WorkspaceId;
+const ids = (...raw: string[]) => raw.map(id);
 const tabs = (open: string[], active: string | null): WorkspaceTabs => ({
   open: open.map(id),
   active: active === null ? null : id(active),
@@ -68,6 +74,37 @@ describe("retainTabs", () => {
   test("drops workspaces that no longer exist and refocuses if needed", () => {
     const kept = retainTabs(tabs(["a", "b", "c"], "b"), new Set([id("a"), id("c")]));
     expect(kept).toEqual(tabs(["a", "c"], "c"));
+  });
+});
+
+describe("currentTabs", () => {
+  const workspace = (raw: string, lastActiveAt: number | null): Workspace => ({
+    id: id(raw),
+    name: raw as WorkspaceName,
+    path: `/work/${raw}` as AbsolutePath,
+    group: null,
+    addedAt: 0 as Timestamp,
+    lastActiveAt: lastActiveAt as Timestamp | null,
+  });
+  const registry = createRegistry([
+    workspace("a", 300),
+    workspace("b", 100),
+    workspace("c", 200),
+    workspace("d", null),
+  ]);
+  if (!registry.ok) throw new Error("registry");
+
+  test("the front tab is the open workspace activated most recently", () => {
+    expect(currentTabs(registry.value, ids("b", "c", "d"))).toEqual(tabs(["b", "c", "d"], "c"));
+  });
+
+  test("tabs of removed workspaces are dropped", () => {
+    expect(currentTabs(registry.value, ids("ghost", "b"))).toEqual(tabs(["b"], "b"));
+  });
+
+  test("never-activated tabs fall back to the first; no tabs means none active", () => {
+    expect(currentTabs(registry.value, ids("d"))).toEqual(tabs(["d"], "d"));
+    expect(currentTabs(registry.value, [])).toEqual(NO_TABS);
   });
 });
 
