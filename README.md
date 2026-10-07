@@ -11,12 +11,13 @@
 A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooling and timesheets
 around a single **Work Context**.
 
-> Status: **early development.** The terminal UI is not available yet.
+> Status: **early development.** The cockpit opens, switches workspaces and keeps them in tabs;
+> the Jira, Git, PR, Jenkins and Android panels are not built yet.
 
 ## Usage
 
 ```bash
-xuefu                                                          # open the cockpit (^W switches workspace, q quits)
+xuefu                                                          # open the cockpit
 xuefu workspace add ~/work/mobile-banking --group "Client A"  # register a project folder
 xuefu workspace                                                # list workspaces and detected tools
 xuefu workspace which                                          # the workspace containing this folder
@@ -27,7 +28,18 @@ xuefu diagnostics                                              # paths, config s
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, which makes it usable in shell prompts.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
-It opens in the workspace containing the current folder, or else in the one you used last.
+It opens on the workspace containing the current folder, alongside the tabs you left open.
+
+| Key            | In the cockpit                                   |
+|----------------|--------------------------------------------------|
+| `↑` `↓`, `j` `k` | move between sections (each workspace remembers its own) |
+| `Ctrl+W`       | find a workspace and open it in a tab            |
+| `Alt+1`…`Alt+9` | bring that tab to the front                     |
+| `Alt+W`        | close the front tab                              |
+| `q`, `Ctrl+C`  | quit                                             |
+
+On macOS, Alt shortcuts need the terminal to send Option as Meta (Terminal: Settings, Profiles,
+Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc+").
 
 ## Development
 
