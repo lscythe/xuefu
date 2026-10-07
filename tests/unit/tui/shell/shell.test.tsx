@@ -9,6 +9,7 @@ import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeTabs } from "../../../support/fake-tabs";
 import { fakeTimer } from "../../../support/fake-timer";
 import { ManualClock } from "../../../support/manual-clock";
+import { workIn } from "../../../support/work";
 import { view } from "../../../support/workspace-views";
 
 const MOBILE = view("mobile-banking", "Mobile Banking", "Banking Client");
@@ -39,6 +40,7 @@ async function renderShell(
         navigation={new Map()}
         saveNavigation={() => Promise.resolve(ok(undefined))}
         timer={null}
+        work={new Map()}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => {
@@ -301,6 +303,75 @@ describe("Shell timer", () => {
     ).captureCharFrame();
     expect(header(frame)).toContain("Mobile Banking Platform M…  Tue");
     expect(header(frame)).toContain("Tue 06 Oct • 13:59 • Timer 00:00:00 ");
+  });
+});
+
+describe("Shell work", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const WORK = workIn("mobile-banking", "MOB-2841", "Add biometric login", NOW - 3_600_000);
+  const panel = (frame: string) => frame.split("\n").filter((line) => line.includes("│ "));
+
+  async function openWork(props: Partial<ShellProps> = {}) {
+    const shell = await renderShell({ work: WORK, ...props });
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    return shell;
+  }
+
+  test("the header names the work in progress after the workspace", async () => {
+    const frame = (await renderShell({ work: WORK })).captureCharFrame();
+    expect(header(frame)).toContain("Mobile Banking  │  MOB-2841 Add biometric login");
+  });
+
+  test("the Work section shows the issue, when it started and its timer", async () => {
+    const shell = await openWork();
+    const frame = shell.captureCharFrame();
+    expect(frame).toContain("MOB-2841  Add biometric login");
+    expect(frame).toContain("Started   Tue 06 Oct 12:59");
+    expect(frame).toContain("Timer     not running, t starts it");
+  });
+
+  test("t times the work in progress, and the panel follows the timer", async () => {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    const issues: (string | null)[] = [];
+    const shell = await openWork({
+      clock,
+      tickMs: 5,
+      toggleTimer: (front, issue) => {
+        issues.push(issue);
+        return timer.toggle(front, issue);
+      },
+    });
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => f.includes("Timer     00:00:00 running"));
+    expect(issues).toEqual(["MOB-2841"]);
+    expect<string | null | undefined>(timer.current()?.timer.issueKey).toBe("MOB-2841");
+    clock.advance(90_000);
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => f.includes("Timer     00:01:30 paused"));
+  });
+
+  test("a timer for other work does not count as this work's", async () => {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    await timer.toggle(MOBILE.workspace, null);
+    const frame = (await openWork({ clock, timer: timer.current() })).captureCharFrame();
+    expect(frame).toContain("Timer     not running, t starts it");
+  });
+
+  test("with nothing in progress, or no workspace, it says what to do", async () => {
+    expect(panel((await openWork({ work: new Map() })).captureCharFrame()).join("\n")).toContain(
+      "Nothing in progress in Mobile Banking.",
+    );
+    const none = await openWork({ tabs: fakeTabs(VIEWS).initial });
+    expect(none.captureCharFrame()).toContain("Open a workspace with Ctrl+W to see its work.");
   });
 });
 

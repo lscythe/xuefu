@@ -1,12 +1,14 @@
-import { type Accessor, createSignal, onCleanup, Show } from "solid-js";
+import { type Accessor, Show } from "solid-js";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
+import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { useNow } from "../use-now";
 import { headerClock } from "./header-clock";
+import { fitHeaderLeft } from "./header-fit";
 import { type HeaderTimer, headerTimer } from "./header-timer";
-import { truncateToWidth } from "./tab-labels";
 
 export interface HeaderProps {
   readonly clock: Clock;
@@ -14,6 +16,8 @@ export interface HeaderProps {
   readonly tickMs: number;
   readonly icons: IconSet;
   readonly workspace: Workspace | null;
+  /** The front workspace's work in progress, shown after its name. */
+  readonly work: WorkContext | null;
   readonly timer: TimerView | null;
   /** Terminal columns; a long workspace name is shortened to keep the right side whole. */
   readonly width: number;
@@ -25,10 +29,7 @@ const BRAND_WIDTH = 15;
 const CHROME = 4;
 
 export function Header(props: HeaderProps) {
-  const [now, setNow] = createSignal(props.clock.now());
-  // The tick only re-reads the clock; nothing accumulates, so sleep/wake cannot drift.
-  const timer = setInterval(() => setNow(props.clock.now()), props.tickMs);
-  onCleanup(() => clearInterval(timer));
+  const now = useNow(props.clock, props.tickMs);
 
   const clock = () => headerClock(now(), props.timeZone);
   const separator = () => (props.icons === "ascii" ? " | " : " • ");
@@ -38,10 +39,11 @@ export function Header(props: HeaderProps) {
     const timerText = t === null ? "" : `${separator()}${t.label} ${t.clock}`;
     return `${clock().date}${separator()}${clock().time}${timerText}`;
   };
-  const name = () =>
-    truncateToWidth(
+  const left = () =>
+    fitHeaderLeft(
       props.workspace?.name ?? "",
-      Math.max(1, props.width - BRAND_WIDTH - CHROME - Bun.stringWidth(right())),
+      props.work === null ? null : { key: props.work.issueKey, title: props.work.title },
+      props.width - BRAND_WIDTH - CHROME - Bun.stringWidth(right()),
     );
 
   return (
@@ -61,8 +63,21 @@ export function Header(props: HeaderProps) {
         {props.workspace === null ? (
           <span style={{ fg: PALETTE.textMuted }}>No workspace</span>
         ) : (
-          <span style={{ fg: PALETTE.text }}>{name()}</span>
+          <span style={{ fg: PALETTE.text }}>{left().name}</span>
         )}
+        <Show when={props.work}>
+          {(work: Accessor<WorkContext>) => (
+            <>
+              <span style={{ fg: PALETTE.textDim }}>{"  │  "}</span>
+              <span style={{ fg: PALETTE.accentSecondary }}>
+                <b>{work().issueKey}</b>
+              </span>
+              <span style={{ fg: PALETTE.textMuted }}>
+                {left().title === null ? "" : ` ${left().title}`}
+              </span>
+            </>
+          )}
+        </Show>
       </text>
       <text fg={PALETTE.textMuted}>
         {`${clock().date}${separator()}`}

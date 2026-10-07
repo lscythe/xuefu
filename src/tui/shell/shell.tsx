@@ -7,6 +7,8 @@ import type { OpenTabs, WorkspaceView } from "../../application/workspace/querie
 import { assertNever } from "../../domain/shared/assert-never";
 import type { Result } from "../../domain/shared/result";
 import { timerToggle } from "../../domain/timesheet/timer";
+import type { IssueKey } from "../../domain/work/issue-key";
+import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
@@ -21,6 +23,7 @@ import { SECTIONS } from "./sections";
 import { TabBar } from "./tab-bar";
 import { fitsTerminal } from "./terminal-size";
 import { TooSmall } from "./too-small";
+import { WorkPanel } from "./work-panel";
 
 export interface ShellProps {
   readonly clock: Clock;
@@ -39,9 +42,15 @@ export interface ShellProps {
   ) => Promise<Result<unknown, AppError>>;
   /** The running or paused timer when the cockpit opened. */
   readonly timer: TimerView | null;
-  /** Starts, pauses or resumes the timer for the workspace in front; null if nothing changed. */
+  /** Work in progress, keyed by workspace id. */
+  readonly work: ReadonlyMap<string, WorkContext>;
+  /**
+   * Starts, pauses or resumes the timer for the workspace in front; a new timer is for `issue`.
+   * Resolves to null when nothing changed.
+   */
   readonly toggleTimer: (
     workspace: Workspace | null,
+    issue: IssueKey | null,
   ) => Promise<Result<TimerView | null, AppError>>;
   readonly stopTimer: () => Promise<Result<unknown, AppError>>;
   readonly onQuit: () => void;
@@ -67,6 +76,7 @@ export function Shell(props: ShellProps) {
   );
 
   const workspace = () => tabs().active;
+  const work = () => props.work.get(workspace()?.id ?? "") ?? null;
   const selected = () => sections().get(workspace()?.id ?? "") ?? 0;
   const section = () => SECTIONS[selected()] ?? SECTIONS[0];
   const select = (index: number) => {
@@ -87,7 +97,7 @@ export function Shell(props: ShellProps) {
   };
 
   const toggleTimer = async () => {
-    const toggled = await props.toggleTimer(workspace());
+    const toggled = await props.toggleTimer(workspace(), work()?.issueKey ?? null);
     if (!toggled.ok) setNotice(toggled.error);
     else if (toggled.value !== null) setTimer(toggled.value);
   };
@@ -164,6 +174,7 @@ export function Shell(props: ShellProps) {
           tickMs={props.tickMs ?? 1000}
           icons={props.icons}
           workspace={workspace()}
+          work={work()}
           timer={timer()}
           width={dimensions().width}
         />
@@ -182,7 +193,19 @@ export function Shell(props: ShellProps) {
             <text fg={PALETTE.accentSecondary}>
               <b>{`${props.icons === "ascii" ? "" : "▍"}${section()?.label.toUpperCase()}`}</b>
             </text>
-            <text fg={PALETTE.textMuted}>Nothing to show yet.</text>
+            <Show
+              when={section()?.id === "work"}
+              fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}
+            >
+              <WorkPanel
+                clock={props.clock}
+                timeZone={props.timeZone}
+                tickMs={props.tickMs ?? 1000}
+                workspace={workspace()}
+                work={work()}
+                timer={timer()}
+              />
+            </Show>
           </box>
         </box>
         <Show when={notice()}>
