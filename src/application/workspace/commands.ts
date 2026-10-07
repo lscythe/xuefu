@@ -9,6 +9,7 @@ import { type WorkspaceId, workspaceId } from "../../domain/shared/ids";
 import { absolutePath, baseName } from "../../domain/shared/path";
 import { ok, type Result } from "../../domain/shared/result";
 import {
+  activateWorkspace,
   addWorkspace,
   assignGroup,
   findWorkspace,
@@ -24,6 +25,7 @@ import type { WorkspaceCapabilities, WorkspaceProbe } from "../ports/workspace-p
 import type { WorkspaceRepository } from "../ports/workspace-repository";
 import { domainString } from "../validation";
 import type {
+  WorkspaceActivatedPayload,
   WorkspaceAddedPayload,
   WorkspaceGroupAssignedPayload,
   WorkspaceRemovedPayload,
@@ -205,7 +207,33 @@ export function workspaceCommands(deps: WorkspaceCommandDependencies) {
       }),
   });
 
-  return { add, remove, group } as const;
+  const activate = defineCommand({
+    name: "workspace.activate",
+    title: "Switch to workspace",
+    category: CATEGORY,
+    safety: "safe",
+    input: z.strictObject({ id: domainString(workspaceId) }),
+    handler: (input, context) =>
+      unitOfWork.run((tx) => {
+        const activated = changeRegistry(repository, (registry) =>
+          activateWorkspace(registry, input.id, context.clock.now()),
+        );
+        if (!activated.ok) return activated;
+        const { workspace } = activated.value;
+        tx.record(
+          workspaceEvent<"WorkspaceActivated", WorkspaceActivatedPayload>(
+            ids,
+            context,
+            "WorkspaceActivated",
+            workspace.id,
+            { id: workspace.id },
+          ),
+        );
+        return ok(workspace);
+      }),
+  });
+
+  return { add, remove, group, activate } as const;
 }
 
 export type WorkspaceCommands = ReturnType<typeof workspaceCommands>;
@@ -218,5 +246,7 @@ export function registerWorkspaceCommands(
   if (!add.ok) return add;
   const remove = bus.register(commands.remove);
   if (!remove.ok) return remove;
-  return bus.register(commands.group);
+  const group = bus.register(commands.group);
+  if (!group.ok) return group;
+  return bus.register(commands.activate);
 }

@@ -55,11 +55,12 @@ let probe: FakeProbe;
 let queries: WorkspaceQueries;
 let published: DomainEvent[];
 let ledger: SqliteEventLedger;
+let clock: ManualClock;
 
 beforeEach(() => {
   db = migratedMemoryDatabase();
   const { logger } = testLogger();
-  const clock = new ManualClock();
+  clock = new ManualClock();
   const ids = new SequentialIds();
   const events = new EventBus(logger);
   published = [];
@@ -242,6 +243,37 @@ describe("workspace.group.assign", () => {
   });
 });
 
+describe("workspace.activate", () => {
+  beforeEach(async () => {
+    probe.dir("/work/a").dir("/work/b");
+    await bus.dispatch("workspace.add", { path: "/work/a" });
+    await bus.dispatch("workspace.add", { path: "/work/b" });
+  });
+
+  test("nothing is last active before the first activation", () => {
+    expect(queries.lastActive()).toEqual({ ok: true, value: null });
+  });
+
+  test("stamps the time, records the activation and becomes the last active workspace", async () => {
+    clock.advance(1_000);
+    const activated = await bus.dispatch("workspace.activate", { id: "b" });
+    expect(activated).toMatchObject({ ok: true, value: { id: "b", lastActiveAt: clock.now() } });
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceAdded", "WorkspaceActivated"]);
+    const last = queries.lastActive();
+    expect(last.ok ? (last.value?.id as string | undefined) : null).toBe("b");
+
+    clock.advance(1_000);
+    await bus.dispatch("workspace.activate", { id: "a" });
+    const later = queries.lastActive();
+    expect(later.ok ? (later.value?.id as string | undefined) : null).toBe("a");
+  });
+
+  test("an unknown workspace is not found and records nothing", async () => {
+    expectError(await bus.dispatch("workspace.activate", { id: "ghost" }), "not-found");
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceAdded"]);
+  });
+});
+
 describe("WorkspaceQueries", () => {
   test("list reports capabilities and folders that have gone missing", async () => {
     probe.dir("/work/a", { git: true, gradle: true }).dir("/work/b");
@@ -295,6 +327,7 @@ describe("workspace events", () => {
     probe.dir("/work/a");
     await bus.dispatch("workspace.add", { path: "/work/a", group: "G" });
     await bus.dispatch("workspace.group.assign", { id: "a", group: null });
+    await bus.dispatch("workspace.activate", { id: "a" });
     const prompt = await bus.dispatch("workspace.remove", { id: "a" });
     if (prompt.ok || prompt.error.kind !== "confirmation-required") throw new Error("no prompt");
     await bus.dispatch(
@@ -309,7 +342,7 @@ describe("workspace events", () => {
     if (!catalog.ok) throw new Error(catalog.error.message);
     const page = ledger.list({ limit: 100 });
     if (!page.ok) throw new Error(page.error.message);
-    expect(page.value.events).toHaveLength(3);
+    expect(page.value.events).toHaveLength(4);
     for (const event of page.value.events) expect(catalog.value.decode(event).ok).toBe(true);
   });
 });

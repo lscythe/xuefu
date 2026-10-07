@@ -1,7 +1,7 @@
 import type { FileSystemError, StorageError } from "../../domain/shared/errors";
 import type { AbsolutePath } from "../../domain/shared/path";
 import { ok, type Result } from "../../domain/shared/result";
-import { workspaceAt } from "../../domain/workspace/registry";
+import { lastActiveWorkspace, workspaceAt } from "../../domain/workspace/registry";
 import type { Workspace } from "../../domain/workspace/workspace";
 import type { WorkspaceCapabilities, WorkspaceProbe } from "../ports/workspace-probe";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
@@ -36,6 +36,12 @@ export class WorkspaceQueries {
       }),
     );
     return ok(views);
+  }
+
+  /** The workspace opened most recently, or null when none has been opened yet. */
+  lastActive(): Result<Workspace | null, StorageError> {
+    const loaded = this.repository.load();
+    return loaded.ok ? ok(lastActiveWorkspace(loaded.value)) : loaded;
   }
 
   /** The workspace containing `path` (symlinks resolved), or null when it is in none. */
