@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import {
   addDuration,
+  clockDuration,
   type Duration,
   duration,
   durationBetween,
@@ -73,5 +74,17 @@ describe("Duration", () => {
         if (result.ok) expect<number>(result.value).toBe(b - a);
       }),
     );
+  });
+});
+
+describe("clockDuration", () => {
+  test.each([
+    [0, "00:00:00"],
+    [999, "00:00:00"],
+    [6_138_000, "01:42:18"],
+    [359_999_000, "99:59:59"],
+    [360_000_000, "100:00:00"],
+  ])("%p ms reads %p", (ms, text) => {
+    expect(clockDuration(ms as Duration)).toBe(text);
   });
 });

@@ -56,3 +56,11 @@ export function addDuration(at: Timestamp, elapsed: Duration): Timestamp {
 export function sumDurations(durations: readonly Duration[]): Duration {
   return durations.reduce((total, d) => total + d, 0) as Duration;
 }
+
+const pad = (value: number): string => String(value).padStart(2, "0");
+
+/** "01:42:18": whole hours, minutes and seconds; hours widen past 99 instead of wrapping. */
+export function clockDuration(elapsed: Duration): string {
+  const seconds = Math.floor(elapsed / 1000);
+  return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+}
