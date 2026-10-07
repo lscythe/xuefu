@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { switcherActionFor, type TypedKey } from "../../../../src/tui/switcher/switcher-keys";
+import { queryActionFor, type TypedKey } from "../../../../src/tui/query-input/keys";
 
 const key = (name: string, sequence = name, modifiers: Partial<TypedKey> = {}): TypedKey => ({
   name,
@@ -11,7 +11,7 @@ const key = (name: string, sequence = name, modifiers: Partial<TypedKey> = {}): 
 });
 const ctrl = (name: string) => key(name, "", { ctrl: true });
 
-describe("switcherActionFor", () => {
+describe("queryActionFor", () => {
   test.each([
     [key("escape", "\u001b"), { kind: "close" }],
     [key("return", "\r"), { kind: "choose" }],
@@ -28,7 +28,7 @@ describe("switcherActionFor", () => {
     [key("符"), { kind: "type", text: "符" }],
     [key("j"), { kind: "type", text: "j" }],
   ] as const)("%o → %o", (pressed, action) => {
-    expect(switcherActionFor(pressed)).toEqual(action);
+    expect(queryActionFor(pressed)).toEqual(action);
   });
 
   test.each([
@@ -38,6 +38,6 @@ describe("switcherActionFor", () => {
     key("f1", "\u001bOP"),
     key("delete", "\u001b[3~"),
   ])("%o does nothing", (pressed) => {
-    expect(switcherActionFor(pressed)).toBeNull();
+    expect(queryActionFor(pressed)).toBeNull();
   });
 });

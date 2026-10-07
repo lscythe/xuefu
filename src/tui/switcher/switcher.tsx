@@ -8,18 +8,12 @@ import type { Result } from "../../domain/shared/result";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { segments } from "../highlight";
-import { cycle } from "../list-navigation";
+import { cycle, scrollOffset } from "../list-navigation";
+import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
+import { queryActionFor } from "../query-input/keys";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
-import { switcherActionFor } from "./switcher-keys";
-import {
-  eraseChar,
-  eraseWord,
-  pastedText,
-  type SwitcherRow,
-  scrollOffset,
-  switcherRows,
-} from "./switcher-model";
+import { type SwitcherRow, switcherRows } from "./switcher-model";
 
 export interface SwitcherProps {
   /** Read fresh on every open, so workspaces added from the CLI meanwhile show up. */
@@ -98,7 +92,7 @@ export function Switcher(props: SwitcherProps) {
   };
 
   useKeyboard((key) => {
-    const action = switcherActionFor(key);
+    const action = queryActionFor(key);
     if (action === null) return;
     switch (action.kind) {
       case "close":
