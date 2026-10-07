@@ -23,7 +23,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "dashboard", label: "Dashboard", icon: "⌂" },
   { id: "work", label: "Work", icon: "▤" },
   { id: "jira", label: "Jira", icon: "◆" },
-  { id: "git", label: "Git", icon: "⎇" },
+  // "⎇" would read better, but common terminal fonts (Menlo among them) lack it.
+  { id: "git", label: "Git", icon: "±" },
   { id: "pulls", label: "PRs", icon: "⇅" },
   { id: "timesheet", label: "Timesheet", icon: "◷" },
   { id: "jenkins", label: "Jenkins", icon: "⚙" },

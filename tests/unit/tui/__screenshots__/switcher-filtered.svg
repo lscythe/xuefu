@@ -99,7 +99,7 @@
 <text x="0" y="104" fill="#4a4740">│</text>
 <rect x="9" y="90" width="9" height="18" fill="#14141c"/>
 <rect x="18" y="90" width="45" height="18" fill="#14141c"/>
-<text x="18 36 45 54" y="104" fill="#8a8578">⎇Git</text>
+<text x="18 36 45 54" y="104" fill="#8a8578">±Git</text>
 <rect x="63" y="90" width="72" height="18" fill="#14141c"/>
 <rect x="135" y="90" width="9" height="18" fill="#14141c"/>
 <text x="135" y="104" fill="#4a4740">│</text>
