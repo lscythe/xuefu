@@ -19,6 +19,8 @@ export interface Workspace {
   readonly path: AbsolutePath;
   readonly group: GroupName | null;
   readonly addedAt: Timestamp;
+  /** When the workspace was last opened in the cockpit; null until it first is. */
+  readonly lastActiveAt: Timestamp | null;
 }
 
 const CONTROL_CHARACTER = /\p{Cc}/u;

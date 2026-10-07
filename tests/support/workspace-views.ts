@@ -18,6 +18,7 @@ export function view(
       path: `/work/${id}` as AbsolutePath,
       group: group as GroupName | null,
       addedAt: 0 as Timestamp,
+      lastActiveAt: null,
     },
     status,
     capabilities: { git: true, gradle: false },
