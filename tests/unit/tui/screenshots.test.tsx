@@ -46,6 +46,8 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         saveNavigation={() => Promise.resolve(ok(undefined))}
         timer={null}
         work={new Map()}
+        startWork={() => Promise.resolve(err(storageError("not wired", "test")))}
+        finishWork={() => Promise.resolve(err(storageError("not wired", "test")))}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => undefined}
@@ -170,6 +172,42 @@ describe("screenshots", () => {
     screen.mockInput.pressKey("j");
     await screen.waitForFrame((f) => f.includes("▍WORK"));
     expectScreenshot("work-none", screen.captureSpans());
+  });
+
+  test("palette", async () => {
+    const screen = await shell({
+      work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 600_000),
+      ...(await trackedTimer("mobile-banking", 600_000, undefined, "MOB-2841")),
+    });
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    expectScreenshot("palette", screen.captureSpans());
+  });
+
+  test("palette, asking for a field", async () => {
+    const screen = await shell();
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Issue key"));
+    await screen.mockInput.typeText("MOB-2841");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Title (optional)"));
+    await screen.mockInput.typeText("Add biometric");
+    await screen.waitForFrame((f) => f.includes("> Add biometric"));
+    expectScreenshot("palette-fields", screen.captureSpans());
+  });
+
+  test("palette, invalid input", async () => {
+    const screen = await shell();
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Issue key"));
+    await screen.mockInput.typeText("biometrics");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Issue key is invalid"));
+    expectScreenshot("palette-invalid", screen.captureSpans());
   });
 
   test("terminal too small", async () => {

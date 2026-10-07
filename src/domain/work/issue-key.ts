@@ -14,7 +14,7 @@ export function issueKey(raw: string): Result<IssueKey, ValidationError> {
     return err(
       validationError(
         "Issue key is invalid",
-        [{ path: "issue", message: "must look like PROJ-123: a project key, '-' and a number" }],
+        [{ path: "issue", message: "must look like PROJ-123" }],
         { raw },
       ),
     );

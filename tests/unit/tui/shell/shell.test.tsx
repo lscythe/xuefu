@@ -8,6 +8,7 @@ import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeTabs } from "../../../support/fake-tabs";
 import { fakeTimer } from "../../../support/fake-timer";
+import { fakeWork } from "../../../support/fake-work";
 import { ManualClock } from "../../../support/manual-clock";
 import { workIn } from "../../../support/work";
 import { view } from "../../../support/workspace-views";
@@ -41,6 +42,8 @@ async function renderShell(
         saveNavigation={() => Promise.resolve(ok(undefined))}
         timer={null}
         work={new Map()}
+        startWork={() => Promise.resolve(err(storageError("not wired", "test")))}
+        finishWork={() => Promise.resolve(err(storageError("not wired", "test")))}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => {
@@ -67,7 +70,7 @@ describe("Shell tabs", () => {
     const frame = (await renderShell()).captureCharFrame();
     expect(tabBar(frame)).toContain(" 1 Mobile Banking ");
     expect(rowContaining(frame, "navigate")).toContain("alt+1-9 tabs");
-    expect(rowContaining(frame, "navigate")).toContain("alt+w close tab");
+    expect(rowContaining(frame, "navigate")).toContain(": commands");
   });
 
   test("choosing in the switcher opens a tab; alt+digit brings tabs back to the front", async () => {
@@ -372,6 +375,131 @@ describe("Shell work", () => {
     );
     const none = await openWork({ tabs: fakeTabs(VIEWS).initial });
     expect(none.captureCharFrame()).toContain("Open a workspace with Ctrl+W to see its work.");
+  });
+});
+
+describe("Shell palette", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+
+  async function paletteShell(props: Partial<ShellProps> = {}) {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    const work = fakeWork(clock, timer);
+    const shell = await renderShell({
+      clock,
+      tickMs: 5,
+      timer: timer.current(),
+      toggleTimer: timer.toggle,
+      stopTimer: timer.stop,
+      startWork: work.start,
+      finishWork: work.finish,
+      ...props,
+    });
+    return Object.assign(shell, { clock, timer, work });
+  }
+
+  async function run(shell: TestRendererSetup, query: string) {
+    await shell.mockInput.typeText(":");
+    await shell.waitForFrame((f) => f.includes(" Commands "));
+    await shell.mockInput.typeText(query);
+    await shell.waitForFrame((f) => f.includes(`: ${query}`));
+    shell.mockInput.pressEnter();
+  }
+
+  test(": lists what applies here, with each direct key", async () => {
+    const shell = await paletteShell();
+    expect(rowContaining(shell.captureCharFrame(), "navigate")).toContain(": commands");
+    await shell.mockInput.typeText(":");
+    const frame = await shell.waitForFrame((f) => f.includes(" Commands "));
+    for (const title of ["Start work…", "Start timer", "Switch workspace", "Close tab", "Quit"]) {
+      expect(frame).toContain(title);
+    }
+    expect(frame).not.toContain("Stop timer");
+    expect(frame).not.toContain("Finish work");
+  });
+
+  test("start work from the palette: it shows in the header and is timed", async () => {
+    const shell = await paletteShell();
+    await run(shell, "start work");
+    await shell.waitForFrame((f) => f.includes("Issue key"));
+    await shell.mockInput.typeText("MOB-2841");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes("Title (optional)"));
+    await shell.mockInput.typeText("Add biometric login");
+    shell.mockInput.pressEnter();
+    const frame = await shell.waitForFrame((f) => !f.includes(" Start work "));
+    expect(header(frame)).toContain("MOB-2841 Add biometric log…");
+    expect(header(frame)).toContain("Timer 00:00:00");
+    expect<string | undefined>(shell.work.open().get("mobile-banking")?.issueKey).toBe("MOB-2841");
+  });
+
+  test("finish work from the palette clears it and stops its timer", async () => {
+    const shell = await paletteShell();
+    await shell.work.start(MOBILE.workspace, "MOB-1", null);
+    shell.renderer.destroy();
+    const again = await paletteShell({
+      work: shell.work.open(),
+      timer: shell.timer.current(),
+      toggleTimer: shell.timer.toggle,
+      stopTimer: shell.timer.stop,
+      finishWork: shell.work.finish,
+    });
+    expect(header(again.captureCharFrame())).toContain("MOB-1");
+    await run(again, "finish");
+    const frame = await again.waitForFrame((f) => !f.includes(" Commands "));
+    expect(header(frame)).not.toContain("MOB-1");
+    expect(header(frame)).not.toContain("Timer");
+  });
+
+  test("timer entries follow the timer; their failures stay in the palette", async () => {
+    const shell = await paletteShell({
+      stopTimer: () =>
+        Promise.resolve(err(storageError("Unable to save the timer", "timers.save"))),
+    });
+    await run(shell, "start timer");
+    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    await run(shell, "stop timer");
+    await shell.waitForFrame(
+      (f) => f.includes("✗ Unable to save the timer") && f.includes(" Commands "),
+    );
+    shell.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await shell.waitForFrame((f) => !f.includes(" Commands "));
+    expect(header(shell.captureCharFrame())).toContain("Timer 00:00:00");
+  });
+
+  test("switch workspace and close tab work from the palette too", async () => {
+    const shell = await paletteShell();
+    await run(shell, "switch");
+    await shell.waitForFrame((f) => f.includes("Switch workspace") && f.includes("of 3"));
+    shell.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await shell.waitForFrame((f) => !f.includes("Switch workspace"));
+    await run(shell, "close tab");
+    await shell.waitForFrame((f) => header(f).includes("No workspace"));
+  });
+
+  test("while the palette is open, keys go to it; quit runs from it", async () => {
+    const shell = await paletteShell();
+    await shell.mockInput.typeText(":");
+    await shell.waitForFrame((f) => f.includes(" Commands "));
+    await shell.mockInput.typeText("q");
+    await shell.waitForFrame((f) => f.includes(": q"));
+    expect(shell.quits()).toBe(0);
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame(() => shell.quits() === 1);
+  });
+
+  test("a failure from a key is reported above the key bar", async () => {
+    const shell = await paletteShell({
+      closeTab: () =>
+        Promise.resolve(err(storageError("Unable to save open tabs", "workspace_tabs.save"))),
+    });
+    shell.mockInput.pressKey("w", { meta: true });
+    await shell.waitForFrame((f) => f.includes("✗ Unable to save open tabs"));
   });
 });
 

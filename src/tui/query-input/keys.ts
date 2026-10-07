@@ -5,7 +5,7 @@ export interface TypedKey extends KeyPress {
   readonly sequence: string;
 }
 
-export type SwitcherAction =
+export type QueryAction =
   | { readonly kind: "close" }
   | { readonly kind: "choose" }
   | { readonly kind: "move"; readonly delta: 1 | -1 }
@@ -20,8 +20,8 @@ function printable(key: TypedKey): string | null {
   return chars.length === 1 && !CONTROL.test(key.sequence) ? key.sequence : null;
 }
 
-/** Keys while the switcher is open; letters type into the query, so j/k/q do not navigate. */
-export function switcherActionFor(key: TypedKey): SwitcherAction | null {
+/** Keys while an overlay takes typing; letters type into its query, so j/k/q do not navigate. */
+export function queryActionFor(key: TypedKey): QueryAction | null {
   if (key.ctrl && !key.meta) {
     switch (key.name) {
       case "p":

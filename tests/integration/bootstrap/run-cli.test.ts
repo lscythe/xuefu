@@ -628,6 +628,32 @@ describe("runCli: work", () => {
     );
   });
 
+  test("the cockpit palette starts and finishes work", async () => {
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Issue key"));
+    await screen.mockInput.typeText("MOB-77");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Title (optional)"));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("│  MOB-77") && /Timer \d\d:\d\d:\d\d/.test(f));
+    expect((await run(["work"])).stdout).toContain("MOB-77");
+
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes("Finish work on MOB-77"));
+    await screen.mockInput.typeText("finish");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => !f.includes("MOB-77"));
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+    expect((await run(["work"])).code).toBe(EXIT.none);
+  });
+
   test("work outlives a removed workspace", async () => {
     await run(["work", "start", "MOB-1"], {}, mobile);
     await run(["workspace", "remove", "mobile-banking", "--yes"]);

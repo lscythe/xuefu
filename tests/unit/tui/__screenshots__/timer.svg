@@ -333,17 +333,17 @@
 <text x="261 270 279 288 297 306 315" y="536" fill="#e8e3d9">alt+1-9</text>
 <rect x="324" y="522" width="63" height="18" fill="#14141c"/>
 <text x="333 342 351 360" y="536" fill="#8a8578">tabs</text>
-<rect x="387" y="522" width="45" height="18" fill="#1c1626"/>
-<text x="387 396 405 414 423" y="536" fill="#e8e3d9">alt+w</text>
-<rect x="432" y="522" width="108" height="18" fill="#14141c"/>
-<text x="441 450 459 468 477 495 504 513" y="536" fill="#8a8578">closetab</text>
-<rect x="540" y="522" width="9" height="18" fill="#1c1626"/>
-<text x="540" y="536" fill="#e8e3d9">t</text>
-<rect x="549" y="522" width="72" height="18" fill="#14141c"/>
-<text x="558 567 576 585 594" y="536" fill="#8a8578">timer</text>
-<rect x="621" y="522" width="9" height="18" fill="#1c1626"/>
-<text x="621" y="536" fill="#e8e3d9">q</text>
-<rect x="630" y="522" width="63" height="18" fill="#14141c"/>
-<text x="639 648 657 666" y="536" fill="#8a8578">quit</text>
-<rect x="693" y="522" width="207" height="18" fill="#14141c"/>
+<rect x="387" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="387" y="536" fill="#e8e3d9">t</text>
+<rect x="396" y="522" width="72" height="18" fill="#14141c"/>
+<text x="405 414 423 432 441" y="536" fill="#8a8578">timer</text>
+<rect x="468" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="468" y="536" fill="#e8e3d9">:</text>
+<rect x="477" y="522" width="99" height="18" fill="#14141c"/>
+<text x="486 495 504 513 522 531 540 549" y="536" fill="#8a8578">commands</text>
+<rect x="576" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="576" y="536" fill="#e8e3d9">q</text>
+<rect x="585" y="522" width="63" height="18" fill="#14141c"/>
+<text x="594 603 612 621" y="536" fill="#8a8578">quit</text>
+<rect x="648" y="522" width="252" height="18" fill="#14141c"/>
 </svg>

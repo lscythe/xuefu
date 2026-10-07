@@ -3,15 +3,17 @@ import { type Accessor, createSignal, Show } from "solid-js";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
+import type { FinishedWork, StartedWork } from "../../application/work/commands";
 import type { OpenTabs, WorkspaceView } from "../../application/workspace/queries";
 import { assertNever } from "../../domain/shared/assert-never";
-import type { Result } from "../../domain/shared/result";
+import { ok, type Result } from "../../domain/shared/result";
 import { timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
+import { Palette } from "../palette/palette";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
@@ -19,6 +21,7 @@ import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
 import { Nav } from "./nav";
+import { paletteEntries } from "./palette-entries";
 import { SECTIONS } from "./sections";
 import { TabBar } from "./tab-bar";
 import { fitsTerminal } from "./terminal-size";
@@ -53,6 +56,13 @@ export interface ShellProps {
     issue: IssueKey | null,
   ) => Promise<Result<TimerView | null, AppError>>;
   readonly stopTimer: () => Promise<Result<unknown, AppError>>;
+  /** Starts work on `issue` in the workspace, timing it; text is checked by the command. */
+  readonly startWork: (
+    workspace: Workspace,
+    issue: string,
+    title: string | null,
+  ) => Promise<Result<StartedWork, AppError>>;
+  readonly finishWork: (workspace: Workspace) => Promise<Result<FinishedWork, AppError>>;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
@@ -63,8 +73,10 @@ export function Shell(props: ShellProps) {
   const dimensions = useTerminalDimensions();
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [notice, setNotice] = createSignal<AppError | null>(null);
   const [timer, setTimer] = createSignal(props.timer);
+  const [allWork, setAllWork] = createSignal(props.work);
   // Each workspace keeps its own place in the navigation; "" is the no-workspace screen.
   const [sections, setSections] = createSignal<ReadonlyMap<string, number>>(
     new Map(
@@ -76,7 +88,7 @@ export function Shell(props: ShellProps) {
   );
 
   const workspace = () => tabs().active;
-  const work = () => props.work.get(workspace()?.id ?? "") ?? null;
+  const work = () => allWork().get(workspace()?.id ?? "") ?? null;
   const selected = () => sections().get(workspace()?.id ?? "") ?? 0;
   const section = () => SECTIONS[selected()] ?? SECTIONS[0];
   const select = (index: number) => {
@@ -89,23 +101,64 @@ export function Shell(props: ShellProps) {
     });
   };
 
-  /** Applies a tab change once it is saved; a failure is shown above the key bar. */
+  /** Shows a failure above the key bar; for actions started by a key rather than the palette. */
+  const report = (done: Promise<Result<unknown, AppError>>) => {
+    void done.then((result) => {
+      if (!result.ok) setNotice(result.error);
+    });
+  };
+
+  /** Applies a tab change once it is saved. */
   const changeTabs = async (change: Promise<Result<OpenTabs, AppError>>) => {
     const changed = await change;
     if (changed.ok) setTabs(changed.value);
-    else setNotice(changed.error);
+    return changed;
+  };
+
+  const closeTab = () => {
+    const current = workspace();
+    return current === null ? Promise.resolve(ok(null)) : changeTabs(props.closeTab(current));
   };
 
   const toggleTimer = async () => {
     const toggled = await props.toggleTimer(workspace(), work()?.issueKey ?? null);
-    if (!toggled.ok) setNotice(toggled.error);
-    else if (toggled.value !== null) setTimer(toggled.value);
+    if (toggled.ok && toggled.value !== null) setTimer(toggled.value);
+    return toggled;
   };
 
   const stopTimer = async () => {
     const stopped = await props.stopTimer();
     if (stopped.ok) setTimer(null);
-    else setNotice(stopped.error);
+    return stopped;
+  };
+
+  const setWorkFor = (id: string, next: WorkContext | null) => {
+    const all = new Map(allWork());
+    if (next === null) all.delete(id);
+    else all.set(id, next);
+    setAllWork(all);
+  };
+
+  const startWork = async (issue: string, title: string | null) => {
+    const current = workspace();
+    if (current === null) return ok(null);
+    const started = await props.startWork(current, issue, title);
+    if (started.ok) {
+      setWorkFor(current.id, started.value.work.work);
+      if (started.value.timer !== null) setTimer(started.value.timer.timer);
+    }
+    return started;
+  };
+
+  const finishWork = async () => {
+    const current = workspace();
+    if (current === null) return ok(null);
+    const finished = await props.finishWork(current);
+    if (finished.ok) {
+      setWorkFor(current.id, null);
+      if (finished.value.timer !== null) setTimer(null);
+    }
+    return finished;
   };
 
   const move = (to: "previous" | "next" | "first" | "last") => {
@@ -126,7 +179,8 @@ export function Shell(props: ShellProps) {
   useKeyboard((key) => {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell.
-    if (action === null || (switcherOpen() && action.kind !== "interrupt")) return;
+    const overlay = switcherOpen() || paletteOpen();
+    if (action === null || (overlay && action.kind !== "interrupt")) return;
     setNotice(null);
     switch (action.kind) {
       case "nav":
@@ -135,23 +189,24 @@ export function Shell(props: ShellProps) {
       case "switcher.open":
         setSwitcherOpen(true);
         return;
+      case "palette.open":
+        setPaletteOpen(true);
+        return;
       case "tab.focus": {
         const target = tabs().open[action.position - 1];
         if (target !== undefined && target.id !== workspace()?.id) {
-          void changeTabs(props.activateWorkspace(target));
+          report(changeTabs(props.activateWorkspace(target)));
         }
         return;
       }
-      case "tab.close": {
-        const current = workspace();
-        if (current !== null) void changeTabs(props.closeTab(current));
+      case "tab.close":
+        report(closeTab());
         return;
-      }
       case "timer.toggle":
-        void toggleTimer();
+        report(toggleTimer());
         return;
       case "timer.stop":
-        void stopTimer();
+        report(stopTimer());
         return;
       case "quit":
       case "interrupt":
@@ -235,6 +290,27 @@ export function Shell(props: ShellProps) {
               return activated;
             }}
             onClose={() => setSwitcherOpen(false)}
+          />
+        </Show>
+        <Show when={paletteOpen()}>
+          <Palette
+            entries={paletteEntries(
+              { workspace: workspace(), work: work(), timer: timer() },
+              {
+                startWork,
+                finishWork,
+                toggleTimer,
+                stopTimer,
+                closeTab,
+                openSwitcher: () => {
+                  setPaletteOpen(false);
+                  setSwitcherOpen(true);
+                },
+                quit: props.onQuit,
+              },
+            )}
+            icons={props.icons}
+            onClose={() => setPaletteOpen(false)}
           />
         </Show>
       </Show>

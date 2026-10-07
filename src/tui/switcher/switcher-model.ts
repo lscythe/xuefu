@@ -59,26 +59,3 @@ export function switcherRows(views: readonly WorkspaceView[], query: string): Sw
     view.workspace.group ?? "",
   ]).map(({ item, match, key }) => workspaceRow(item, { key, positions: match.positions }));
 }
-
-/** Drops the last character (a whole code point, so CJK and emoji erase cleanly). */
-export function eraseChar(query: string): string {
-  return Array.from(query).slice(0, -1).join("");
-}
-
-/** Ctrl+W: trailing spaces, then the last word, or the last run of punctuation if there is none. */
-export function eraseWord(query: string): string {
-  const trimmed = query.replace(/\s+$/u, "");
-  const withoutWord = trimmed.replace(/[\p{L}\p{N}]+$/u, "");
-  return withoutWord !== trimmed ? withoutWord : trimmed.replace(/[^\p{L}\p{N}\s]+$/u, "");
-}
-
-/** Pasted text as query input: whitespace runs become one space, control characters go. */
-export function pastedText(text: string): string {
-  return text.replace(/\s+/gu, " ").replace(/\p{C}/gu, "");
-}
-
-/** First visible row for a window of `height` rows, keeping `selected` near the middle. */
-export function scrollOffset(selected: number, rowCount: number, height: number): number {
-  const centred = selected - Math.floor(height / 2);
-  return Math.max(0, Math.min(centred, rowCount - height));
-}

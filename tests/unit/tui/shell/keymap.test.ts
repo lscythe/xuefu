@@ -21,6 +21,7 @@ describe("actionFor", () => {
     [press("q"), { kind: "quit" }],
     [press("c", { ctrl: true }), { kind: "interrupt" }],
     [press("w", { ctrl: true }), { kind: "switcher.open" }],
+    [press(":"), { kind: "palette.open" }],
     [alt("1"), { kind: "tab.focus", position: 1 }],
     [alt("9"), { kind: "tab.focus", position: 9 }],
     [alt("w"), { kind: "tab.close" }],
@@ -48,13 +49,14 @@ describe("keyHints", () => {
     expect(keyHints("unicode", { tabs: false, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
+      { keys: ":", label: "commands" },
       { keys: "q", label: "quit" },
     ]);
     expect(keyHints("unicode", { tabs: true, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "alt+1-9", label: "tabs" },
-      { keys: "alt+w", label: "close tab" },
+      { keys: ":", label: "commands" },
       { keys: "q", label: "quit" },
     ]);
   });
