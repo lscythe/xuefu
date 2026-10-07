@@ -4,6 +4,7 @@ import type { IconSet } from "../theme/status";
 export type ShellAction =
   | { readonly kind: "nav"; readonly to: "previous" | "next" | "first" | "last" }
   | { readonly kind: "switcher.open" }
+  | { readonly kind: "palette.open" }
   /** Alt+1..9: bring that tab to the front. */
   | { readonly kind: "tab.focus"; readonly position: number }
   | { readonly kind: "tab.close" }
@@ -36,6 +37,7 @@ const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
   ["home", { kind: "nav", to: "first" }],
   ["end", { kind: "nav", to: "last" }],
   ["ctrl+w", { kind: "switcher.open" }],
+  [":", { kind: "palette.open" }],
   ...Array.from(
     { length: MAX_TABS },
     (_, i) => [`meta+${i + 1}`, { kind: "tab.focus", position: i + 1 }] as const,
@@ -66,13 +68,10 @@ export function keyHints(
   return [
     { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
     { keys: "^W", label: "workspaces" },
-    ...(state.tabs
-      ? [
-          { keys: "alt+1-9", label: "tabs" },
-          { keys: "alt+w", label: "close tab" },
-        ]
-      : []),
+    ...(state.tabs ? [{ keys: "alt+1-9", label: "tabs" }] : []),
     ...(state.timer ? [{ keys: "t", label: "timer" }] : []),
+    // Everything else, Alt+W included, is listed in the palette with its key.
+    { keys: ":", label: "commands" },
     { keys: "q", label: "quit" },
   ];
 }

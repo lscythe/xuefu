@@ -80,6 +80,14 @@ export async function runTui(
           ...(issue === null ? {} : { issue }),
         }),
       stopTimer: () => app.commandBus.invoke(app.timerCommands.stop, {}),
+      startWork: (workspace, issue, title) =>
+        app.commandBus.invoke(app.workCommands.start, {
+          workspace: workspace.id,
+          issue,
+          ...(title === null ? {} : { title }),
+        }),
+      finishWork: (workspace) =>
+        app.commandBus.invoke(app.workCommands.finish, { workspace: workspace.id }),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {

@@ -330,8 +330,12 @@
 <rect x="153" y="522" width="117" height="18" fill="#14141c"/>
 <text x="162 171 180 189 198 207 216 225 234 243" y="536" fill="#8a8578">workspaces</text>
 <rect x="270" y="522" width="9" height="18" fill="#1c1626"/>
-<text x="270" y="536" fill="#e8e3d9">q</text>
-<rect x="279" y="522" width="63" height="18" fill="#14141c"/>
-<text x="288 297 306 315" y="536" fill="#8a8578">quit</text>
-<rect x="342" y="522" width="558" height="18" fill="#14141c"/>
+<text x="270" y="536" fill="#e8e3d9">:</text>
+<rect x="279" y="522" width="99" height="18" fill="#14141c"/>
+<text x="288 297 306 315 324 333 342 351" y="536" fill="#8a8578">commands</text>
+<rect x="378" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="378" y="536" fill="#e8e3d9">q</text>
+<rect x="387" y="522" width="63" height="18" fill="#14141c"/>
+<text x="396 405 414 423" y="536" fill="#8a8578">quit</text>
+<rect x="450" y="522" width="450" height="18" fill="#14141c"/>
 </svg>
