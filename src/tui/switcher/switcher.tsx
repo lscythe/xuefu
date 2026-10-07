@@ -25,7 +25,8 @@ export interface SwitcherProps {
   readonly load: () => Promise<Result<readonly WorkspaceView[], AppError>>;
   readonly currentId: WorkspaceId | null;
   readonly icons: IconSet;
-  readonly onChoose: (workspace: Workspace) => void;
+  /** Switches to the workspace; on failure the switcher stays open and shows the error. */
+  readonly onChoose: (workspace: Workspace) => Promise<Result<unknown, AppError>>;
   readonly onClose: () => void;
 }
 
@@ -55,11 +56,23 @@ function Highlighted(props: { text: string; hits: readonly number[]; fg: string;
   );
 }
 
+/** Error text stays Bone White beside a vermilion glyph: vermilion text is too low-contrast. */
+function ErrorLine(props: { error: AppError; ascii: boolean }) {
+  return (
+    <text>
+      <span style={{ fg: PALETTE.error }}>{props.ascii ? "[x] " : "✗ "}</span>
+      <span style={{ fg: PALETTE.text }}>{props.error.message}</span>
+    </text>
+  );
+}
+
 export function Switcher(props: SwitcherProps) {
   const dimensions = useTerminalDimensions();
   const [loaded, setLoaded] = createSignal<Result<readonly WorkspaceView[], AppError> | null>(null);
   const [query, setQuery] = createSignal("");
   const [selected, setSelected] = createSignal(0);
+  const [choosing, setChoosing] = createSignal(false);
+  const [chooseError, setChooseError] = createSignal<AppError | null>(null);
 
   const views = () => {
     const result = loaded();
@@ -82,6 +95,15 @@ export function Switcher(props: SwitcherProps) {
   const editQuery = (next: string) => {
     setQuery(next);
     setSelected(0);
+    setChooseError(null);
+  };
+
+  const choose = async (workspace: Workspace) => {
+    if (choosing()) return;
+    setChoosing(true);
+    const chosen = await props.onChoose(workspace);
+    setChoosing(false);
+    setChooseError(chosen.ok ? null : chosen.error);
   };
 
   useKeyboard((key) => {
@@ -93,7 +115,7 @@ export function Switcher(props: SwitcherProps) {
         return;
       case "choose": {
         const choice = choices()[selected()];
-        if (choice !== undefined) props.onChoose(choice.view.workspace);
+        if (choice !== undefined) void choose(choice.view.workspace);
         return;
       }
       case "move":
@@ -159,12 +181,7 @@ export function Switcher(props: SwitcherProps) {
           <text fg={PALETTE.textMuted}>Loading workspaces...</text>
         </Match>
         <Match when={failure()}>
-          {(error: Accessor<AppError>) => (
-            <text>
-              <span style={{ fg: PALETTE.error }}>{ascii() ? "[x] " : "✗ "}</span>
-              <span style={{ fg: PALETTE.text }}>{error().message}</span>
-            </text>
-          )}
+          {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
         </Match>
         <Match when={views().length === 0}>
           <text fg={PALETTE.textMuted}>No workspaces yet. Add one with:</text>
@@ -216,6 +233,9 @@ export function Switcher(props: SwitcherProps) {
           </For>
         </Match>
       </Switch>
+      <Show when={chooseError()}>
+        {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
+      </Show>
       <text fg={PALETTE.textMuted}>
         {`${choices().length} of ${views().length}   `}
         {ascii() ? "up/down move" : "↑↓ move"}

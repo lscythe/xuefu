@@ -35,6 +35,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         icons="unicode"
         workspace={MOBILE?.workspace ?? null}
         loadWorkspaces={() => Promise.resolve(ok(VIEWS))}
+        activateWorkspace={(workspace) => Promise.resolve(ok(workspace))}
         onQuit={() => undefined}
         {...props}
       />

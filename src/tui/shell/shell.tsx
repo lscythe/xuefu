@@ -24,6 +24,8 @@ export interface ShellProps {
   /** The workspace XueFu was opened in, or null outside every workspace. */
   readonly workspace: Workspace | null;
   readonly loadWorkspaces: () => Promise<Result<readonly WorkspaceView[], AppError>>;
+  /** Makes the workspace current and remembers it for the next launch. */
+  readonly activateWorkspace: (workspace: Workspace) => Promise<Result<Workspace, AppError>>;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
@@ -102,9 +104,13 @@ export function Shell(props: ShellProps) {
             load={props.loadWorkspaces}
             currentId={workspace()?.id ?? null}
             icons={props.icons}
-            onChoose={(chosen) => {
-              setWorkspace(chosen);
-              setSwitcherOpen(false);
+            onChoose={async (chosen) => {
+              const activated = await props.activateWorkspace(chosen);
+              if (activated.ok) {
+                setWorkspace(activated.value);
+                setSwitcherOpen(false);
+              }
+              return activated;
             }}
             onClose={() => setSwitcherOpen(false)}
           />

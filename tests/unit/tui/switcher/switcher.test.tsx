@@ -38,7 +38,10 @@ async function renderSwitcher(props: Partial<SwitcherProps> = {}) {
           load={() => Promise.resolve<Loaded>(ok(VIEWS))}
           currentId={null}
           icons="unicode"
-          onChoose={(workspace) => chosen.push(workspace)}
+          onChoose={(workspace) => {
+            chosen.push(workspace);
+            return Promise.resolve(ok(undefined));
+          }}
           onClose={() => {
             closed += 1;
           }}
@@ -84,7 +87,7 @@ describe("Switcher", () => {
             load={() => promise}
             currentId={null}
             icons="unicode"
-            onChoose={() => undefined}
+            onChoose={() => Promise.resolve(ok(undefined))}
             onClose={() => undefined}
           />
         </box>
@@ -179,6 +182,35 @@ describe("Switcher", () => {
     // A lone ESC is only reported once the parser is sure no escape sequence follows.
     await Bun.sleep(30);
     expect(screen.closed()).toBe(1);
+  });
+
+  test("a failed switch shows why and keeps the switcher open", async () => {
+    const refused = err(storageError("Unable to save workspaces", "workspaces.save"));
+    const screen = await renderSwitcher({ onChoose: () => Promise.resolve(refused) });
+    screen.mockInput.pressEnter();
+    const frame = await screen.waitForFrame((f) => f.includes("Unable to save workspaces"));
+    expect(line(frame, "Unable to save")).toContain("✗ Unable to save workspaces");
+    expect(frame).toContain("Switch workspace");
+    expect(screen.closed()).toBe(0);
+
+    await screen.type("d");
+    expect(screen.frame()).not.toContain("Unable to save workspaces");
+  });
+
+  test("enter is ignored while a switch is still in progress", async () => {
+    let calls = 0;
+    const { promise, resolve } = Promise.withResolvers<Result<unknown, AppError>>();
+    const screen = await renderSwitcher({
+      onChoose: () => {
+        calls += 1;
+        return promise;
+      },
+    });
+    screen.mockInput.pressEnter();
+    screen.mockInput.pressEnter();
+    await screen.renderOnce();
+    expect(calls).toBe(1);
+    resolve(ok(undefined));
   });
 
   test("an empty registry explains how to add a workspace", async () => {

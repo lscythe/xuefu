@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
-import { ok } from "../../../../src/domain/shared/result";
+import { storageError } from "../../../../src/domain/shared/errors";
+import { err, ok } from "../../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { ManualClock } from "../../../support/manual-clock";
@@ -30,6 +31,7 @@ async function renderShell(
         icons="unicode"
         workspace={MOBILE.workspace}
         loadWorkspaces={() => Promise.resolve(ok(VIEWS))}
+        activateWorkspace={(workspace) => Promise.resolve(ok(workspace))}
         onQuit={() => {
           quits += 1;
         }}
@@ -119,6 +121,20 @@ describe("Shell", () => {
     shell.mockInput.pressKey("w", { ctrl: true });
     const reopened = await shell.waitForFrame((f) => f.includes("Switch workspace"));
     expect(rowContaining(reopened, "Auth Service  auth-service")).toContain("▸ Auth Service");
+  });
+
+  test("a switch that cannot be saved keeps the current workspace", async () => {
+    const shell = await renderShell({
+      activateWorkspace: () =>
+        Promise.resolve(err(storageError("Unable to save workspaces", "workspaces.save"))),
+    });
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    await shell.mockInput.typeText("auth");
+    shell.mockInput.pressEnter();
+    const frame = await shell.waitForFrame((f) => f.includes("Unable to save workspaces"));
+    expect(frame).toContain("Switch workspace");
+    expect(rowContaining(frame, "XUEFU")).toContain("Mobile Banking");
   });
 
   test("while the switcher is open, letters go to the query, not the shell", async () => {

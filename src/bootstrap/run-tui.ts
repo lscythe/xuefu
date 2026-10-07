@@ -14,10 +14,22 @@ export interface TuiHost {
   createRenderer(): Promise<CliRenderer>;
 }
 
-function workspaceAt(app: App, cwd: string): Promise<Result<Workspace | null, AppError>> {
+function activate(app: App, workspace: Workspace): Promise<Result<Workspace, AppError>> {
+  return app.commandBus.invoke(app.workspaceCommands.activate, { id: workspace.id });
+}
+
+/**
+ * The workspace containing `cwd` (opening XueFu there counts as switching to it), otherwise the
+ * one used last, so launching from anywhere else reopens where you left off.
+ */
+async function startingWorkspace(
+  app: App,
+  cwd: string,
+): Promise<Result<Workspace | null, AppError>> {
   const path = absolutePath(cwd);
-  if (!path.ok) return Promise.resolve(ok(null));
-  return app.workspaces.which(path.value);
+  const here = path.ok ? await app.workspaces.which(path.value) : ok(null);
+  if (!here.ok) return here;
+  return here.value === null ? app.workspaces.lastActive() : activate(app, here.value);
 }
 
 /** Runs the cockpit until the user quits or the renderer is torn down by a signal. */
@@ -26,7 +38,7 @@ export async function runTui(
   host: TuiHost,
   cwd: string,
 ): Promise<Result<void, AppError>> {
-  const workspace = await workspaceAt(app, cwd);
+  const workspace = await startingWorkspace(app, cwd);
   if (!workspace.ok) return workspace;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
@@ -46,6 +58,7 @@ export async function runTui(
       icons: app.config.ui.icons,
       workspace: workspace.value,
       loadWorkspaces: () => app.workspaces.list(),
+      activateWorkspace: (chosen) => activate(app, chosen),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {

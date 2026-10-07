@@ -337,6 +337,43 @@ describe("runCli: workspaces", () => {
     expect((await running).code).toBe(EXIT.ok);
   });
 
+  test("outside every workspace, the cockpit reopens the one used last", async () => {
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["workspace", "add", join(projects, "api"), "--name", "Payments API"]);
+
+    /** Opens the cockpit in `cwd`, returns its header, then runs `steps` and quits. */
+    const session = async (cwd: string, steps: (screen: TestRendererSetup) => Promise<void>) => {
+      const terminal = headlessTerminal();
+      const running = run([], {}, cwd, terminal.host);
+      const screen = await terminal.screen;
+      const frame = await screen.waitForFrame((f) => f.includes("XUEFU"));
+      await steps(screen);
+      screen.mockInput.pressKey("q");
+      expect((await running).code).toBe(EXIT.ok);
+      return frame.split("\n")[0] ?? "";
+    };
+
+    expect(await session(projects, async () => undefined)).toContain("No workspace");
+    await session(projects, async (screen) => {
+      screen.mockInput.pressKey("w", { ctrl: true });
+      await screen.waitForFrame((f) => f.includes("2 of 2"));
+      await screen.mockInput.typeText("pay");
+      screen.mockInput.pressEnter();
+      await screen.waitForFrame((f) => !f.includes("Switch workspace"));
+    });
+    expect(await session(projects, async () => undefined)).toContain("Payments API");
+
+    // Opening inside a workspace counts as switching to it.
+    await session(mobile, async () => undefined);
+    expect(await session(projects, async () => undefined)).toContain("Mobile Banking");
+
+    const listed = JSON.parse((await run(["workspace", "list", "--json"])).stdout);
+    expect(listed.map((w: { lastActiveAt: string | null }) => typeof w.lastActiveAt)).toEqual([
+      "string",
+      "string",
+    ]);
+  });
+
   test("removing an unknown workspace exits 66 with a hint", async () => {
     const result = await run(["workspace", "remove", "ghost", "-y"]);
     expect(result.code).toBe(EXIT.noInput);
