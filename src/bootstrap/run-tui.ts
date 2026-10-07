@@ -55,12 +55,11 @@ export async function runTui(
     await openShell(renderer, {
       clock: systemClock,
       icons: app.config.ui.icons,
-      workspace: tabs.value.active,
+      tabs: tabs.value,
       loadWorkspaces: () => app.workspaces.list(),
-      activateWorkspace: async (chosen) => {
-        const switched = await activate(app, chosen);
-        return switched.ok ? ok(switched.value.active ?? chosen) : switched;
-      },
+      activateWorkspace: (chosen) => activate(app, chosen),
+      closeTab: (closing) =>
+        app.commandBus.invoke(app.workspaceCommands.closeTab, { id: closing.id }),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {

@@ -337,11 +337,11 @@ describe("runCli: workspaces", () => {
     expect((await running).code).toBe(EXIT.ok);
   });
 
-  test("outside every workspace, the cockpit reopens the one used last", async () => {
+  test("outside every workspace, the cockpit reopens the tabs left open", async () => {
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
     await run(["workspace", "add", join(projects, "api"), "--name", "Payments API"]);
 
-    /** Opens the cockpit in `cwd`, returns its header, then runs `steps` and quits. */
+    /** Opens the cockpit in `cwd`, returns its header and tab rows, then runs `steps` and quits. */
     const session = async (cwd: string, steps: (screen: TestRendererSetup) => Promise<void>) => {
       const terminal = headlessTerminal();
       const running = run([], {}, cwd, terminal.host);
@@ -350,22 +350,37 @@ describe("runCli: workspaces", () => {
       await steps(screen);
       screen.mockInput.pressKey("q");
       expect((await running).code).toBe(EXIT.ok);
-      return frame.split("\n")[0] ?? "";
+      const [header = "", tabs = ""] = frame.split("\n");
+      return { header, tabs };
     };
-
-    expect(await session(projects, async () => undefined)).toContain("No workspace");
-    await session(projects, async (screen) => {
+    const open = async (screen: TestRendererSetup, query: string) => {
       screen.mockInput.pressKey("w", { ctrl: true });
       await screen.waitForFrame((f) => f.includes("2 of 2"));
-      await screen.mockInput.typeText("pay");
+      await screen.mockInput.typeText(query);
       screen.mockInput.pressEnter();
       await screen.waitForFrame((f) => !f.includes("Switch workspace"));
-    });
-    expect(await session(projects, async () => undefined)).toContain("Payments API");
+    };
+    const idle = async () => undefined;
 
-    // Opening inside a workspace counts as switching to it.
-    await session(mobile, async () => undefined);
-    expect(await session(projects, async () => undefined)).toContain("Mobile Banking");
+    expect((await session(projects, idle)).header).toContain("No workspace");
+    await session(projects, async (screen) => {
+      await open(screen, "pay");
+      await open(screen, "mob");
+    });
+    const reopened = await session(projects, async (screen) => {
+      screen.mockInput.pressKey("w", { meta: true });
+      await screen.waitForFrame((f) => (f.split("\n")[0] ?? "").includes("Payments API"));
+    });
+    expect(reopened.header).toContain("Mobile Banking");
+    expect(reopened.tabs).toContain(" 1 Payments API  2 Mobile Banking ");
+
+    const afterClose = await session(projects, idle);
+    expect(afterClose.header).toContain("Payments API");
+    expect(afterClose.tabs).not.toContain("Mobile Banking");
+
+    // Opening inside a workspace brings its tab back.
+    await session(mobile, idle);
+    expect((await session(projects, idle)).tabs).toContain(" 1 Payments API  2 Mobile Banking ");
 
     const listed = JSON.parse((await run(["workspace", "list", "--json"])).stdout);
     expect(listed.map((w: { lastActiveAt: string | null }) => typeof w.lastActiveAt)).toEqual([

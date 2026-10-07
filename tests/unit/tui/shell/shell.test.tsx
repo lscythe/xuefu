@@ -6,6 +6,7 @@ import { storageError } from "../../../../src/domain/shared/errors";
 import { err, ok } from "../../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
+import { fakeTabs } from "../../../support/fake-tabs";
 import { ManualClock } from "../../../support/manual-clock";
 import { view } from "../../../support/workspace-views";
 
@@ -23,15 +24,17 @@ async function renderShell(
   size = { width: 100, height: 30 },
 ): Promise<TestRendererSetup & { quits: () => number }> {
   let quits = 0;
+  const tabs = fakeTabs(VIEWS, "mobile-banking");
   setup = await testRender(
     () => (
       <Shell
         clock={new ManualClock(Date.UTC(2026, 9, 6, 13, 59, 41))}
         timeZone="UTC"
         icons="unicode"
-        workspace={MOBILE.workspace}
+        tabs={tabs.initial}
         loadWorkspaces={() => Promise.resolve(ok(VIEWS))}
-        activateWorkspace={(workspace) => Promise.resolve(ok(workspace))}
+        activateWorkspace={tabs.activate}
+        closeTab={tabs.close}
         onQuit={() => {
           quits += 1;
         }}
@@ -47,6 +50,84 @@ async function renderShell(
 function rowContaining(frame: string, text: string): string {
   return frame.split("\n").find((line) => line.includes(text)) ?? "";
 }
+
+const header = (frame: string) => rowContaining(frame, "XUEFU");
+const tabBar = (frame: string) => frame.split("\n")[1] ?? "";
+
+describe("Shell tabs", () => {
+  test("shows a numbered tab per open workspace under the header", async () => {
+    const frame = (await renderShell()).captureCharFrame();
+    expect(tabBar(frame)).toContain(" 1 Mobile Banking ");
+    expect(rowContaining(frame, "navigate")).toContain("alt+1-9 tabs");
+    expect(rowContaining(frame, "navigate")).toContain("alt+w close tab");
+  });
+
+  test("choosing in the switcher opens a tab; alt+digit brings tabs back to the front", async () => {
+    const shell = await renderShell();
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    await shell.mockInput.typeText("auth");
+    shell.mockInput.pressEnter();
+    const opened = await shell.waitForFrame((f) => header(f).includes("Auth Service"));
+    expect(tabBar(opened)).toContain(" 1 Mobile Banking  2 Auth Service ");
+
+    shell.mockInput.pressKey("1", { meta: true });
+    await shell.waitForFrame((f) => header(f).includes("Mobile Banking"));
+    shell.mockInput.pressKey("2", { meta: true });
+    await shell.waitForFrame((f) => header(f).includes("Auth Service"));
+    shell.mockInput.pressKey("7", { meta: true });
+    await shell.renderOnce();
+    expect(header(shell.captureCharFrame())).toContain("Auth Service");
+  });
+
+  test("each tab remembers its own section", async () => {
+    const shell = await renderShell();
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    await shell.mockInput.typeText("dep");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => header(f).includes("deployd") && f.includes("▍DASHBOARD"));
+    shell.mockInput.pressKey("1", { meta: true });
+    await shell.waitForFrame((f) => header(f).includes("Mobile Banking") && f.includes("▍WORK"));
+  });
+
+  test("alt+w closes the front tab; closing the last leaves no workspace", async () => {
+    const tabs = fakeTabs(VIEWS, "mobile-banking", "deployd");
+    const shell = await renderShell({
+      tabs: tabs.initial,
+      activateWorkspace: tabs.activate,
+      closeTab: tabs.close,
+    });
+    expect(header(shell.captureCharFrame())).toContain("deployd");
+    shell.mockInput.pressKey("w", { meta: true });
+    const one = await shell.waitForFrame((f) => header(f).includes("Mobile Banking"));
+    expect(tabBar(one)).not.toContain("deployd");
+    shell.mockInput.pressKey("w", { meta: true });
+    const none = await shell.waitForFrame((f) => header(f).includes("No workspace"));
+    expect(none).not.toContain("1 Mobile Banking");
+    expect(rowContaining(none, "navigate")).not.toContain("alt+1-9");
+    shell.mockInput.pressKey("w", { meta: true });
+    await shell.renderOnce();
+  });
+
+  test("a tab change that cannot be saved is reported and changes nothing", async () => {
+    const failed = err(storageError("Unable to save open tabs", "workspace_tabs.save"));
+    const tabs = fakeTabs(VIEWS, "mobile-banking", "deployd");
+    const shell = await renderShell({
+      tabs: tabs.initial,
+      activateWorkspace: () => Promise.resolve(failed),
+      closeTab: () => Promise.resolve(failed),
+    });
+    shell.mockInput.pressKey("1", { meta: true });
+    const frame = await shell.waitForFrame((f) => f.includes("Unable to save open tabs"));
+    expect(rowContaining(frame, "Unable to save")).toContain("✗ Unable to save open tabs");
+    expect(header(frame)).toContain("deployd");
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => !f.includes("Unable to save open tabs"));
+  });
+});
 
 describe("Shell", () => {
   test("shows the brand, workspace, clock, navigation, panel and key bar", async () => {
@@ -65,7 +146,7 @@ describe("Shell", () => {
   });
 
   test("says so when the current folder is not a workspace", async () => {
-    const frame = (await renderShell({ workspace: null })).captureCharFrame();
+    const frame = (await renderShell({ tabs: fakeTabs(VIEWS).initial })).captureCharFrame();
     expect(rowContaining(frame, "XUEFU")).toContain("No workspace");
   });
 

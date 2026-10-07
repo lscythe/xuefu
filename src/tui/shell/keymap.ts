@@ -1,14 +1,15 @@
+import { MAX_TABS } from "../../domain/workspace/tabs";
 import type { IconSet } from "../theme/status";
 
 export type ShellAction =
-  | "nav.previous"
-  | "nav.next"
-  | "nav.first"
-  | "nav.last"
-  | "switcher.open"
-  | "quit"
+  | { readonly kind: "nav"; readonly to: "previous" | "next" | "first" | "last" }
+  | { readonly kind: "switcher.open" }
+  /** Alt+1..9: bring that tab to the front. */
+  | { readonly kind: "tab.focus"; readonly position: number }
+  | { readonly kind: "tab.close" }
+  | { readonly kind: "quit" }
   /** Ctrl+C: quits from anywhere, including while an overlay owns the keyboard. */
-  | "interrupt";
+  | { readonly kind: "interrupt" };
 
 /** The parts of a terminal key event the shell cares about; OpenTUI's KeyEvent satisfies it. */
 export interface KeyPress {
@@ -23,16 +24,23 @@ export interface KeyHint {
   readonly label: string;
 }
 
-/** Chords are written "ctrl+c"; modifiers must match exactly, so "Q" is not "q". */
-const BINDINGS: Readonly<Record<ShellAction, readonly string[]>> = {
-  "nav.previous": ["up", "k"],
-  "nav.next": ["down", "j"],
-  "nav.first": ["home"],
-  "nav.last": ["end"],
-  "switcher.open": ["ctrl+w"],
-  quit: ["q"],
-  interrupt: ["ctrl+c"],
-};
+/** Chords are written "ctrl+c" (Alt arrives as meta); modifiers must match, so "Q" is not "q". */
+const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
+  ["up", { kind: "nav", to: "previous" }],
+  ["k", { kind: "nav", to: "previous" }],
+  ["down", { kind: "nav", to: "next" }],
+  ["j", { kind: "nav", to: "next" }],
+  ["home", { kind: "nav", to: "first" }],
+  ["end", { kind: "nav", to: "last" }],
+  ["ctrl+w", { kind: "switcher.open" }],
+  ...Array.from(
+    { length: MAX_TABS },
+    (_, i) => [`meta+${i + 1}`, { kind: "tab.focus", position: i + 1 }] as const,
+  ),
+  ["meta+w", { kind: "tab.close" }],
+  ["q", { kind: "quit" }],
+  ["ctrl+c", { kind: "interrupt" }],
+];
 
 function chordOf(key: KeyPress): string {
   return [key.ctrl ? "ctrl+" : "", key.meta ? "meta+" : "", key.shift ? "shift+" : "", key.name]
@@ -42,17 +50,20 @@ function chordOf(key: KeyPress): string {
 
 export function actionFor(key: KeyPress): ShellAction | null {
   const chord = chordOf(key);
-  for (const [action, chords] of Object.entries(BINDINGS) as [ShellAction, readonly string[]][]) {
-    if (chords.includes(chord)) return action;
-  }
-  return null;
+  return BINDINGS.find(([bound]) => bound === chord)?.[1] ?? null;
 }
 
 /** What the key bar shows; kept next to BINDINGS so a hint never advertises an unbound key. */
-export function keyHints(icons: IconSet): readonly KeyHint[] {
+export function keyHints(icons: IconSet, state: { readonly tabs: boolean }): readonly KeyHint[] {
   return [
     { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
     { keys: "^W", label: "workspaces" },
+    ...(state.tabs
+      ? [
+          { keys: "alt+1-9", label: "tabs" },
+          { keys: "alt+w", label: "close tab" },
+        ]
+      : []),
     { keys: "q", label: "quit" },
   ];
 }

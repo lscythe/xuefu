@@ -8,44 +8,57 @@ const press = (name: string, modifiers: Partial<Omit<KeyPress, "name">> = {}): K
   shift: false,
   ...modifiers,
 });
+const alt = (name: string) => press(name, { meta: true });
 
 describe("actionFor", () => {
   test.each([
-    [press("up"), "nav.previous"],
-    [press("k"), "nav.previous"],
-    [press("down"), "nav.next"],
-    [press("j"), "nav.next"],
-    [press("home"), "nav.first"],
-    [press("end"), "nav.last"],
-    [press("q"), "quit"],
-    [press("c", { ctrl: true }), "interrupt"],
-    [press("w", { ctrl: true }), "switcher.open"],
-  ] as const)("%o → %s", (key, action) => {
-    expect(actionFor(key)).toBe(action);
+    [press("up"), { kind: "nav", to: "previous" }],
+    [press("k"), { kind: "nav", to: "previous" }],
+    [press("down"), { kind: "nav", to: "next" }],
+    [press("j"), { kind: "nav", to: "next" }],
+    [press("home"), { kind: "nav", to: "first" }],
+    [press("end"), { kind: "nav", to: "last" }],
+    [press("q"), { kind: "quit" }],
+    [press("c", { ctrl: true }), { kind: "interrupt" }],
+    [press("w", { ctrl: true }), { kind: "switcher.open" }],
+    [alt("1"), { kind: "tab.focus", position: 1 }],
+    [alt("9"), { kind: "tab.focus", position: 9 }],
+    [alt("w"), { kind: "tab.close" }],
+  ] as const)("%o → %o", (key, action) => {
+    expect(actionFor(key)).toEqual(action);
   });
 
   test.each([
     press("x"),
     press("c"),
+    press("1"),
+    alt("0"),
     press("q", { ctrl: true }),
     press("q", { shift: true }),
-    press("j", { meta: true }),
+    alt("j"),
   ])("%o is unbound", (key) => {
     expect(actionFor(key)).toBeNull();
   });
 });
 
 describe("keyHints", () => {
-  test("every hint names a bound action", () => {
-    expect(keyHints("unicode")).toEqual([
+  test("every hint names a bound action; tab keys only show with tabs open", () => {
+    expect(keyHints("unicode", { tabs: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
+      { keys: "q", label: "quit" },
+    ]);
+    expect(keyHints("unicode", { tabs: true })).toEqual([
+      { keys: "↑↓", label: "navigate" },
+      { keys: "^W", label: "workspaces" },
+      { keys: "alt+1-9", label: "tabs" },
+      { keys: "alt+w", label: "close tab" },
       { keys: "q", label: "quit" },
     ]);
   });
 
   test("ascii icons avoid arrow glyphs", () => {
-    expect(keyHints("ascii")[0]).toEqual({ keys: "j/k", label: "navigate" });
-    expect(keyHints("nerd")).toEqual(keyHints("unicode"));
+    expect(keyHints("ascii", { tabs: false })[0]).toEqual({ keys: "j/k", label: "navigate" });
+    expect(keyHints("nerd", { tabs: true })).toEqual(keyHints("unicode", { tabs: true }));
   });
 });
