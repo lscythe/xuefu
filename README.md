@@ -27,6 +27,7 @@ xuefu diagnostics                                              # paths, config s
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, which makes it usable in shell prompts.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
+It opens in the workspace containing the current folder, or else in the one you used last.
 
 ## Development
 
@@ -46,6 +47,7 @@ bun run start -- --help
 | `bun run test:integration` | SQLite, filesystem and config integration tests |
 | `bun run test:arch`     | layer-boundary and import-cycle enforcement     |
 | `bun run test:e2e`      | spawns the real entrypoint against temp dirs    |
+| `bun run screenshots`   | regenerate TUI golden screenshots, render PNGs  |
 | `bun run lint:fix`      | Biome lint + format with autofix                |
 | `bun run lint:workflows` | actionlint (with shellcheck) on GitHub workflows |
 | `bun run build`         | compile a standalone binary into `dist/`        |
