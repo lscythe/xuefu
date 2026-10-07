@@ -81,7 +81,11 @@ export function timerCommands(deps: TimerCommandDependencies) {
     title: "Start or pause timer",
     category: CATEGORY,
     safety: "safe",
-    input: z.strictObject({ workspace: domainString(workspaceId).nullable() }),
+    input: z.strictObject({
+      workspace: domainString(workspaceId).nullable(),
+      /** The issue a newly started timer is for, e.g. the work in progress there. */
+      issue: domainString(issueKey).optional(),
+    }),
     handler: (input, context) =>
       unitOfWork.run((tx): Result<TimerView | null, TimerError> => {
         const active = timers.active();
@@ -90,7 +94,7 @@ export function timerCommands(deps: TimerCommandDependencies) {
         if (action === "pause") return changeActive((timer) => pauseIn(tx, context, timer));
         if (action === "resume") return changeActive((timer) => resumeIn(tx, context, timer));
         if (action === null || input.workspace === null) return ok(null);
-        const started = startIn(tx, context, input.workspace, null);
+        const started = startIn(tx, context, input.workspace, input.issue ?? null);
         return started.ok ? ok(started.value.timer) : started;
       }),
   });
