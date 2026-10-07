@@ -1,11 +1,14 @@
 import type { FileSystemError, StorageError } from "../../domain/shared/errors";
+import type { WorkspaceId } from "../../domain/shared/ids";
 import type { AbsolutePath } from "../../domain/shared/path";
 import { ok, type Result } from "../../domain/shared/result";
 import { type WorkspaceRegistry, workspaceAt } from "../../domain/workspace/registry";
+import type { NavigationKey } from "../../domain/workspace/session";
 import { currentTabs, type WorkspaceTabs } from "../../domain/workspace/tabs";
 import type { Workspace } from "../../domain/workspace/workspace";
 import type { WorkspaceCapabilities, WorkspaceProbe } from "../ports/workspace-probe";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
+import type { WorkspaceSessionRepository } from "../ports/workspace-session-repository";
 import type { WorkspaceTabsRepository } from "../ports/workspace-tabs-repository";
 
 /** "missing" covers folders that were deleted, moved or became unreadable since registration. */
@@ -37,7 +40,13 @@ export class WorkspaceQueries {
     private readonly repository: WorkspaceRepository,
     private readonly probe: WorkspaceProbe,
     private readonly tabRepository: WorkspaceTabsRepository,
+    private readonly sessions: WorkspaceSessionRepository,
   ) {}
+
+  /** Where each workspace was left in the cockpit, keyed by workspace. */
+  navigation(): Result<ReadonlyMap<WorkspaceId, NavigationKey>, StorageError> {
+    return this.sessions.navigation();
+  }
 
   async list(): Promise<Result<WorkspaceView[], StorageError>> {
     const loaded = this.repository.load();

@@ -22,6 +22,7 @@ import { err, ok, type Result } from "../../../src/domain/shared/result";
 import { SqliteEventLedger } from "../../../src/infrastructure/persistence/sqlite/event-ledger";
 import { SqliteUnitOfWork } from "../../../src/infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkspaceRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-repository";
+import { SqliteWorkspaceSessionRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-session-repository";
 import { SqliteWorkspaceTabsRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-tabs-repository";
 import { migratedMemoryDatabase } from "../../support/database";
 import { ManualClock } from "../../support/manual-clock";
@@ -69,18 +70,20 @@ beforeEach(() => {
   ledger = new SqliteEventLedger(db);
   const repository = new SqliteWorkspaceRepository(db);
   const tabs = new SqliteWorkspaceTabsRepository(db);
+  const sessions = new SqliteWorkspaceSessionRepository(db);
   probe = new FakeProbe();
   bus = new CommandBus({ logger, clock, ids });
   const commands = workspaceCommands({
     repository,
     tabs,
+    sessions,
     probe,
     unitOfWork: new SqliteUnitOfWork(db, ledger, events),
     ids,
   });
   const registered = registerWorkspaceCommands(bus, commands);
   if (!registered.ok) throw new Error(registered.error.message);
-  queries = new WorkspaceQueries(repository, probe, tabs);
+  queries = new WorkspaceQueries(repository, probe, tabs, sessions);
 });
 afterEach(() => db.close());
 
@@ -333,6 +336,37 @@ describe("workspace tabs", () => {
   });
 });
 
+describe("workspace.navigate", () => {
+  beforeEach(async () => {
+    probe.dir("/work/a");
+    await bus.dispatch("workspace.add", { path: "/work/a" });
+  });
+
+  test("remembers where a workspace was left, without recording activity", async () => {
+    expect(queries.navigation()).toEqual({ ok: true, value: new Map() });
+    expect(await bus.dispatch("workspace.navigate", { id: "a", navigation: "pulls" })).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const navigation = queries.navigation();
+    expect(navigation.ok ? [...navigation.value].map(([k, v]) => `${k}:${v}`) : null).toEqual([
+      "a:pulls",
+    ]);
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded"]);
+  });
+
+  test("an unknown workspace is not found; a malformed key is a validation error", async () => {
+    expectError(
+      await bus.dispatch("workspace.navigate", { id: "ghost", navigation: "pulls" }),
+      "not-found",
+    );
+    expectError(
+      await bus.dispatch("workspace.navigate", { id: "a", navigation: "Pull Requests" }),
+      "validation",
+    );
+  });
+});
+
 describe("WorkspaceQueries", () => {
   test("list reports capabilities and folders that have gone missing", async () => {
     probe.dir("/work/a", { git: true, gradle: true }).dir("/work/b");
@@ -372,6 +406,7 @@ describe("registerWorkspaceCommands", () => {
       workspaceCommands({
         repository: new SqliteWorkspaceRepository(db),
         tabs: new SqliteWorkspaceTabsRepository(db),
+        sessions: new SqliteWorkspaceSessionRepository(db),
         probe,
         unitOfWork: new SqliteUnitOfWork(db, ledger, new EventBus(testLogger().logger)),
         ids: new SequentialIds(),

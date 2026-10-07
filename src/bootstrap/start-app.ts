@@ -33,6 +33,7 @@ import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
+import { SqliteWorkspaceSessionRepository } from "../infrastructure/persistence/sqlite/workspace-session-repository";
 import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sqlite/workspace-tabs-repository";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
@@ -139,9 +140,11 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
 
   const workspaceRepository = new SqliteWorkspaceRepository(database);
   const tabRepository = new SqliteWorkspaceTabsRepository(database);
+  const sessionRepository = new SqliteWorkspaceSessionRepository(database);
   const workspaces = workspaceCommands({
     repository: workspaceRepository,
     tabs: tabRepository,
+    sessions: sessionRepository,
     probe: fsWorkspaceProbe,
     unitOfWork,
     ids: uuidV7Ids,
@@ -172,7 +175,12 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     unitOfWork,
     ledger,
     workspaceCommands: workspaces,
-    workspaces: new WorkspaceQueries(workspaceRepository, fsWorkspaceProbe, tabRepository),
+    workspaces: new WorkspaceQueries(
+      workspaceRepository,
+      fsWorkspaceProbe,
+      tabRepository,
+      sessionRepository,
+    ),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();

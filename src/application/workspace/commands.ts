@@ -18,6 +18,7 @@ import {
   removeWorkspace,
   type WorkspaceRegistry,
 } from "../../domain/workspace/registry";
+import { navigationKey } from "../../domain/workspace/session";
 import { closeTab, currentTabs, openTab } from "../../domain/workspace/tabs";
 import { groupName, type Workspace, workspaceName } from "../../domain/workspace/workspace";
 import { type CommandContext, defineCommand } from "../commands/command";
@@ -26,6 +27,7 @@ import type { IdGenerator } from "../ports/id-generator";
 import type { UnitOfWork } from "../ports/unit-of-work";
 import type { WorkspaceCapabilities, WorkspaceProbe } from "../ports/workspace-probe";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
+import type { WorkspaceSessionRepository } from "../ports/workspace-session-repository";
 import type { WorkspaceTabsRepository } from "../ports/workspace-tabs-repository";
 import { domainString } from "../validation";
 import type {
@@ -40,6 +42,7 @@ import { type OpenTabs, viewTabs } from "./queries";
 export interface WorkspaceCommandDependencies {
   readonly repository: WorkspaceRepository;
   readonly tabs: WorkspaceTabsRepository;
+  readonly sessions: WorkspaceSessionRepository;
   readonly probe: WorkspaceProbe;
   readonly unitOfWork: UnitOfWork;
   readonly ids: IdGenerator;
@@ -87,7 +90,7 @@ function workspaceEvent<T extends string, P extends object>(
 
 /** The workspace registry's write side: every change goes through the command bus. */
 export function workspaceCommands(deps: WorkspaceCommandDependencies) {
-  const { repository, tabs, probe, unitOfWork, ids } = deps;
+  const { repository, tabs, sessions, probe, unitOfWork, ids } = deps;
 
   /** Stamps `id` as active now and records the switch; must run inside a unit of work. */
   const activateIn = (
@@ -293,7 +296,27 @@ export function workspaceCommands(deps: WorkspaceCommandDependencies) {
       }),
   });
 
-  return { add, remove, group, activate, closeTab: closeTabCommand } as const;
+  /** Cockpit state, not activity: saved without an event so the ledger stays meaningful. */
+  const navigate = defineCommand({
+    name: "workspace.navigate",
+    title: "Remember workspace navigation",
+    category: CATEGORY,
+    safety: "safe",
+    input: z.strictObject({
+      id: domainString(workspaceId),
+      navigation: domainString(navigationKey),
+    }),
+    handler: (input, context) =>
+      unitOfWork.run((): Result<void, NotFoundOrStorage> => {
+        const loaded = repository.load();
+        if (!loaded.ok) return loaded;
+        const found = findWorkspace(loaded.value, input.id);
+        if (!found.ok) return found;
+        return sessions.saveNavigation(input.id, input.navigation, context.clock.now());
+      }),
+  });
+
+  return { add, remove, group, activate, closeTab: closeTabCommand, navigate } as const;
 }
 
 export type WorkspaceCommands = ReturnType<typeof workspaceCommands>;
@@ -310,5 +333,7 @@ export function registerWorkspaceCommands(
   if (!group.ok) return group;
   const activate = bus.register(commands.activate);
   if (!activate.ok) return activate;
-  return bus.register(commands.closeTab);
+  const close = bus.register(commands.closeTab);
+  if (!close.ok) return close;
+  return bus.register(commands.navigate);
 }
