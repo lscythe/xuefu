@@ -1,7 +1,8 @@
 import { afterEach, describe, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
-import { ok } from "../../../src/domain/shared/result";
+import { storageError } from "../../../src/domain/shared/errors";
+import { err, ok } from "../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { ManualClock } from "../../support/manual-clock";
 import { expectScreenshot } from "../../support/screenshot";
@@ -74,6 +75,17 @@ describe("screenshots", () => {
     const screen = await shell();
     await openSwitcher(screen);
     expectScreenshot("switcher", screen.captureSpans());
+  });
+
+  test("switcher, switch failed", async () => {
+    const screen = await shell({
+      activateWorkspace: () =>
+        Promise.resolve(err(storageError("Unable to save workspaces", "workspaces.save"))),
+    });
+    await openSwitcher(screen, "auth");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Unable to save workspaces"));
+    expectScreenshot("switcher-error", screen.captureSpans());
   });
 
   test("switcher, filtered", async () => {
