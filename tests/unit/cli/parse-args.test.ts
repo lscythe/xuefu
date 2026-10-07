@@ -141,3 +141,30 @@ describe("parseArgs: timer", () => {
     expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
   });
 });
+
+describe("parseArgs: work", () => {
+  test.each([
+    [["work"], { kind: "work.status", json: false }],
+    [["work", "status", "--json"], { kind: "work.status", json: true }],
+    [
+      ["work", "start", "MOB-2841"],
+      { kind: "work.start", issue: "MOB-2841", title: null, workspace: null },
+    ],
+    [
+      ["work", "start", "mob-1", "--title", "Add login", "-w", "mob"],
+      { kind: "work.start", issue: "mob-1", title: "Add login", workspace: "mob" },
+    ],
+    [["work", "finish"], { kind: "work.finish", workspace: null }],
+    [["work", "finish", "-w", "mob"], { kind: "work.finish", workspace: "mob" }],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+  });
+
+  test.each([
+    [["work", "start"], "work start expects <issue>"],
+    [["work", "finish", "--title", "x"], "--title does not apply to work finish"],
+    [["work", "pause"], "Unknown work command: pause"],
+  ])("rejects %p", (argv, message) => {
+    expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
+  });
+});

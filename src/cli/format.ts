@@ -2,6 +2,8 @@ import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
 import type { Redactor } from "../application/security/redaction";
 import type { TimerView } from "../application/timesheet/queries";
+import type { StartedTimer } from "../application/timesheet/timer-operations";
+import type { WorkView } from "../application/work/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import { clockDuration, type Timestamp } from "../domain/shared/time";
@@ -33,8 +35,15 @@ Commands:
                                   --json             machine-readable output
   timer start                   Start timing this workspace; stops any other timer
                                   -w, --workspace <id>  another workspace than this folder's
-                                  --issue <key>      the issue worked on, e.g. MOB-2841
+                                  --issue <key>      the issue (default: the work in progress)
   timer pause | resume | stop   Pause, resume or stop the timer
+  work [status]                 Show the work in progress in every workspace
+                                  --json             machine-readable output
+  work start <issue>            Work on an issue here and time it; finishes other work here
+                                  --title <text>     what the issue is about
+                                  -w, --workspace <id>  another workspace than this folder's
+  work finish                   Finish the work here and stop its timer
+                                  -w, --workspace <id>  another workspace than this folder's
 
 Options:
   -h, --help                    Show this help
@@ -182,4 +191,65 @@ export function formatTimerStatus(view: TimerView, now: Timestamp): string {
     ...(timer.issueKey === null ? [] : [row("Issue", timer.issueKey)]),
     "",
   ].join("\n");
+}
+
+/** What starting a timer did: the timer it stopped, then the one now running. */
+export function formatStartedTimer(started: StartedTimer): string[] {
+  const { timer, replaced } = started;
+  const resumed = timer.timer.segments.length > 1;
+  return [
+    ...(replaced === null
+      ? []
+      : [
+          `✓ Stopped the timer for ${timerSubject(replaced)} after ${clockDuration(
+            elapsed(replaced.timer, replaced.timer.updatedAt),
+          )}`,
+        ]),
+    resumed
+      ? `✓ Resumed the timer for ${timerSubject(timer)} at ${clockDuration(
+          elapsed(timer.timer, timer.timer.updatedAt),
+        )}`
+      : `✓ Started a timer for ${timerSubject(timer)}`,
+  ];
+}
+
+/** "MOB-2841 (Add biometric login)", or just the key when the work has no title. */
+export function workSubject(view: WorkView): string {
+  const { issueKey, title } = view.work;
+  return title === null ? issueKey : `${issueKey} (${title})`;
+}
+
+const startedFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** "Tue 06 Oct 09:14" in `timeZone`, the host zone when omitted. */
+function startedAt(at: Timestamp, timeZone: string | undefined): string {
+  const key = timeZone ?? "";
+  let formatter = startedFormatters.get(key);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      ...(timeZone === undefined ? {} : { timeZone }),
+    });
+    startedFormatters.set(key, formatter);
+  }
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const part of formatter.formatToParts(at)) parts[part.type] = part.value;
+  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.hour}:${parts.minute}`;
+}
+
+export function formatWorkList(views: readonly WorkView[], timeZone?: string): string {
+  return table([
+    ["WORKSPACE", "ISSUE", "STARTED", "TITLE"],
+    ...views.map((view) => [
+      view.workspace?.name ?? `${view.work.workspaceId} (removed)`,
+      view.work.issueKey,
+      startedAt(view.work.startedAt, timeZone),
+      view.work.title ?? "-",
+    ]),
+  ]);
 }

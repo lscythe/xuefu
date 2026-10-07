@@ -26,7 +26,16 @@ export type CliCommand =
       readonly workspace: string | null;
       readonly issue: string | null;
     }
-  | { readonly kind: "timer.change"; readonly action: "pause" | "resume" | "stop" };
+  | { readonly kind: "timer.change"; readonly action: "pause" | "resume" | "stop" }
+  | { readonly kind: "work.status"; readonly json: boolean }
+  | {
+      readonly kind: "work.start";
+      readonly issue: string;
+      readonly title: string | null;
+      /** null means the workspace containing the current directory. */
+      readonly workspace: string | null;
+    }
+  | { readonly kind: "work.finish"; readonly workspace: string | null };
 
 export type CliInvocation =
   | { readonly kind: "help" }
@@ -69,7 +78,11 @@ function timerChange(action: "pause" | "resume" | "stop"): CommandSpec {
 }
 
 /** Commands with subcommands, and the subcommand run when none is given. */
-const GROUPS: Readonly<Record<string, string>> = { workspace: "list", timer: "status" };
+const GROUPS: Readonly<Record<string, string>> = {
+  workspace: "list",
+  timer: "status",
+  work: "status",
+};
 
 const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   diagnostics: {
@@ -153,6 +166,32 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
       issue: text(values, "issue"),
     }),
   },
+  "work status": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["json"],
+    build: (_args, values) => ({ kind: "work.status", json: flag(values, "json") }),
+  },
+  "work start": {
+    usage: "<issue>",
+    minArgs: 1,
+    maxArgs: 1,
+    flags: ["workspace", "title"],
+    build: (args, values) => ({
+      kind: "work.start",
+      issue: arg(args, 0),
+      title: text(values, "title"),
+      workspace: text(values, "workspace"),
+    }),
+  },
+  "work finish": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace"],
+    build: (_args, values) => ({ kind: "work.finish", workspace: text(values, "workspace") }),
+  },
   "timer pause": timerChange("pause"),
   "timer resume": timerChange("resume"),
   "timer stop": timerChange("stop"),
@@ -214,6 +253,7 @@ export function parseArgs(argv: readonly string[]): Result<CliInvocation, Valida
         yes: { type: "boolean", short: "y" },
         workspace: { type: "string", short: "w" },
         issue: { type: "string" },
+        title: { type: "string" },
       },
     });
   } catch (thrown) {
