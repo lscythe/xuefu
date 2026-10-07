@@ -39,6 +39,8 @@ export async function runTui(
 ): Promise<Result<void, AppError>> {
   const tabs = await startingTabs(app, cwd);
   if (!tabs.ok) return tabs;
+  const navigation = app.workspaces.navigation();
+  if (!navigation.ok) return navigation;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
   const { openShell } = await import("../tui/open-shell");
@@ -60,6 +62,12 @@ export async function runTui(
       activateWorkspace: (chosen) => activate(app, chosen),
       closeTab: (closing) =>
         app.commandBus.invoke(app.workspaceCommands.closeTab, { id: closing.id }),
+      navigation: navigation.value,
+      saveNavigation: (workspace, section) =>
+        app.commandBus.invoke(app.workspaceCommands.navigate, {
+          id: workspace.id,
+          navigation: section,
+        }),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {

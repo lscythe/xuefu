@@ -351,7 +351,7 @@ describe("runCli: workspaces", () => {
       screen.mockInput.pressKey("q");
       expect((await running).code).toBe(EXIT.ok);
       const [header = "", tabs = ""] = frame.split("\n");
-      return { header, tabs };
+      return { header, tabs, frame };
     };
     const open = async (screen: TestRendererSetup, query: string) => {
       screen.mockInput.pressKey("w", { ctrl: true });
@@ -378,9 +378,15 @@ describe("runCli: workspaces", () => {
     expect(afterClose.header).toContain("Payments API");
     expect(afterClose.tabs).not.toContain("Mobile Banking");
 
-    // Opening inside a workspace brings its tab back.
-    await session(mobile, idle);
-    expect((await session(projects, idle)).tabs).toContain(" 1 Payments API  2 Mobile Banking ");
+    // Opening inside a workspace brings its tab back, on the section it was left on.
+    await session(mobile, async (screen) => {
+      screen.mockInput.pressKey("j");
+      await screen.waitForFrame((f) => f.includes("▍WORK"));
+    });
+    const back = await session(projects, idle);
+    expect(back.header).toContain("Mobile Banking");
+    expect(back.tabs).toContain(" 1 Payments API  2 Mobile Banking ");
+    expect(back.frame).toContain("▍WORK");
 
     const listed = JSON.parse((await run(["workspace", "list", "--json"])).stdout);
     expect(listed.map((w: { lastActiveAt: string | null }) => typeof w.lastActiveAt)).toEqual([

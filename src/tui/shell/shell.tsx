@@ -29,6 +29,12 @@ export interface ShellProps {
   /** Brings the workspace to the front, opening a tab for it if needed, and saves that. */
   readonly activateWorkspace: (workspace: Workspace) => Promise<Result<OpenTabs, AppError>>;
   readonly closeTab: (workspace: Workspace) => Promise<Result<OpenTabs, AppError>>;
+  /** Section ids each workspace was left on, from the last session. */
+  readonly navigation: ReadonlyMap<string, string>;
+  readonly saveNavigation: (
+    workspace: Workspace,
+    section: string,
+  ) => Promise<Result<unknown, AppError>>;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
@@ -41,13 +47,27 @@ export function Shell(props: ShellProps) {
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [notice, setNotice] = createSignal<AppError | null>(null);
   // Each workspace keeps its own place in the navigation; "" is the no-workspace screen.
-  const [sections, setSections] = createSignal<ReadonlyMap<string, number>>(new Map());
+  const [sections, setSections] = createSignal<ReadonlyMap<string, number>>(
+    new Map(
+      [...props.navigation].flatMap(([id, key]) => {
+        const index = SECTIONS.findIndex((section) => section.id === key);
+        return index === -1 ? [] : [[id, index] as const];
+      }),
+    ),
+  );
 
   const workspace = () => tabs().active;
   const selected = () => sections().get(workspace()?.id ?? "") ?? 0;
   const section = () => SECTIONS[selected()] ?? SECTIONS[0];
-  const select = (index: number) =>
-    setSections((current) => new Map(current).set(workspace()?.id ?? "", index));
+  const select = (index: number) => {
+    const current = workspace();
+    setSections((all) => new Map(all).set(current?.id ?? "", index));
+    const target = SECTIONS[index];
+    if (current === null || target === undefined) return;
+    void props.saveNavigation(current, target.id).then((saved) => {
+      if (!saved.ok) setNotice(saved.error);
+    });
+  };
 
   /** Applies a tab change once it is saved; a failure is shown above the key bar. */
   const changeTabs = async (change: Promise<Result<OpenTabs, AppError>>) => {

@@ -39,6 +39,8 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         loadWorkspaces={() => Promise.resolve(ok(VIEWS))}
         activateWorkspace={tabs.activate}
         closeTab={tabs.close}
+        navigation={new Map()}
+        saveNavigation={() => Promise.resolve(ok(undefined))}
         onQuit={() => undefined}
         {...props}
       />

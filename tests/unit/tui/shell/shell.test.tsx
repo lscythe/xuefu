@@ -35,6 +35,8 @@ async function renderShell(
         loadWorkspaces={() => Promise.resolve(ok(VIEWS))}
         activateWorkspace={tabs.activate}
         closeTab={tabs.close}
+        navigation={new Map()}
+        saveNavigation={() => Promise.resolve(ok(undefined))}
         onQuit={() => {
           quits += 1;
         }}
@@ -91,6 +93,52 @@ describe("Shell tabs", () => {
     await shell.waitForFrame((f) => header(f).includes("deployd") && f.includes("▍DASHBOARD"));
     shell.mockInput.pressKey("1", { meta: true });
     await shell.waitForFrame((f) => header(f).includes("Mobile Banking") && f.includes("▍WORK"));
+  });
+
+  test("starts each workspace on its saved section and saves every change", async () => {
+    const saved: string[] = [];
+    const tabs = fakeTabs(VIEWS, "deployd", "mobile-banking");
+    const shell = await renderShell({
+      tabs: tabs.initial,
+      activateWorkspace: tabs.activate,
+      navigation: new Map([
+        ["mobile-banking", "pulls"],
+        ["deployd", "no-longer-a-section"],
+      ]),
+      saveNavigation: (workspace, section) => {
+        saved.push(`${workspace.id}:${section}`);
+        return Promise.resolve(ok(undefined));
+      },
+    });
+    expect(shell.captureCharFrame()).toContain("▍PRS");
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => f.includes("▍TIMESHEET"));
+    shell.mockInput.pressKey("1", { meta: true });
+    await shell.waitForFrame((f) => header(f).includes("deployd") && f.includes("▍DASHBOARD"));
+    expect(saved).toEqual(["mobile-banking:timesheet"]);
+  });
+
+  test("a section change that cannot be saved is reported", async () => {
+    const shell = await renderShell({
+      saveNavigation: () =>
+        Promise.resolve(err(storageError("Unable to save the workspace session", "x"))),
+    });
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => f.includes("✗ Unable to save the workspace session"));
+  });
+
+  test("outside every workspace the section is not saved", async () => {
+    let saves = 0;
+    const shell = await renderShell({
+      tabs: fakeTabs(VIEWS).initial,
+      saveNavigation: () => {
+        saves += 1;
+        return Promise.resolve(ok(undefined));
+      },
+    });
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    expect(saves).toBe(0);
   });
 
   test("alt+w closes the front tab; closing the last leaves no workspace", async () => {
