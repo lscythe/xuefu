@@ -7,7 +7,7 @@ import type { WorkspaceId } from "../../domain/shared/ids";
 import type { Result } from "../../domain/shared/result";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
-import { segments } from "../highlight";
+import { Highlighted } from "../highlighted";
 import { cycle, scrollOffset } from "../list-navigation";
 import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
 import { queryActionFor } from "../query-input/keys";
@@ -30,26 +30,6 @@ const isWorkspaceRow = (row: SwitcherRow): row is WorkspaceRow => row.kind === "
 
 const MAX_WIDTH = 64;
 const MAX_LIST_ROWS = 12;
-
-function Highlighted(props: { text: string; hits: readonly number[]; fg: string; bold?: boolean }) {
-  return (
-    <For each={segments(props.text, props.hits)}>
-      {(part) =>
-        part.hit ? (
-          <span style={{ fg: PALETTE.accentSpectral }}>
-            <b>{part.text}</b>
-          </span>
-        ) : props.bold === true ? (
-          <span style={{ fg: props.fg }}>
-            <b>{part.text}</b>
-          </span>
-        ) : (
-          <span style={{ fg: props.fg }}>{part.text}</span>
-        )
-      }
-    </For>
-  );
-}
 
 export function Switcher(props: SwitcherProps) {
   const dimensions = useTerminalDimensions();
