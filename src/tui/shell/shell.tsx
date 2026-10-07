@@ -91,7 +91,7 @@ export function Shell(props: ShellProps) {
             paddingX={1}
           >
             <text fg={PALETTE.accentSecondary}>
-              <b>{`▍${section()?.label.toUpperCase()}`}</b>
+              <b>{`${props.icons === "ascii" ? "" : "▍"}${section()?.label.toUpperCase()}`}</b>
             </text>
             <text fg={PALETTE.textMuted}>Nothing to show yet.</text>
           </box>

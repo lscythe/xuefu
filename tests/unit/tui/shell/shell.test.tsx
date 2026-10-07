@@ -170,6 +170,8 @@ describe("Shell", () => {
     const frame = (await renderShell({ icons: "ascii" })).captureCharFrame();
     expect(rowContaining(frame, "Dashboard")).toContain("> Dashboard");
     expect(frame).not.toContain("⌂");
+    expect(frame).not.toContain("▍");
+    expect(frame).toContain("DASHBOARD");
     expect(rowContaining(frame, "navigate")).toContain("j/k navigate");
     expect(rowContaining(frame, "XUEFU")).toContain("Tue 06 Oct | 13:59");
   });

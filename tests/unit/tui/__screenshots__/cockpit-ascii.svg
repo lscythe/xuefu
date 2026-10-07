@@ -31,9 +31,9 @@
 <rect x="144" y="36" width="9" height="18" fill="#0a0a0f"/>
 <text x="144" y="50" fill="#c1121f">│</text>
 <rect x="153" y="36" width="9" height="18" fill="#0a0a0f"/>
-<rect x="162" y="36" width="90" height="18" fill="#0a0a0f"/>
-<text x="162 171 180 189 198 207 216 225 234 243" y="50" fill="#7bdff2" font-weight="bold">▍DASHBOARD</text>
-<rect x="252" y="36" width="639" height="18" fill="#0a0a0f"/>
+<rect x="162" y="36" width="81" height="18" fill="#0a0a0f"/>
+<text x="162 171 180 189 198 207 216 225 234" y="50" fill="#7bdff2" font-weight="bold">DASHBOARD</text>
+<rect x="243" y="36" width="648" height="18" fill="#0a0a0f"/>
 <rect x="891" y="36" width="9" height="18" fill="#0a0a0f"/>
 <text x="891" y="50" fill="#c1121f">│</text>
 <rect x="0" y="54" width="9" height="18" fill="#14141c"/>
