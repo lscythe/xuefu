@@ -41,6 +41,7 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | Key            | In the cockpit                                   |
 |----------------|--------------------------------------------------|
 | `↑` `↓`, `j` `k` | move between sections (each workspace remembers its own) |
+| `:`            | command palette: find any action by name, such as starting or finishing work |
 | `Ctrl+W`       | find a workspace and open it in a tab            |
 | `Alt+1`…`Alt+9` | bring that tab to the front                     |
 | `Alt+W`        | close the front tab                              |
