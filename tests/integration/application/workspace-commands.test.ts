@@ -22,6 +22,8 @@ import { err, ok, type Result } from "../../../src/domain/shared/result";
 import { SqliteEventLedger } from "../../../src/infrastructure/persistence/sqlite/event-ledger";
 import { SqliteUnitOfWork } from "../../../src/infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkspaceRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-repository";
+import { SqliteWorkspaceSessionRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-session-repository";
+import { SqliteWorkspaceTabsRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-tabs-repository";
 import { migratedMemoryDatabase } from "../../support/database";
 import { ManualClock } from "../../support/manual-clock";
 import { SequentialIds } from "../../support/sequential-ids";
@@ -67,17 +69,21 @@ beforeEach(() => {
   events.subscribe("*", (e) => void published.push(e));
   ledger = new SqliteEventLedger(db);
   const repository = new SqliteWorkspaceRepository(db);
+  const tabs = new SqliteWorkspaceTabsRepository(db);
+  const sessions = new SqliteWorkspaceSessionRepository(db);
   probe = new FakeProbe();
   bus = new CommandBus({ logger, clock, ids });
   const commands = workspaceCommands({
     repository,
+    tabs,
+    sessions,
     probe,
     unitOfWork: new SqliteUnitOfWork(db, ledger, events),
     ids,
   });
   const registered = registerWorkspaceCommands(bus, commands);
   if (!registered.ok) throw new Error(registered.error.message);
-  queries = new WorkspaceQueries(repository, probe);
+  queries = new WorkspaceQueries(repository, probe, tabs, sessions);
 });
 afterEach(() => db.close());
 
@@ -243,34 +249,121 @@ describe("workspace.group.assign", () => {
   });
 });
 
-describe("workspace.activate", () => {
+describe("workspace tabs", () => {
   beforeEach(async () => {
-    probe.dir("/work/a").dir("/work/b");
+    probe.dir("/work/a").dir("/work/b").dir("/work/c");
     await bus.dispatch("workspace.add", { path: "/work/a" });
     await bus.dispatch("workspace.add", { path: "/work/b" });
+    await bus.dispatch("workspace.add", { path: "/work/c" });
   });
 
-  test("nothing is last active before the first activation", () => {
-    expect(queries.lastActive()).toEqual({ ok: true, value: null });
+  function openTabs(): [string[], string | null] {
+    const current = queries.tabs();
+    if (!current.ok) throw new Error(current.error.message);
+    return [current.value.open.map((w) => w.id as string), current.value.active?.id ?? null];
+  }
+
+  function activate(id: string) {
+    clock.advance(1_000);
+    return bus.dispatch("workspace.activate", { id });
+  }
+
+  test("nothing is open before the first activation", () => {
+    expect(openTabs()).toEqual([[], null]);
   });
 
-  test("stamps the time, records the activation and becomes the last active workspace", async () => {
-    clock.advance(1_000);
-    const activated = await bus.dispatch("workspace.activate", { id: "b" });
-    expect(activated).toMatchObject({ ok: true, value: { id: "b", lastActiveAt: clock.now() } });
-    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceAdded", "WorkspaceActivated"]);
-    const last = queries.lastActive();
-    expect(last.ok ? (last.value?.id as string | undefined) : null).toBe("b");
+  test("activating stamps the time, opens a tab in front and records the switch", async () => {
+    const activated = await activate("b");
+    expect(activated).toMatchObject({
+      ok: true,
+      value: { active: { id: "b", lastActiveAt: clock.now() }, open: [{ id: "b" }] },
+    });
+    expect(ledgerTypes()).toEqual([
+      "WorkspaceAdded",
+      "WorkspaceAdded",
+      "WorkspaceAdded",
+      "WorkspaceActivated",
+    ]);
+    await activate("a");
+    expect(openTabs()).toEqual([["b", "a"], "a"]);
+    await activate("b");
+    expect(openTabs()).toEqual([["b", "a"], "b"]);
+  });
 
-    clock.advance(1_000);
-    await bus.dispatch("workspace.activate", { id: "a" });
-    const later = queries.lastActive();
-    expect(later.ok ? (later.value?.id as string | undefined) : null).toBe("a");
+  test("closing the front tab brings its neighbour to the front", async () => {
+    await activate("a");
+    await activate("b");
+    await activate("c");
+    await activate("b");
+    const closed = await bus.dispatch("workspace.tab.close", { id: "b" });
+    expect(closed).toMatchObject({ ok: true, value: { active: { id: "c" } } });
+    expect(openTabs()).toEqual([["a", "c"], "c"]);
+    expect(ledgerTypes().slice(-2)).toEqual(["WorkspaceTabClosed", "WorkspaceActivated"]);
+  });
+
+  test("closing a background tab keeps the front tab", async () => {
+    await activate("a");
+    await activate("b");
+    await bus.dispatch("workspace.tab.close", { id: "a" });
+    expect(openTabs()).toEqual([["b"], "b"]);
+    expect(ledgerTypes().at(-1)).toBe("WorkspaceTabClosed");
+    await bus.dispatch("workspace.tab.close", { id: "b" });
+    expect(openTabs()).toEqual([[], null]);
+  });
+
+  test("closing a workspace that is not open is not found and changes nothing", async () => {
+    await activate("a");
+    expectError(await bus.dispatch("workspace.tab.close", { id: "b" }), "not-found");
+    expect(openTabs()).toEqual([["a"], "a"]);
+  });
+
+  test("removing a workspace closes its tab", async () => {
+    await activate("a");
+    await activate("b");
+    const prompt = await bus.dispatch("workspace.remove", { id: "b" });
+    if (prompt.ok || prompt.error.kind !== "confirmation-required") throw new Error("no prompt");
+    await bus.dispatch(
+      "workspace.remove",
+      { id: "b" },
+      { confirmation: confirmationTokenFor(prompt.error) },
+    );
+    expect(openTabs()).toEqual([["a"], "a"]);
   });
 
   test("an unknown workspace is not found and records nothing", async () => {
     expectError(await bus.dispatch("workspace.activate", { id: "ghost" }), "not-found");
-    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceAdded"]);
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceAdded", "WorkspaceAdded"]);
+  });
+});
+
+describe("workspace.navigate", () => {
+  beforeEach(async () => {
+    probe.dir("/work/a");
+    await bus.dispatch("workspace.add", { path: "/work/a" });
+  });
+
+  test("remembers where a workspace was left, without recording activity", async () => {
+    expect(queries.navigation()).toEqual({ ok: true, value: new Map() });
+    expect(await bus.dispatch("workspace.navigate", { id: "a", navigation: "pulls" })).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const navigation = queries.navigation();
+    expect(navigation.ok ? [...navigation.value].map(([k, v]) => `${k}:${v}`) : null).toEqual([
+      "a:pulls",
+    ]);
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded"]);
+  });
+
+  test("an unknown workspace is not found; a malformed key is a validation error", async () => {
+    expectError(
+      await bus.dispatch("workspace.navigate", { id: "ghost", navigation: "pulls" }),
+      "not-found",
+    );
+    expectError(
+      await bus.dispatch("workspace.navigate", { id: "a", navigation: "Pull Requests" }),
+      "validation",
+    );
   });
 });
 
@@ -312,6 +405,8 @@ describe("registerWorkspaceCommands", () => {
       bus,
       workspaceCommands({
         repository: new SqliteWorkspaceRepository(db),
+        tabs: new SqliteWorkspaceTabsRepository(db),
+        sessions: new SqliteWorkspaceSessionRepository(db),
         probe,
         unitOfWork: new SqliteUnitOfWork(db, ledger, new EventBus(testLogger().logger)),
         ids: new SequentialIds(),
@@ -328,6 +423,7 @@ describe("workspace events", () => {
     await bus.dispatch("workspace.add", { path: "/work/a", group: "G" });
     await bus.dispatch("workspace.group.assign", { id: "a", group: null });
     await bus.dispatch("workspace.activate", { id: "a" });
+    await bus.dispatch("workspace.tab.close", { id: "a" });
     const prompt = await bus.dispatch("workspace.remove", { id: "a" });
     if (prompt.ok || prompt.error.kind !== "confirmation-required") throw new Error("no prompt");
     await bus.dispatch(
@@ -342,7 +438,7 @@ describe("workspace events", () => {
     if (!catalog.ok) throw new Error(catalog.error.message);
     const page = ledger.list({ limit: 100 });
     if (!page.ok) throw new Error(page.error.message);
-    expect(page.value.events).toHaveLength(4);
+    expect(page.value.events).toHaveLength(5);
     for (const event of page.value.events) expect(catalog.value.decode(event).ok).toBe(true);
   });
 });

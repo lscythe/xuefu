@@ -1,13 +1,15 @@
 import { z } from "zod";
-import type {
-  DuplicateCommandError,
-  StorageError,
-  ValidationError,
+import {
+  type DuplicateCommandError,
+  type NotFoundError,
+  notFound,
+  type StorageError,
+  type ValidationError,
 } from "../../domain/shared/errors";
 import { createEvent, type DomainEvent } from "../../domain/shared/event";
 import { type WorkspaceId, workspaceId } from "../../domain/shared/ids";
 import { absolutePath, baseName } from "../../domain/shared/path";
-import { ok, type Result } from "../../domain/shared/result";
+import { err, ok, type Result } from "../../domain/shared/result";
 import {
   activateWorkspace,
   addWorkspace,
@@ -16,6 +18,8 @@ import {
   removeWorkspace,
   type WorkspaceRegistry,
 } from "../../domain/workspace/registry";
+import { navigationKey } from "../../domain/workspace/session";
+import { closeTab, currentTabs, openTab } from "../../domain/workspace/tabs";
 import { groupName, type Workspace, workspaceName } from "../../domain/workspace/workspace";
 import { type CommandContext, defineCommand } from "../commands/command";
 import type { CommandBus } from "../commands/command-bus";
@@ -23,16 +27,22 @@ import type { IdGenerator } from "../ports/id-generator";
 import type { UnitOfWork } from "../ports/unit-of-work";
 import type { WorkspaceCapabilities, WorkspaceProbe } from "../ports/workspace-probe";
 import type { WorkspaceRepository } from "../ports/workspace-repository";
+import type { WorkspaceSessionRepository } from "../ports/workspace-session-repository";
+import type { WorkspaceTabsRepository } from "../ports/workspace-tabs-repository";
 import { domainString } from "../validation";
 import type {
   WorkspaceActivatedPayload,
   WorkspaceAddedPayload,
   WorkspaceGroupAssignedPayload,
   WorkspaceRemovedPayload,
+  WorkspaceTabClosedPayload,
 } from "./events";
+import { type OpenTabs, viewTabs } from "./queries";
 
 export interface WorkspaceCommandDependencies {
   readonly repository: WorkspaceRepository;
+  readonly tabs: WorkspaceTabsRepository;
+  readonly sessions: WorkspaceSessionRepository;
   readonly probe: WorkspaceProbe;
   readonly unitOfWork: UnitOfWork;
   readonly ids: IdGenerator;
@@ -44,6 +54,8 @@ export interface AddedWorkspace {
 }
 
 const CATEGORY = "Workspace";
+
+type NotFoundOrStorage = NotFoundError | StorageError;
 
 /** Load, change and save the registry; must run inside a unit of work. */
 function changeRegistry<C extends { readonly registry: WorkspaceRegistry }, E>(
@@ -78,7 +90,30 @@ function workspaceEvent<T extends string, P extends object>(
 
 /** The workspace registry's write side: every change goes through the command bus. */
 export function workspaceCommands(deps: WorkspaceCommandDependencies) {
-  const { repository, probe, unitOfWork, ids } = deps;
+  const { repository, tabs, sessions, probe, unitOfWork, ids } = deps;
+
+  /** Stamps `id` as active now and records the switch; must run inside a unit of work. */
+  const activateIn = (
+    tx: { record(event: DomainEvent): void },
+    context: CommandContext,
+    id: WorkspaceId,
+  ) => {
+    const activated = changeRegistry(repository, (registry) =>
+      activateWorkspace(registry, id, context.clock.now()),
+    );
+    if (activated.ok) {
+      tx.record(
+        workspaceEvent<"WorkspaceActivated", WorkspaceActivatedPayload>(
+          ids,
+          context,
+          "WorkspaceActivated",
+          id,
+          { id },
+        ),
+      );
+    }
+    return activated;
+  };
 
   const add = defineCommand({
     name: "workspace.add",
@@ -214,26 +249,74 @@ export function workspaceCommands(deps: WorkspaceCommandDependencies) {
     safety: "safe",
     input: z.strictObject({ id: domainString(workspaceId) }),
     handler: (input, context) =>
-      unitOfWork.run((tx) => {
-        const activated = changeRegistry(repository, (registry) =>
-          activateWorkspace(registry, input.id, context.clock.now()),
-        );
+      unitOfWork.run((tx): Result<OpenTabs, NotFoundOrStorage> => {
+        const stored = tabs.load();
+        if (!stored.ok) return stored;
+        const activated = activateIn(tx, context, input.id);
         if (!activated.ok) return activated;
-        const { workspace } = activated.value;
-        tx.record(
-          workspaceEvent<"WorkspaceActivated", WorkspaceActivatedPayload>(
-            ids,
-            context,
-            "WorkspaceActivated",
-            workspace.id,
-            { id: workspace.id },
-          ),
-        );
-        return ok(workspace);
+        const { registry } = activated.value;
+        const next = openTab(currentTabs(registry, stored.value), input.id);
+        const saved = tabs.save(next.open);
+        return saved.ok ? ok(viewTabs(registry, next)) : saved;
       }),
   });
 
-  return { add, remove, group, activate } as const;
+  const closeTabCommand = defineCommand({
+    name: "workspace.tab.close",
+    title: "Close workspace tab",
+    category: CATEGORY,
+    safety: "safe",
+    input: z.strictObject({ id: domainString(workspaceId) }),
+    handler: (input, context) =>
+      unitOfWork.run((tx): Result<OpenTabs, NotFoundOrStorage> => {
+        const loaded = repository.load();
+        if (!loaded.ok) return loaded;
+        const stored = tabs.load();
+        if (!stored.ok) return stored;
+        const current = currentTabs(loaded.value, stored.value);
+        if (!current.open.includes(input.id)) return err(notFound("tab", input.id));
+        const next = closeTab(current, input.id);
+        const saved = tabs.save(next.open);
+        if (!saved.ok) return saved;
+        tx.record(
+          workspaceEvent<"WorkspaceTabClosed", WorkspaceTabClosedPayload>(
+            ids,
+            context,
+            "WorkspaceTabClosed",
+            input.id,
+            { id: input.id },
+          ),
+        );
+        // The new front tab must also be the most recently active one; see currentTabs.
+        if (next.active === null || next.active === current.active) {
+          return ok(viewTabs(loaded.value, next));
+        }
+        const activated = activateIn(tx, context, next.active);
+        return activated.ok ? ok(viewTabs(activated.value.registry, next)) : activated;
+      }),
+  });
+
+  /** Cockpit state, not activity: saved without an event so the ledger stays meaningful. */
+  const navigate = defineCommand({
+    name: "workspace.navigate",
+    title: "Remember workspace navigation",
+    category: CATEGORY,
+    safety: "safe",
+    input: z.strictObject({
+      id: domainString(workspaceId),
+      navigation: domainString(navigationKey),
+    }),
+    handler: (input, context) =>
+      unitOfWork.run((): Result<void, NotFoundOrStorage> => {
+        const loaded = repository.load();
+        if (!loaded.ok) return loaded;
+        const found = findWorkspace(loaded.value, input.id);
+        if (!found.ok) return found;
+        return sessions.saveNavigation(input.id, input.navigation, context.clock.now());
+      }),
+  });
+
+  return { add, remove, group, activate, closeTab: closeTabCommand, navigate } as const;
 }
 
 export type WorkspaceCommands = ReturnType<typeof workspaceCommands>;
@@ -248,5 +331,9 @@ export function registerWorkspaceCommands(
   if (!remove.ok) return remove;
   const group = bus.register(commands.group);
   if (!group.ok) return group;
-  return bus.register(commands.activate);
+  const activate = bus.register(commands.activate);
+  if (!activate.ok) return activate;
+  const close = bus.register(commands.closeTab);
+  if (!close.ok) return close;
+  return bus.register(commands.navigate);
 }

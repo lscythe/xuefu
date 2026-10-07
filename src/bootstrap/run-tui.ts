@@ -1,5 +1,6 @@
 import type { CliRenderer } from "@opentui/core";
 import type { AppError } from "../application/errors";
+import type { OpenTabs } from "../application/workspace/queries";
 import { unexpected } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
@@ -14,22 +15,20 @@ export interface TuiHost {
   createRenderer(): Promise<CliRenderer>;
 }
 
-function activate(app: App, workspace: Workspace): Promise<Result<Workspace, AppError>> {
+/** Switches to the workspace (opening or focusing its tab); resolves to the open tabs. */
+function activate(app: App, workspace: Workspace): Promise<Result<OpenTabs, AppError>> {
   return app.commandBus.invoke(app.workspaceCommands.activate, { id: workspace.id });
 }
 
 /**
- * The workspace containing `cwd` (opening XueFu there counts as switching to it), otherwise the
- * one used last, so launching from anywhere else reopens where you left off.
+ * Tabs to start with: opening XueFu inside a workspace brings its tab to the front; anywhere else
+ * the tabs open last time come back as they were.
  */
-async function startingWorkspace(
-  app: App,
-  cwd: string,
-): Promise<Result<Workspace | null, AppError>> {
+async function startingTabs(app: App, cwd: string): Promise<Result<OpenTabs, AppError>> {
   const path = absolutePath(cwd);
   const here = path.ok ? await app.workspaces.which(path.value) : ok(null);
   if (!here.ok) return here;
-  return here.value === null ? app.workspaces.lastActive() : activate(app, here.value);
+  return here.value === null ? app.workspaces.tabs() : activate(app, here.value);
 }
 
 /** Runs the cockpit until the user quits or the renderer is torn down by a signal. */
@@ -38,8 +37,10 @@ export async function runTui(
   host: TuiHost,
   cwd: string,
 ): Promise<Result<void, AppError>> {
-  const workspace = await startingWorkspace(app, cwd);
-  if (!workspace.ok) return workspace;
+  const tabs = await startingTabs(app, cwd);
+  if (!tabs.ok) return tabs;
+  const navigation = app.workspaces.navigation();
+  if (!navigation.ok) return navigation;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
   const { openShell } = await import("../tui/open-shell");
@@ -56,16 +57,24 @@ export async function runTui(
     await openShell(renderer, {
       clock: systemClock,
       icons: app.config.ui.icons,
-      workspace: workspace.value,
+      tabs: tabs.value,
       loadWorkspaces: () => app.workspaces.list(),
       activateWorkspace: (chosen) => activate(app, chosen),
+      closeTab: (closing) =>
+        app.commandBus.invoke(app.workspaceCommands.closeTab, { id: closing.id }),
+      navigation: navigation.value,
+      saveNavigation: (workspace, section) =>
+        app.commandBus.invoke(app.workspaceCommands.navigate, {
+          id: workspace.id,
+          navigation: section,
+        }),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {
     renderer.destroy();
     return err(unexpected("Unable to draw the terminal UI", thrown));
   }
-  app.logger.info("Cockpit opened", { workspace: workspace.value?.id ?? null });
+  app.logger.info("Cockpit opened", { workspace: tabs.value.active?.id ?? null });
   await closed;
   app.logger.info("Cockpit closed");
   return ok(undefined);

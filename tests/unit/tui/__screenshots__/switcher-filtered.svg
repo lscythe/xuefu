@@ -15,37 +15,31 @@
 <rect x="846" y="0" width="45" height="18" fill="#14141c"/>
 <text x="846 855 864 873 882" y="14" fill="#4fd18b">13:59</text>
 <rect x="891" y="0" width="9" height="18" fill="#14141c"/>
-<rect x="0" y="18" width="144" height="18" fill="#14141c"/>
-<text x="0 9 18 27 36 45 54 63 72 81 90 99 108 117 126 135" y="32" fill="#4a4740">┌──────────────┐</text>
-<rect x="144" y="18" width="756" height="18" fill="#0a0a0f"/>
-<text x="144 153 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729 738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="32" fill="#c1121f">┌──────────────────────────────────────────────────────────────────────────────────┐</text>
-<rect x="0" y="36" width="9" height="18" fill="#14141c"/>
-<text x="0" y="50" fill="#4a4740">│</text>
-<rect x="9" y="36" width="9" height="18" fill="#1c1626"/>
-<text x="9" y="50" fill="#c1121f">▌</text>
-<rect x="18" y="36" width="99" height="18" fill="#1c1626"/>
-<text x="18 36 45 54 63 72 81 90 99 108" y="50" fill="#e8e3d9">⌂Dashboard</text>
-<rect x="117" y="36" width="18" height="18" fill="#1c1626"/>
-<rect x="135" y="36" width="9" height="18" fill="#14141c"/>
-<text x="135" y="50" fill="#4a4740">│</text>
-<rect x="144" y="36" width="9" height="18" fill="#0a0a0f"/>
-<text x="144" y="50" fill="#c1121f">│</text>
-<rect x="153" y="36" width="9" height="18" fill="#0a0a0f"/>
+<rect x="0" y="18" width="9" height="18" fill="#14141c"/>
+<rect x="9" y="18" width="27" height="18" fill="#1c1626"/>
+<text x="18" y="32" fill="#c1121f" font-weight="bold">1</text>
+<rect x="36" y="18" width="135" height="18" fill="#1c1626"/>
+<text x="36 45 54 63 72 81 99 108 117 126 135 144 153" y="32" fill="#e8e3d9" font-weight="bold">MobileBanking</text>
+<rect x="171" y="18" width="729" height="18" fill="#14141c"/>
+<rect x="0" y="36" width="144" height="18" fill="#14141c"/>
+<text x="0 9 18 27 36 45 54 63 72 81 90 99 108 117 126 135" y="50" fill="#4a4740">┌──────────────┐</text>
+<rect x="144" y="36" width="18" height="18" fill="#0a0a0f"/>
+<text x="144 153" y="50" fill="#c1121f">┌─</text>
 <rect x="162" y="36" width="18" height="18" fill="#14141c"/>
 <text x="162 171" y="50" fill="#c1121f">┌─</text>
 <rect x="180" y="36" width="162" height="18" fill="#14141c"/>
 <text x="189 198 207 216 225 234 252 261 270 279 288 297 306 315 324" y="50" fill="#7bdff2">Switchworkspace</text>
 <rect x="342" y="36" width="396" height="18" fill="#14141c"/>
 <text x="342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="50" fill="#c1121f">───────────────────────────────────────────┐</text>
-<rect x="738" y="36" width="153" height="18" fill="#0a0a0f"/>
-<rect x="891" y="36" width="9" height="18" fill="#0a0a0f"/>
-<text x="891" y="50" fill="#c1121f">│</text>
+<rect x="738" y="36" width="162" height="18" fill="#0a0a0f"/>
+<text x="738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="50" fill="#c1121f">─────────────────┐</text>
 <rect x="0" y="54" width="9" height="18" fill="#14141c"/>
 <text x="0" y="68" fill="#4a4740">│</text>
-<rect x="9" y="54" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="54" width="54" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63" y="68" fill="#8a8578">▤Work</text>
-<rect x="72" y="54" width="63" height="18" fill="#14141c"/>
+<rect x="9" y="54" width="9" height="18" fill="#1c1626"/>
+<text x="9" y="68" fill="#c1121f">▌</text>
+<rect x="18" y="54" width="99" height="18" fill="#1c1626"/>
+<text x="18 36 45 54 63 72 81 90 99 108" y="68" fill="#e8e3d9">⌂Dashboard</text>
+<rect x="117" y="54" width="18" height="18" fill="#1c1626"/>
 <rect x="135" y="54" width="9" height="18" fill="#14141c"/>
 <text x="135" y="68" fill="#4a4740">│</text>
 <rect x="144" y="54" width="9" height="18" fill="#0a0a0f"/>
@@ -70,7 +64,7 @@
 <text x="0" y="86" fill="#4a4740">│</text>
 <rect x="9" y="72" width="9" height="18" fill="#14141c"/>
 <rect x="18" y="72" width="54" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63" y="86" fill="#8a8578">◆Jira</text>
+<text x="18 36 45 54 63" y="86" fill="#8a8578">▤Work</text>
 <rect x="72" y="72" width="63" height="18" fill="#14141c"/>
 <rect x="135" y="72" width="9" height="18" fill="#14141c"/>
 <text x="135" y="86" fill="#4a4740">│</text>
@@ -99,9 +93,9 @@
 <rect x="0" y="90" width="9" height="18" fill="#14141c"/>
 <text x="0" y="104" fill="#4a4740">│</text>
 <rect x="9" y="90" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="90" width="45" height="18" fill="#14141c"/>
-<text x="18 36 45 54" y="104" fill="#8a8578">±Git</text>
-<rect x="63" y="90" width="72" height="18" fill="#14141c"/>
+<rect x="18" y="90" width="54" height="18" fill="#14141c"/>
+<text x="18 36 45 54 63" y="104" fill="#8a8578">◆Jira</text>
+<rect x="72" y="90" width="63" height="18" fill="#14141c"/>
 <rect x="135" y="90" width="9" height="18" fill="#14141c"/>
 <text x="135" y="104" fill="#4a4740">│</text>
 <rect x="144" y="90" width="9" height="18" fill="#0a0a0f"/>
@@ -130,7 +124,7 @@
 <text x="0" y="122" fill="#4a4740">│</text>
 <rect x="9" y="108" width="9" height="18" fill="#14141c"/>
 <rect x="18" y="108" width="45" height="18" fill="#14141c"/>
-<text x="18 36 45 54" y="122" fill="#8a8578">⇅PRs</text>
+<text x="18 36 45 54" y="122" fill="#8a8578">±Git</text>
 <rect x="63" y="108" width="72" height="18" fill="#14141c"/>
 <rect x="135" y="108" width="9" height="18" fill="#14141c"/>
 <text x="135" y="122" fill="#4a4740">│</text>
@@ -151,9 +145,9 @@
 <rect x="0" y="126" width="9" height="18" fill="#14141c"/>
 <text x="0" y="140" fill="#4a4740">│</text>
 <rect x="9" y="126" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="126" width="99" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63 72 81 90 99 108" y="140" fill="#8a8578">◷Timesheet</text>
-<rect x="117" y="126" width="18" height="18" fill="#14141c"/>
+<rect x="18" y="126" width="45" height="18" fill="#14141c"/>
+<text x="18 36 45 54" y="140" fill="#8a8578">⇅PRs</text>
+<rect x="63" y="126" width="72" height="18" fill="#14141c"/>
 <rect x="135" y="126" width="9" height="18" fill="#14141c"/>
 <text x="135" y="140" fill="#4a4740">│</text>
 <rect x="144" y="126" width="9" height="18" fill="#0a0a0f"/>
@@ -167,9 +161,9 @@
 <rect x="0" y="144" width="9" height="18" fill="#14141c"/>
 <text x="0" y="158" fill="#4a4740">│</text>
 <rect x="9" y="144" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="144" width="81" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63 72 81 90" y="158" fill="#8a8578">⚙Jenkins</text>
-<rect x="99" y="144" width="36" height="18" fill="#14141c"/>
+<rect x="18" y="144" width="99" height="18" fill="#14141c"/>
+<text x="18 36 45 54 63 72 81 90 99 108" y="158" fill="#8a8578">◷Timesheet</text>
+<rect x="117" y="144" width="18" height="18" fill="#14141c"/>
 <rect x="135" y="144" width="9" height="18" fill="#14141c"/>
 <text x="135" y="158" fill="#4a4740">│</text>
 <rect x="144" y="144" width="9" height="18" fill="#0a0a0f"/>
@@ -181,7 +175,7 @@
 <text x="0" y="176" fill="#4a4740">│</text>
 <rect x="9" y="162" width="9" height="18" fill="#14141c"/>
 <rect x="18" y="162" width="81" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63 72 81 90" y="176" fill="#8a8578">▣Android</text>
+<text x="18 36 45 54 63 72 81 90" y="176" fill="#8a8578">⚙Jenkins</text>
 <rect x="99" y="162" width="36" height="18" fill="#14141c"/>
 <rect x="135" y="162" width="9" height="18" fill="#14141c"/>
 <text x="135" y="176" fill="#4a4740">│</text>
@@ -193,9 +187,9 @@
 <rect x="0" y="180" width="9" height="18" fill="#14141c"/>
 <text x="0" y="194" fill="#4a4740">│</text>
 <rect x="9" y="180" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="180" width="90" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63 72 81 90 99" y="194" fill="#8a8578">↗Activity</text>
-<rect x="108" y="180" width="27" height="18" fill="#14141c"/>
+<rect x="18" y="180" width="81" height="18" fill="#14141c"/>
+<text x="18 36 45 54 63 72 81 90" y="194" fill="#8a8578">▣Android</text>
+<rect x="99" y="180" width="36" height="18" fill="#14141c"/>
 <rect x="135" y="180" width="9" height="18" fill="#14141c"/>
 <text x="135" y="194" fill="#4a4740">│</text>
 <rect x="144" y="180" width="9" height="18" fill="#0a0a0f"/>
@@ -206,9 +200,9 @@
 <rect x="0" y="198" width="9" height="18" fill="#14141c"/>
 <text x="0" y="212" fill="#4a4740">│</text>
 <rect x="9" y="198" width="9" height="18" fill="#14141c"/>
-<rect x="18" y="198" width="63" height="18" fill="#14141c"/>
-<text x="18 36 45 54 63 72" y="212" fill="#8a8578">✎Notes</text>
-<rect x="81" y="198" width="54" height="18" fill="#14141c"/>
+<rect x="18" y="198" width="90" height="18" fill="#14141c"/>
+<text x="18 36 45 54 63 72 81 90 99" y="212" fill="#8a8578">↗Activity</text>
+<rect x="108" y="198" width="27" height="18" fill="#14141c"/>
 <rect x="135" y="198" width="9" height="18" fill="#14141c"/>
 <text x="135" y="212" fill="#4a4740">│</text>
 <rect x="144" y="198" width="9" height="18" fill="#0a0a0f"/>
@@ -218,7 +212,10 @@
 <text x="891" y="212" fill="#c1121f">│</text>
 <rect x="0" y="216" width="9" height="18" fill="#14141c"/>
 <text x="0" y="230" fill="#4a4740">│</text>
-<rect x="9" y="216" width="126" height="18" fill="#14141c"/>
+<rect x="9" y="216" width="9" height="18" fill="#14141c"/>
+<rect x="18" y="216" width="63" height="18" fill="#14141c"/>
+<text x="18 36 45 54 63 72" y="230" fill="#8a8578">✎Notes</text>
+<rect x="81" y="216" width="54" height="18" fill="#14141c"/>
 <rect x="135" y="216" width="9" height="18" fill="#14141c"/>
 <text x="135" y="230" fill="#4a4740">│</text>
 <rect x="144" y="216" width="9" height="18" fill="#0a0a0f"/>
@@ -389,9 +386,17 @@
 <text x="126 135" y="536" fill="#e8e3d9">^W</text>
 <rect x="144" y="522" width="117" height="18" fill="#14141c"/>
 <text x="153 162 171 180 189 198 207 216 225 234" y="536" fill="#8a8578">workspaces</text>
-<rect x="261" y="522" width="9" height="18" fill="#1c1626"/>
-<text x="261" y="536" fill="#e8e3d9">q</text>
-<rect x="270" y="522" width="63" height="18" fill="#14141c"/>
-<text x="279 288 297 306" y="536" fill="#8a8578">quit</text>
-<rect x="333" y="522" width="567" height="18" fill="#14141c"/>
+<rect x="261" y="522" width="63" height="18" fill="#1c1626"/>
+<text x="261 270 279 288 297 306 315" y="536" fill="#e8e3d9">alt+1-9</text>
+<rect x="324" y="522" width="63" height="18" fill="#14141c"/>
+<text x="333 342 351 360" y="536" fill="#8a8578">tabs</text>
+<rect x="387" y="522" width="45" height="18" fill="#1c1626"/>
+<text x="387 396 405 414 423" y="536" fill="#e8e3d9">alt+w</text>
+<rect x="432" y="522" width="108" height="18" fill="#14141c"/>
+<text x="441 450 459 468 477 495 504 513" y="536" fill="#8a8578">closetab</text>
+<rect x="540" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="540" y="536" fill="#e8e3d9">q</text>
+<rect x="549" y="522" width="63" height="18" fill="#14141c"/>
+<text x="558 567 576 585" y="536" fill="#8a8578">quit</text>
+<rect x="612" y="522" width="288" height="18" fill="#14141c"/>
 </svg>
