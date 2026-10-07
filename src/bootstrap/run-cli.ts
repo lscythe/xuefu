@@ -169,6 +169,8 @@ function workspaceJson(workspace: Workspace) {
     path: workspace.path,
     group: workspace.group,
     addedAt: new Date(workspace.addedAt).toISOString(),
+    lastActiveAt:
+      workspace.lastActiveAt === null ? null : new Date(workspace.lastActiveAt).toISOString(),
   };
 }
 

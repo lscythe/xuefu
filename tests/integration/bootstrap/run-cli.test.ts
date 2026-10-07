@@ -271,6 +271,7 @@ describe("runCli: workspaces", () => {
         path: join(projects, "api"),
         group: "Client",
         addedAt: expect.any(String),
+        lastActiveAt: null,
         status: "ready",
         capabilities: { git: false, gradle: false },
       },
