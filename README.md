@@ -11,8 +11,8 @@
 A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooling and timesheets
 around a single **Work Context**.
 
-> Status: **early development.** The cockpit opens, switches workspaces and keeps them in tabs;
-> the Jira, Git, PR, Jenkins and Android panels are not built yet.
+> Status: **early development.** The cockpit opens, switches workspaces, keeps them in tabs and
+> times your work; the Jira, Git, PR, Jenkins and Android panels are not built yet.
 
 ## Usage
 
@@ -22,11 +22,15 @@ xuefu workspace add ~/work/mobile-banking --group "Client A"  # register a proje
 xuefu workspace                                                # list workspaces and detected tools
 xuefu workspace which                                          # the workspace containing this folder
 xuefu workspace remove mobile-banking --yes                    # stop tracking it; the folder is kept
+xuefu timer start --issue MOB-2841                             # time this workspace (stops any other timer)
+xuefu timer                                                    # the running or paused timer
+xuefu timer pause | resume | stop                              # pause, resume or stop it
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
-`workspace which` exits `1` outside every workspace, which makes it usable in shell prompts.
+`workspace which` exits `1` outside every workspace and `timer` exits `1` with no timer running,
+which makes both usable in shell prompts.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -36,7 +40,12 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `Ctrl+W`       | find a workspace and open it in a tab            |
 | `Alt+1`…`Alt+9` | bring that tab to the front                     |
 | `Alt+W`        | close the front tab                              |
+| `t`            | start, pause or resume the front workspace's timer |
+| `Shift+T`      | stop the timer                                   |
 | `q`, `Ctrl+C`  | quit                                             |
+
+Only one timer runs at a time: starting one in another workspace stops the current one first.
+Timers are saved as they change, so they keep counting across restarts and crashes.
 
 On macOS, Alt shortcuts need the terminal to send Option as Meta (Terminal: Settings, Profiles,
 Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc+").

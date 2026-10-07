@@ -439,6 +439,115 @@ describe("runCli: workspaces", () => {
   });
 });
 
+describe("runCli: timer", () => {
+  let mobile: string;
+  let api: string;
+  beforeEach(async () => {
+    const projects = join(realpathSync(dir.path), "projects");
+    mobile = join(projects, "mobile");
+    api = join(projects, "api");
+    mkdirSync(mobile, { recursive: true });
+    mkdirSync(api, { recursive: true });
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["workspace", "add", api, "--name", "Payments API"]);
+  });
+
+  test("no timer: status exits 1, and pausing explains how to start one", async () => {
+    expect(await run(["timer"])).toEqual({
+      code: EXIT.none,
+      stdout: "",
+      stderr: "No timer is running.\n",
+    });
+    expect(await run(["timer", "status", "--json"])).toMatchObject({
+      code: EXIT.none,
+      stdout: "null\n",
+    });
+    const paused = await run(["timer", "pause"]);
+    expect(paused.code).toBe(EXIT.noInput);
+    expect(paused.stderr).toContain("No timer is running");
+    expect(paused.stderr).toContain("xuefu timer start");
+  });
+
+  test("start times the workspace of the current folder, and survives a restart", async () => {
+    expect(await run(["timer", "start", "--issue", "mob-2841"], {}, mobile)).toEqual({
+      code: EXIT.ok,
+      stdout: "✓ Started a timer for Mobile Banking (MOB-2841)\n",
+      stderr: "",
+    });
+    const status = await run(["timer"]);
+    expect(status.code).toBe(EXIT.ok);
+    expect(status.stdout).toMatch(/^● Running {2}\d\d:\d\d:\d\d\n/);
+    expect(status.stdout).toContain("Workspace    Mobile Banking (mobile-banking)");
+    expect(status.stdout).toContain("Issue        MOB-2841");
+    const json = JSON.parse((await run(["timer", "status", "--json"])).stdout);
+    expect(json).toMatchObject({
+      status: "running",
+      workspaceId: "mobile-banking",
+      workspaceName: "Mobile Banking",
+      issueKey: "MOB-2841",
+    });
+    expect(json.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test("pause, resume and stop report the time tracked", async () => {
+    await run(["timer", "start", "-w", "payments-api"]);
+    expect((await run(["timer", "pause"])).stdout).toMatch(
+      /^✓ Paused the timer for Payments API at \d\d:\d\d:\d\d\n$/,
+    );
+    expect((await run(["timer"])).stdout).toMatch(/^‖ Paused {3}\d\d:\d\d:\d\d\n/);
+    expect((await run(["timer", "start", "-w", "payments-api"])).stdout).toMatch(
+      /^✓ Resumed the timer for Payments API at /,
+    );
+    expect((await run(["timer", "resume"])).stderr).toContain("The timer is running, not paused");
+    expect((await run(["timer", "stop"])).stdout).toMatch(
+      /^✓ Stopped the timer for Payments API after \d\d:\d\d:\d\d\n$/,
+    );
+    expect((await run(["timer"])).code).toBe(EXIT.none);
+  });
+
+  test("starting in another workspace stops the running timer", async () => {
+    await run(["timer", "start"], {}, mobile);
+    const switched = await run(["timer", "start"], {}, api);
+    expect(switched.stdout).toMatch(
+      /^✓ Stopped the timer for Mobile Banking after \d\d:\d\d:\d\d\n✓ Started a timer for Payments API\n$/,
+    );
+    expect((await run(["timer", "start"], {}, api)).code).toBe(EXIT.data);
+  });
+
+  test("a timer outlives its removed workspace", async () => {
+    await run(["timer", "start"], {}, mobile);
+    await run(["workspace", "remove", "mobile-banking", "--yes"]);
+    expect((await run(["timer"])).stdout).toContain("Workspace    mobile-banking (removed)");
+    expect((await run(["timer", "stop"])).stdout).toContain(
+      "Stopped the timer for mobile-banking after",
+    );
+  });
+
+  test("the cockpit shows a running timer, and t and shift+t drive it", async () => {
+    await run(["timer", "start"], {}, mobile);
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => /Timer \d\d:\d\d:\d\d/.test(f));
+    screen.mockInput.pressKey("t");
+    await screen.waitForFrame((f) => /Paused \d\d:\d\d:\d\d/.test(f));
+    await screen.mockInput.typeText("T");
+    await screen.waitForFrame((f) => !f.includes("Paused"));
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+    expect((await run(["timer"])).code).toBe(EXIT.none);
+  });
+
+  test("outside every workspace, start needs --workspace", async () => {
+    const outside = await run(["timer", "start"]);
+    expect(outside.code).toBe(EXIT.usage);
+    expect(outside.stderr).toContain(`Not inside a workspace: ${dir.path}`);
+    expect(outside.stderr).toContain("pass --workspace <id>");
+    expect((await run(["timer", "start", "-w", "ghost"])).stderr).toContain("xuefu workspace list");
+    expect((await run(["timer", "start"], {}, join(dir.path, "missing"))).code).toBe(EXIT.io);
+  });
+});
+
 describe("exitCodeFor", () => {
   const prompt = {
     title: "t",

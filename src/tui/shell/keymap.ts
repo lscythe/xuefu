@@ -7,6 +7,9 @@ export type ShellAction =
   /** Alt+1..9: bring that tab to the front. */
   | { readonly kind: "tab.focus"; readonly position: number }
   | { readonly kind: "tab.close" }
+  /** Start, pause or resume the front workspace's timer; Shift+T stops it. */
+  | { readonly kind: "timer.toggle" }
+  | { readonly kind: "timer.stop" }
   | { readonly kind: "quit" }
   /** Ctrl+C: quits from anywhere, including while an overlay owns the keyboard. */
   | { readonly kind: "interrupt" };
@@ -38,6 +41,8 @@ const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
     (_, i) => [`meta+${i + 1}`, { kind: "tab.focus", position: i + 1 }] as const,
   ),
   ["meta+w", { kind: "tab.close" }],
+  ["t", { kind: "timer.toggle" }],
+  ["shift+t", { kind: "timer.stop" }],
   ["q", { kind: "quit" }],
   ["ctrl+c", { kind: "interrupt" }],
 ];
@@ -54,7 +59,10 @@ export function actionFor(key: KeyPress): ShellAction | null {
 }
 
 /** What the key bar shows; kept next to BINDINGS so a hint never advertises an unbound key. */
-export function keyHints(icons: IconSet, state: { readonly tabs: boolean }): readonly KeyHint[] {
+export function keyHints(
+  icons: IconSet,
+  state: { readonly tabs: boolean; readonly timer: boolean },
+): readonly KeyHint[] {
   return [
     { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
     { keys: "^W", label: "workspaces" },
@@ -64,6 +72,7 @@ export function keyHints(icons: IconSet, state: { readonly tabs: boolean }): rea
           { keys: "alt+w", label: "close tab" },
         ]
       : []),
+    ...(state.timer ? [{ keys: "t", label: "timer" }] : []),
     { keys: "q", label: "quit" },
   ];
 }

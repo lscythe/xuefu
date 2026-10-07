@@ -7,6 +7,7 @@ import { err, ok } from "../../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeTabs } from "../../../support/fake-tabs";
+import { fakeTimer } from "../../../support/fake-timer";
 import { ManualClock } from "../../../support/manual-clock";
 import { view } from "../../../support/workspace-views";
 
@@ -37,6 +38,9 @@ async function renderShell(
         closeTab={tabs.close}
         navigation={new Map()}
         saveNavigation={() => Promise.resolve(ok(undefined))}
+        timer={null}
+        toggleTimer={() => Promise.resolve(ok(null))}
+        stopTimer={() => Promise.resolve(ok(undefined))}
         onQuit={() => {
           quits += 1;
         }}
@@ -174,6 +178,129 @@ describe("Shell tabs", () => {
     expect(header(frame)).toContain("deployd");
     shell.mockInput.pressKey("j");
     await shell.waitForFrame((f) => !f.includes("Unable to save open tabs"));
+  });
+});
+
+describe("Shell timer", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const keyBar = (frame: string) => rowContaining(frame, "navigate");
+
+  async function timerShell(props: Partial<ShellProps> = {}, size = { width: 100, height: 30 }) {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    const shell = await renderShell(
+      {
+        clock,
+        tickMs: 5,
+        timer: timer.current(),
+        toggleTimer: timer.toggle,
+        stopTimer: timer.stop,
+        ...props,
+      },
+      size,
+    );
+    return Object.assign(shell, { clock, timer });
+  }
+
+  test("t starts the front workspace's timer, which counts up in the header", async () => {
+    const shell = await timerShell();
+    expect(keyBar(shell.captureCharFrame())).toContain("t timer");
+    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("13:59 • Timer 00:00:00"));
+    shell.clock.advance(6_138_000);
+    await shell.waitForFrame((f) => header(f).includes("Timer 01:42:18"));
+  });
+
+  test("t pauses and resumes; shift+t stops", async () => {
+    const shell = await timerShell();
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    shell.clock.advance(90_000);
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("Paused 00:01:30"));
+    shell.clock.advance(600_000);
+    await Bun.sleep(25);
+    expect(header(shell.captureCharFrame())).toContain("Paused 00:01:30");
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("Timer 00:01:30"));
+    await shell.mockInput.typeText("T");
+    await shell.waitForFrame((f) => !header(f).includes("Timer"));
+    expect(shell.timer.current()).toBeNull();
+  });
+
+  test("a timer running elsewhere shows whose it is; t here starts this one's own", async () => {
+    const shell = await timerShell();
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    await shell.mockInput.typeText("auth");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => header(f).includes("Mobile Banking 00:00:00"));
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    expect<string | undefined>(shell.timer.current()?.workspace?.name).toBe("Auth Service");
+  });
+
+  test("the timer survives into the next session", async () => {
+    const clock = new ManualClock(NOW - 60_000);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    await timer.toggle(MOBILE.workspace);
+    clock.set(NOW);
+    await timer.toggle(MOBILE.workspace);
+    clock.advance(3_600_000);
+    const frame = (await renderShell({ clock, timer: timer.current() })).captureCharFrame();
+    expect(header(frame)).toContain("Paused 00:01:00");
+  });
+
+  test("with no workspace and no timer the key does nothing and is not offered", async () => {
+    let toggles = 0;
+    const shell = await timerShell({
+      tabs: fakeTabs(VIEWS).initial,
+      toggleTimer: () => {
+        toggles += 1;
+        return Promise.resolve(ok(null));
+      },
+    });
+    expect(keyBar(shell.captureCharFrame())).not.toContain("t timer");
+    shell.mockInput.pressKey("t");
+    await shell.renderOnce();
+    expect(toggles).toBe(1);
+    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+  });
+
+  test("failures are reported above the key bar", async () => {
+    const shell = await timerShell({
+      toggleTimer: () =>
+        Promise.resolve(err(storageError("Unable to save the timer", "timers.save"))),
+    });
+    shell.mockInput.pressKey("t");
+    await shell.waitForFrame((f) => f.includes("✗ Unable to save the timer"));
+    await shell.mockInput.typeText("T");
+    await shell.waitForFrame((f) => f.includes("✗ No timer is running"));
+  });
+
+  test("at 80 columns a long workspace name gives way to the clock and timer", async () => {
+    const long = view("long", "Mobile Banking Platform Modernisation Programme");
+    const tabs = fakeTabs([long], "long");
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(clock, [long.workspace]);
+    await timer.toggle(long.workspace);
+    const frame = (
+      await renderShell(
+        { clock, tabs: tabs.initial, timer: timer.current() },
+        { width: 80, height: 24 },
+      )
+    ).captureCharFrame();
+    expect(header(frame)).toContain("Mobile Banking Platform M…  Tue");
+    expect(header(frame)).toContain("Tue 06 Oct • 13:59 • Timer 00:00:00 ");
   });
 });
 

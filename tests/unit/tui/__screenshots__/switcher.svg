@@ -13,7 +13,7 @@
 <rect x="729" y="0" width="117" height="18" fill="#14141c"/>
 <text x="729 738 747 765 774 792 801 810 828" y="14" fill="#8a8578">Tue06Oct•</text>
 <rect x="846" y="0" width="45" height="18" fill="#14141c"/>
-<text x="846 855 864 873 882" y="14" fill="#4fd18b">13:59</text>
+<text x="846 855 864 873 882" y="14" fill="#e8e3d9">13:59</text>
 <rect x="891" y="0" width="9" height="18" fill="#14141c"/>
 <rect x="0" y="18" width="9" height="18" fill="#14141c"/>
 <rect x="9" y="18" width="27" height="18" fill="#1c1626"/>
@@ -457,8 +457,12 @@
 <rect x="432" y="522" width="108" height="18" fill="#14141c"/>
 <text x="441 450 459 468 477 495 504 513" y="536" fill="#8a8578">closetab</text>
 <rect x="540" y="522" width="9" height="18" fill="#1c1626"/>
-<text x="540" y="536" fill="#e8e3d9">q</text>
-<rect x="549" y="522" width="63" height="18" fill="#14141c"/>
-<text x="558 567 576 585" y="536" fill="#8a8578">quit</text>
-<rect x="612" y="522" width="288" height="18" fill="#14141c"/>
+<text x="540" y="536" fill="#e8e3d9">t</text>
+<rect x="549" y="522" width="72" height="18" fill="#14141c"/>
+<text x="558 567 576 585 594" y="536" fill="#8a8578">timer</text>
+<rect x="621" y="522" width="9" height="18" fill="#1c1626"/>
+<text x="621" y="536" fill="#e8e3d9">q</text>
+<rect x="630" y="522" width="63" height="18" fill="#14141c"/>
+<text x="639 648 657 666" y="536" fill="#8a8578">quit</text>
+<rect x="693" y="522" width="207" height="18" fill="#14141c"/>
 </svg>

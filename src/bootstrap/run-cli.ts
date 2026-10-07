@@ -8,19 +8,27 @@ import {
   type Redactor,
   SecretRegistry,
 } from "../application/security/redaction";
+import type { TimerView } from "../application/timesheet/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import {
   formatConfirmation,
   formatDiagnostics,
   formatError,
+  formatTimerStatus,
   formatWorkspaceList,
   helpText,
+  timerSubject,
 } from "../cli/format";
 import { type CliCommand, parseArgs } from "../cli/parse-args";
 import { assertNever } from "../domain/shared/assert-never";
+import { validationError } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
+import { err, ok, type Result } from "../domain/shared/result";
+import { clockDuration } from "../domain/shared/time";
+import { elapsed } from "../domain/timesheet/timer";
 import type { Workspace } from "../domain/workspace/workspace";
 import type { ConfigSource } from "../infrastructure/config/load-config";
+import { systemClock } from "../infrastructure/system/clock";
 import { runTui, type TuiHost } from "./run-tui";
 import { type App, startApp } from "./start-app";
 
@@ -102,11 +110,14 @@ export function exitCodeFor(error: AppError): number {
   }
 }
 
+const HINTS: Readonly<Record<string, string>> = {
+  workspace: "List registered workspaces with: xuefu workspace list",
+  timer: "Start one with: xuefu timer start",
+};
+
 function withHint(error: AppError): AppError {
-  if (error.kind === "not-found" && error.entity === "workspace" && error.hint === undefined) {
-    return { ...error, hint: "List registered workspaces with: xuefu workspace list" };
-  }
-  return error;
+  const hint = error.kind === "not-found" ? HINTS[error.entity] : undefined;
+  return hint === undefined || error.hint !== undefined ? error : { ...error, hint };
 }
 
 function fail(out: Output, error: AppError): number {
@@ -277,6 +288,103 @@ async function whichWorkspace(
   return workspace === null ? EXIT.none : EXIT.ok;
 }
 
+function timerJson(view: TimerView) {
+  const { timer, workspace } = view;
+  return {
+    id: timer.id,
+    status: timer.status,
+    workspaceId: timer.workspaceId,
+    workspaceName: workspace?.name ?? null,
+    issueKey: timer.issueKey,
+    startedAt: new Date(timer.startedAt).toISOString(),
+    elapsedMs: elapsed(timer, systemClock.now()),
+  };
+}
+
+function timerStatus(app: App, out: Output, json: boolean): number {
+  const active = app.timers.active();
+  if (!active.ok) return fail(out, active.error);
+  const view = active.value;
+  if (json) {
+    printJson(out, view === null ? null : timerJson(view));
+  } else if (view === null) {
+    out.runtime.stderr.write("No timer is running.\n");
+  } else {
+    print(out, formatTimerStatus(view, systemClock.now()));
+  }
+  return view === null ? EXIT.none : EXIT.ok;
+}
+
+/** The workspace named on the command line, else the one containing the current directory. */
+async function timerWorkspace(
+  app: App,
+  out: Output,
+  given: string | null,
+): Promise<Result<string, AppError>> {
+  if (given !== null) return ok(given);
+  const path = absolutePath(out.runtime.cwd);
+  if (!path.ok) return path;
+  const found = await app.workspaces.which(path.value);
+  if (!found.ok) return found;
+  if (found.value !== null) return ok(found.value.id);
+  return err(
+    validationError(`Not inside a workspace: ${path.value}`, [
+      { path: "workspace", message: "pass --workspace <id> or run from a workspace folder" },
+    ]),
+  );
+}
+
+async function startTimer(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "timer.start" }>,
+): Promise<number> {
+  const workspace = await timerWorkspace(app, out, command.workspace);
+  if (!workspace.ok) return fail(out, workspace.error);
+  const started = await app.commandBus.invoke(app.timerCommands.start, {
+    workspace: workspace.value,
+    ...(command.issue === null ? {} : { issue: command.issue }),
+  });
+  if (!started.ok) return fail(out, started.error);
+  const { timer, replaced } = started.value;
+  const resumed = timer.timer.segments.length > 1;
+  return print(
+    out,
+    [
+      ...(replaced === null
+        ? []
+        : [
+            `✓ Stopped the timer for ${timerSubject(replaced)} after ${clockDuration(
+              elapsed(replaced.timer, replaced.timer.updatedAt),
+            )}`,
+          ]),
+      resumed
+        ? `✓ Resumed the timer for ${timerSubject(timer)} at ${clockDuration(
+            elapsed(timer.timer, timer.timer.updatedAt),
+          )}`
+        : `✓ Started a timer for ${timerSubject(timer)}`,
+      "",
+    ].join("\n"),
+  );
+}
+
+async function changeTimer(
+  app: App,
+  out: Output,
+  action: "pause" | "resume" | "stop",
+): Promise<number> {
+  const commands = app.timerCommands;
+  const command =
+    action === "pause" ? commands.pause : action === "resume" ? commands.resume : commands.stop;
+  const changed = await app.commandBus.invoke(command, {});
+  if (!changed.ok) return fail(out, changed.error);
+  const view = changed.value;
+  const total = clockDuration(elapsed(view.timer, view.timer.updatedAt));
+  const done = { pause: "Paused", resume: "Resumed", stop: "Stopped" }[action];
+  const when = action === "stop" ? "after" : "at";
+  return print(out, `✓ ${done} the timer for ${timerSubject(view)} ${when} ${total}\n`);
+}
+
 async function openCockpit(app: App, out: Output): Promise<number> {
   const closed = await runTui(app, out.runtime.tui, out.runtime.cwd);
   return closed.ok ? EXIT.ok : fail(out, closed.error);
@@ -300,6 +408,12 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return groupWorkspace(app, out, command);
     case "workspace.which":
       return whichWorkspace(app, out, command);
+    case "timer.status":
+      return timerStatus(app, out, command.json);
+    case "timer.start":
+      return startTimer(app, out, command);
+    case "timer.change":
+      return changeTimer(app, out, command.action);
     default:
       return assertNever(command);
   }

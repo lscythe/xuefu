@@ -115,3 +115,29 @@ describe("parseArgs: workspace", () => {
     if (!result.ok) expect(result.error.message).toBe(message);
   });
 });
+
+describe("parseArgs: timer", () => {
+  test.each([
+    [["timer"], { kind: "timer.status", json: false }],
+    [["timer", "status", "--json"], { kind: "timer.status", json: true }],
+    [["timer", "start"], { kind: "timer.start", workspace: null, issue: null }],
+    [
+      ["timer", "start", "-w", "mob", "--issue", "MOB-2841"],
+      { kind: "timer.start", workspace: "mob", issue: "MOB-2841" },
+    ],
+    [["timer", "pause"], { kind: "timer.change", action: "pause" }],
+    [["timer", "resume"], { kind: "timer.change", action: "resume" }],
+    [["timer", "stop"], { kind: "timer.change", action: "stop" }],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+  });
+
+  test.each([
+    [["timer", "reset"], "Unknown timer command: reset"],
+    [["timer", "start", "MOB-1"], "Unexpected argument: MOB-1"],
+    [["timer", "stop", "--issue", "MOB-1"], "--issue does not apply to timer stop"],
+    [["timer", "status", "--workspace", "mob"], "--workspace does not apply to timer status"],
+  ])("rejects %p", (argv, message) => {
+    expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
+  });
+});
