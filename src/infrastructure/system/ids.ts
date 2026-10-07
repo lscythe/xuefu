@@ -1,5 +1,12 @@
 import type { IdGenerator } from "../../application/ports/id-generator";
-import { type CorrelationId, correlationId, type EventId, eventId } from "../../domain/shared/ids";
+import {
+  type CorrelationId,
+  correlationId,
+  type EventId,
+  eventId,
+  type TimerId,
+  timerId,
+} from "../../domain/shared/ids";
 
 function mustParse<T>(
   parse: (raw: string) => { ok: true; value: T } | { ok: false },
@@ -14,4 +21,5 @@ function mustParse<T>(
 export const uuidV7Ids: IdGenerator = {
   eventId: (): EventId => mustParse(eventId, Bun.randomUUIDv7()),
   correlationId: (): CorrelationId => mustParse(correlationId, Bun.randomUUIDv7()),
+  timerId: (): TimerId => mustParse(timerId, Bun.randomUUIDv7()),
 };

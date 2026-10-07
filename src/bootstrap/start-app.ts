@@ -5,6 +5,12 @@ import { EventBus } from "../application/events/event-bus";
 import type { Logger } from "../application/ports/logger";
 import type { Redactor } from "../application/security/redaction";
 import {
+  registerTimerCommands,
+  type TimerCommands,
+  timerCommands,
+} from "../application/timesheet/commands";
+import { TimerQueries } from "../application/timesheet/queries";
+import {
   registerWorkspaceCommands,
   type WorkspaceCommands,
   workspaceCommands,
@@ -31,6 +37,7 @@ import { MIGRATIONS } from "../infrastructure/persistence/migrations/catalog";
 import { type MigrationReport, migrate } from "../infrastructure/persistence/migrations/runner";
 import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
+import { SqliteTimerRepository } from "../infrastructure/persistence/sqlite/timer-repository";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
 import { SqliteWorkspaceSessionRepository } from "../infrastructure/persistence/sqlite/workspace-session-repository";
@@ -68,6 +75,8 @@ export interface App {
   readonly ledger: SqliteEventLedger;
   readonly workspaceCommands: WorkspaceCommands;
   readonly workspaces: WorkspaceQueries;
+  readonly timerCommands: TimerCommands;
+  readonly timers: TimerQueries;
   close(): void;
 }
 
@@ -149,10 +158,20 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     unitOfWork,
     ids: uuidV7Ids,
   });
+  const timerRepository = new SqliteTimerRepository(database);
+  const timers = timerCommands({
+    timers: timerRepository,
+    workspaces: workspaceRepository,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
   const registered = registerWorkspaceCommands(commandBus, workspaces);
-  if (!registered.ok) {
+  const timersRegistered = registered.ok ? registerTimerCommands(commandBus, timers) : registered;
+  if (!timersRegistered.ok) {
     database.close();
-    return err(unexpected("Command registration failed", new Error(registered.error.message)));
+    return err(
+      unexpected("Command registration failed", new Error(timersRegistered.error.message)),
+    );
   }
 
   logger.info("XueFu started", {
@@ -181,6 +200,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
       tabRepository,
       sessionRepository,
     ),
+    timerCommands: timers,
+    timers: new TimerQueries(timerRepository, workspaceRepository),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();
