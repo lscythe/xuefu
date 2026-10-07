@@ -6,6 +6,7 @@ import { assertNever } from "../../domain/shared/assert-never";
 import type { WorkspaceId } from "../../domain/shared/ids";
 import type { Result } from "../../domain/shared/result";
 import type { Workspace } from "../../domain/workspace/workspace";
+import { ErrorLine } from "../error-line";
 import { segments } from "../highlight";
 import { cycle } from "../list-navigation";
 import { PALETTE } from "../theme/palette";
@@ -53,16 +54,6 @@ function Highlighted(props: { text: string; hits: readonly number[]; fg: string;
         )
       }
     </For>
-  );
-}
-
-/** Error text stays Bone White beside a vermilion glyph: vermilion text is too low-contrast. */
-function ErrorLine(props: { error: AppError; ascii: boolean }) {
-  return (
-    <text>
-      <span style={{ fg: PALETTE.error }}>{props.ascii ? "[x] " : "✗ "}</span>
-      <span style={{ fg: PALETTE.text }}>{props.error.message}</span>
-    </text>
   );
 }
 
