@@ -35,12 +35,16 @@ const isWorkspaceRow = (row: SwitcherRow): row is WorkspaceRow => row.kind === "
 const MAX_WIDTH = 64;
 const MAX_LIST_ROWS = 12;
 
-function Highlighted(props: { text: string; hits: readonly number[]; fg: string }) {
+function Highlighted(props: { text: string; hits: readonly number[]; fg: string; bold?: boolean }) {
   return (
     <For each={segments(props.text, props.hits)}>
       {(part) =>
         part.hit ? (
           <span style={{ fg: PALETTE.accentSpectral }}>
+            <b>{part.text}</b>
+          </span>
+        ) : props.bold === true ? (
+          <span style={{ fg: props.fg }}>
             <b>{part.text}</b>
           </span>
         ) : (
@@ -139,7 +143,8 @@ export function Switcher(props: SwitcherProps) {
       flexDirection="column"
       border
       borderColor={PALETTE.borderFocused}
-      backgroundColor={PALETTE.elevatedBg}
+      // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
+      backgroundColor={PALETTE.panelBg}
       title=" Switch workspace "
       titleColor={PALETTE.accentSecondary}
       paddingX={1}
@@ -181,28 +186,31 @@ export function Switcher(props: SwitcherProps) {
               const active = () => choices()[selected()] === row;
               const workspace = row.view.workspace;
               return (
-                <text bg={active() ? PALETTE.selectionBg : PALETTE.elevatedBg}>
-                  <span style={{ fg: PALETTE.borderFocused }}>
-                    {active() ? (ascii() ? "> " : "▸ ") : "  "}
-                  </span>
-                  <Highlighted
-                    text={workspace.name}
-                    hits={row.nameHits}
-                    fg={active() ? PALETTE.selectionFg : PALETTE.text}
-                  />
-                  <span>{"  "}</span>
-                  <Highlighted text={workspace.id} hits={row.idHits} fg={PALETTE.textMuted} />
-                  <Show when={workspace.id === props.currentId}>
-                    <span style={{ fg: PALETTE.success }}>
-                      {ascii() ? "  * current" : "  ● current"}
+                <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
+                  <text>
+                    <span style={{ fg: PALETTE.borderFocused }}>
+                      {active() ? (ascii() ? "> " : "▸ ") : "  "}
                     </span>
-                  </Show>
-                  <Show when={row.view.status === "missing"}>
-                    <span style={{ fg: PALETTE.warning }}>
-                      {ascii() ? "  ! missing" : "  ⚠ missing"}
-                    </span>
-                  </Show>
-                </text>
+                    <Highlighted
+                      text={workspace.name}
+                      hits={row.nameHits}
+                      fg={active() ? PALETTE.selectionFg : PALETTE.text}
+                      bold={active()}
+                    />
+                    <span>{"  "}</span>
+                    <Highlighted text={workspace.id} hits={row.idHits} fg={PALETTE.textMuted} />
+                    <Show when={workspace.id === props.currentId}>
+                      <span style={{ fg: PALETTE.success }}>
+                        {ascii() ? "  * current" : "  ● current"}
+                      </span>
+                    </Show>
+                    <Show when={row.view.status === "missing"}>
+                      <span style={{ fg: PALETTE.warning }}>
+                        {ascii() ? "  ! missing" : "  ⚠ missing"}
+                      </span>
+                    </Show>
+                  </text>
+                </box>
               );
             }}
           </For>
