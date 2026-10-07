@@ -18,7 +18,15 @@ export type CliCommand =
     }
   | { readonly kind: "workspace.remove"; readonly id: string; readonly yes: boolean }
   | { readonly kind: "workspace.group"; readonly id: string; readonly group: string | null }
-  | { readonly kind: "workspace.which"; readonly path: string | null; readonly json: boolean };
+  | { readonly kind: "workspace.which"; readonly path: string | null; readonly json: boolean }
+  | { readonly kind: "timer.status"; readonly json: boolean }
+  | {
+      readonly kind: "timer.start";
+      /** null means the workspace containing the current directory. */
+      readonly workspace: string | null;
+      readonly issue: string | null;
+    }
+  | { readonly kind: "timer.change"; readonly action: "pause" | "resume" | "stop" };
 
 export type CliInvocation =
   | { readonly kind: "help" }
@@ -49,6 +57,19 @@ const text = (values: Values, key: string): string | null => {
 };
 const flag = (values: Values, key: string): boolean => values[key] === true;
 const arg = (args: readonly string[], index: number): string => args[index] ?? "";
+
+function timerChange(action: "pause" | "resume" | "stop"): CommandSpec {
+  return {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: [],
+    build: () => ({ kind: "timer.change", action }),
+  };
+}
+
+/** Commands with subcommands, and the subcommand run when none is given. */
+const GROUPS: Readonly<Record<string, string>> = { workspace: "list", timer: "status" };
 
 const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   diagnostics: {
@@ -114,6 +135,27 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
       json: flag(values, "json"),
     }),
   },
+  "timer status": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["json"],
+    build: (_args, values) => ({ kind: "timer.status", json: flag(values, "json") }),
+  },
+  "timer start": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace", "issue"],
+    build: (_args, values) => ({
+      kind: "timer.start",
+      workspace: text(values, "workspace"),
+      issue: text(values, "issue"),
+    }),
+  },
+  "timer pause": timerChange("pause"),
+  "timer resume": timerChange("resume"),
+  "timer stop": timerChange("stop"),
 };
 
 const COCKPIT: CommandSpec = {
@@ -138,11 +180,12 @@ function resolveCommand(
 ): Result<{ name: string; spec: CommandSpec; args: readonly string[] }, ValidationError> {
   const [command, ...rest] = positionals;
   if (command === undefined) return ok({ name: "xuefu", spec: COCKPIT, args: [] });
-  if (command === "workspace") {
-    const [sub = "list", ...args] = rest;
-    const name = `workspace ${sub}`;
+  const fallback = Object.hasOwn(GROUPS, command) ? GROUPS[command] : undefined;
+  if (fallback !== undefined) {
+    const [sub = fallback, ...args] = rest;
+    const name = `${command} ${sub}`;
     const spec = lookup(name);
-    if (spec === undefined) return err(usage(`Unknown workspace command: ${sub}`));
+    if (spec === undefined) return err(usage(`Unknown ${command} command: ${sub}`));
     return ok({ name, spec, args });
   }
   const spec = lookup(command);
@@ -169,6 +212,8 @@ export function parseArgs(argv: readonly string[]): Result<CliInvocation, Valida
         id: { type: "string" },
         group: { type: "string" },
         yes: { type: "boolean", short: "y" },
+        workspace: { type: "string", short: "w" },
+        issue: { type: "string" },
       },
     });
   } catch (thrown) {

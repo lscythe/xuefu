@@ -1,8 +1,11 @@
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
 import type { Redactor } from "../application/security/redaction";
+import type { TimerView } from "../application/timesheet/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
+import { clockDuration, type Timestamp } from "../domain/shared/time";
+import { elapsed } from "../domain/timesheet/timer";
 
 export function helpText(version: string): string {
   return `血符 XueFu ${version}: terminal developer cockpit
@@ -26,6 +29,12 @@ Commands:
   workspace ungroup <id>        Take a workspace out of its group
   workspace which [path]        Print the workspace that contains a folder
                                   --json             machine-readable output
+  timer [status]                Show the running or paused timer
+                                  --json             machine-readable output
+  timer start                   Start timing this workspace; stops any other timer
+                                  -w, --workspace <id>  another workspace than this folder's
+                                  --issue <key>      the issue worked on, e.g. MOB-2841
+  timer pause | resume | stop   Pause, resume or stop the timer
 
 Options:
   -h, --help                    Show this help
@@ -153,4 +162,24 @@ export function formatError(error: AppError, redactor: Redactor): string {
   if (error.cause !== undefined) lines.push(`  ${error.cause.name}: ${error.cause.message}`);
   if (error.hint !== undefined) lines.push("", `  ${error.hint}`);
   return lines.map((line) => redactor.redactString(line)).join("\n");
+}
+
+/** "Mobile Banking (MOB-2841)"; the workspace id once the workspace has been removed. */
+export function timerSubject(view: TimerView): string {
+  const name = view.workspace?.name ?? view.timer.workspaceId;
+  return view.timer.issueKey === null ? name : `${name} (${view.timer.issueKey})`;
+}
+
+export function formatTimerStatus(view: TimerView, now: Timestamp): string {
+  const { timer, workspace } = view;
+  const state = timer.status === "running" ? "● Running" : "‖ Paused ";
+  return [
+    `${state}  ${clockDuration(elapsed(timer, now))}`,
+    row(
+      "Workspace",
+      workspace === null ? `${timer.workspaceId} (removed)` : `${workspace.name} (${workspace.id})`,
+    ),
+    ...(timer.issueKey === null ? [] : [row("Issue", timer.issueKey)]),
+    "",
+  ].join("\n");
 }
