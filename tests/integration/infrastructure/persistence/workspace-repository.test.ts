@@ -4,6 +4,7 @@ import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import {
+  activateWorkspace,
   addWorkspace,
   assignGroup,
   EMPTY_REGISTRY,
@@ -53,6 +54,16 @@ describe("SqliteWorkspaceRepository", () => {
     const grouped = assignGroup(registry, "mobile-banking" as WorkspaceId, "Client" as GroupName);
     if (!grouped.ok) throw new Error("group");
     expect(saved(grouped.value.registry)).toEqual(grouped.value.registry);
+  });
+
+  test("round-trips when each workspace was last active", () => {
+    let registry = add(EMPTY_REGISTRY, candidate("/a", "A"));
+    registry = add(registry, candidate("/b", "B"));
+    const activated = activateWorkspace(registry, "b" as WorkspaceId, (AT + 5) as Timestamp);
+    if (!activated.ok) throw new Error("activate");
+    const loaded = saved(activated.value.registry);
+    expect(loaded).toEqual(activated.value.registry);
+    expect(loaded.workspaces.map((w) => w.lastActiveAt)).toEqual([null, (AT + 5) as Timestamp]);
   });
 
   test("saving drops removed workspaces and keeps the rest in order", () => {
@@ -111,6 +122,7 @@ describe("SqliteWorkspaceRepository", () => {
     expect(() => insert("rel", "relative/path")).toThrow();
     insert("one", "/same");
     expect(() => insert("two", "/same")).toThrow();
+    expect(() => db.run("UPDATE workspaces SET last_active_at = -1 WHERE id = 'one'")).toThrow();
   });
 
   test("storage failures surface as storage errors", () => {

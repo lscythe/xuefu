@@ -3,6 +3,7 @@ import type { AppError } from "../application/errors";
 import { unexpected } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
+import type { Workspace } from "../domain/workspace/workspace";
 import { systemClock } from "../infrastructure/system/clock";
 import type { App } from "./start-app";
 
@@ -13,12 +14,22 @@ export interface TuiHost {
   createRenderer(): Promise<CliRenderer>;
 }
 
-async function workspaceNameAt(app: App, cwd: string): Promise<Result<string | null, AppError>> {
+function activate(app: App, workspace: Workspace): Promise<Result<Workspace, AppError>> {
+  return app.commandBus.invoke(app.workspaceCommands.activate, { id: workspace.id });
+}
+
+/**
+ * The workspace containing `cwd` (opening XueFu there counts as switching to it), otherwise the
+ * one used last, so launching from anywhere else reopens where you left off.
+ */
+async function startingWorkspace(
+  app: App,
+  cwd: string,
+): Promise<Result<Workspace | null, AppError>> {
   const path = absolutePath(cwd);
-  if (!path.ok) return ok(null);
-  const found = await app.workspaces.which(path.value);
-  if (!found.ok) return found;
-  return ok(found.value?.name ?? null);
+  const here = path.ok ? await app.workspaces.which(path.value) : ok(null);
+  if (!here.ok) return here;
+  return here.value === null ? app.workspaces.lastActive() : activate(app, here.value);
 }
 
 /** Runs the cockpit until the user quits or the renderer is torn down by a signal. */
@@ -27,8 +38,8 @@ export async function runTui(
   host: TuiHost,
   cwd: string,
 ): Promise<Result<void, AppError>> {
-  const workspaceName = await workspaceNameAt(app, cwd);
-  if (!workspaceName.ok) return workspaceName;
+  const workspace = await startingWorkspace(app, cwd);
+  if (!workspace.ok) return workspace;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
   const { openShell } = await import("../tui/open-shell");
@@ -45,14 +56,16 @@ export async function runTui(
     await openShell(renderer, {
       clock: systemClock,
       icons: app.config.ui.icons,
-      workspaceName: workspaceName.value,
+      workspace: workspace.value,
+      loadWorkspaces: () => app.workspaces.list(),
+      activateWorkspace: (chosen) => activate(app, chosen),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {
     renderer.destroy();
     return err(unexpected("Unable to draw the terminal UI", thrown));
   }
-  app.logger.info("Cockpit opened", { workspace: workspaceName.value });
+  app.logger.info("Cockpit opened", { workspace: workspace.value?.id ?? null });
   await closed;
   app.logger.info("Cockpit closed");
   return ok(undefined);

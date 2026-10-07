@@ -271,6 +271,7 @@ describe("runCli: workspaces", () => {
         path: join(projects, "api"),
         group: "Client",
         addedAt: expect.any(String),
+        lastActiveAt: null,
         status: "ready",
         capabilities: { git: false, gradle: false },
       },
@@ -318,7 +319,7 @@ describe("runCli: workspaces", () => {
     expect(JSON.parse((await run(["workspace", "list", "--json"])).stdout)).toEqual([]);
   });
 
-  test("the cockpit names the workspace it was opened in", async () => {
+  test("the cockpit names the workspace it was opened in and lists it in the switcher", async () => {
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
     const nested = join(mobile, "app");
     mkdirSync(nested);
@@ -326,8 +327,51 @@ describe("runCli: workspaces", () => {
     const running = run([], {}, nested, terminal.host);
     const screen = await terminal.screen;
     expect(await screen.waitForFrame((f) => f.includes("XUEFU"))).toContain("Mobile Banking");
+    screen.mockInput.pressKey("w", { ctrl: true });
+    const switcher = await screen.waitForFrame((f) => f.includes("1 of 1"));
+    expect(switcher).toContain("● current");
+    screen.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await screen.waitForFrame((f) => !f.includes("Switch workspace"));
     screen.mockInput.pressKey("q");
     expect((await running).code).toBe(EXIT.ok);
+  });
+
+  test("outside every workspace, the cockpit reopens the one used last", async () => {
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["workspace", "add", join(projects, "api"), "--name", "Payments API"]);
+
+    /** Opens the cockpit in `cwd`, returns its header, then runs `steps` and quits. */
+    const session = async (cwd: string, steps: (screen: TestRendererSetup) => Promise<void>) => {
+      const terminal = headlessTerminal();
+      const running = run([], {}, cwd, terminal.host);
+      const screen = await terminal.screen;
+      const frame = await screen.waitForFrame((f) => f.includes("XUEFU"));
+      await steps(screen);
+      screen.mockInput.pressKey("q");
+      expect((await running).code).toBe(EXIT.ok);
+      return frame.split("\n")[0] ?? "";
+    };
+
+    expect(await session(projects, async () => undefined)).toContain("No workspace");
+    await session(projects, async (screen) => {
+      screen.mockInput.pressKey("w", { ctrl: true });
+      await screen.waitForFrame((f) => f.includes("2 of 2"));
+      await screen.mockInput.typeText("pay");
+      screen.mockInput.pressEnter();
+      await screen.waitForFrame((f) => !f.includes("Switch workspace"));
+    });
+    expect(await session(projects, async () => undefined)).toContain("Payments API");
+
+    // Opening inside a workspace counts as switching to it.
+    await session(mobile, async () => undefined);
+    expect(await session(projects, async () => undefined)).toContain("Mobile Banking");
+
+    const listed = JSON.parse((await run(["workspace", "list", "--json"])).stdout);
+    expect(listed.map((w: { lastActiveAt: string | null }) => typeof w.lastActiveAt)).toEqual([
+      "string",
+      "string",
+    ]);
   });
 
   test("removing an unknown workspace exits 66 with a hint", async () => {

@@ -23,12 +23,14 @@ export function Nav(props: NavProps) {
           const active = () => index() === props.selected;
           const icon = () => sectionIcon(section, props.icons);
           return (
-            <text bg={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
-              <span style={{ fg: PALETTE.borderFocused }}>{active() ? marker() : " "}</span>
-              <span style={{ fg: active() ? PALETTE.selectionFg : PALETTE.textMuted }}>
-                {`${icon() ?? ""} ${section.label}`}
-              </span>
-            </text>
+            <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
+              <text>
+                <span style={{ fg: PALETTE.borderFocused }}>{active() ? marker() : " "}</span>
+                <span style={{ fg: active() ? PALETTE.selectionFg : PALETTE.textMuted }}>
+                  {`${icon() ?? ""} ${section.label}`}
+                </span>
+              </text>
+            </box>
           );
         }}
       </For>

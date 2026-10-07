@@ -119,6 +119,7 @@ function view(
       path: path as AbsolutePath,
       group: (options.group ?? null) as GroupName | null,
       addedAt: 0 as Timestamp,
+      lastActiveAt: null,
     },
     status: options.status ?? "ready",
     capabilities: options.capabilities ?? { git: false, gradle: false },

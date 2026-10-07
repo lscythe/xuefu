@@ -15,6 +15,7 @@ const RowSchema = z.object({
   path: z.string(),
   group_name: z.string().nullable(),
   added_at: z.int(),
+  last_active_at: z.int().nullable(),
 });
 
 function corrupt(id: unknown): StorageError {
@@ -32,8 +33,17 @@ function decodeRow(raw: unknown): Result<Workspace, StorageError> {
   const path = absolutePath(row.path);
   const group = row.group_name === null ? ok(null) : groupName(row.group_name);
   const addedAt = timestamp(row.added_at);
+  const lastActiveAt = row.last_active_at === null ? ok(null) : timestamp(row.last_active_at);
   // A stored name must already be in canonical (trimmed) form.
-  if (!id.ok || !name.ok || name.value !== row.name || !path.ok || !group.ok || !addedAt.ok) {
+  if (
+    !id.ok ||
+    !name.ok ||
+    name.value !== row.name ||
+    !path.ok ||
+    !group.ok ||
+    !addedAt.ok ||
+    !lastActiveAt.ok
+  ) {
     return err(corrupt(row.id));
   }
   return ok({
@@ -42,6 +52,7 @@ function decodeRow(raw: unknown): Result<Workspace, StorageError> {
     path: path.value,
     group: group.value,
     addedAt: addedAt.value,
+    lastActiveAt: lastActiveAt.value,
   });
 }
 
@@ -81,14 +92,15 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository {
           .query("DELETE FROM workspaces WHERE id NOT IN (SELECT value FROM json_each(?))")
           .run(JSON.stringify(registry.workspaces.map((w) => w.id)));
         const upsert = this.db.query(
-          `INSERT INTO workspaces (id, name, path, group_name, position, added_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+          `INSERT INTO workspaces (id, name, path, group_name, position, added_at, last_active_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              name = excluded.name, path = excluded.path, group_name = excluded.group_name,
-             position = excluded.position, added_at = excluded.added_at`,
+             position = excluded.position, added_at = excluded.added_at,
+             last_active_at = excluded.last_active_at`,
         );
         registry.workspaces.forEach((w, position) => {
-          upsert.run(w.id, w.name, w.path, w.group, position, w.addedAt);
+          upsert.run(w.id, w.name, w.path, w.group, position, w.addedAt, w.lastActiveAt);
         });
       })();
       return ok(undefined);

@@ -93,6 +93,7 @@ export function addWorkspace(
     path: input.path,
     group: input.group,
     addedAt,
+    lastActiveAt: null,
   });
   return ok({ registry: freeze([...registry.workspaces, workspace]), workspace });
 }
@@ -129,6 +130,31 @@ export function assignGroup(
     registry: freeze(registry.workspaces.map((w) => (w.id === id ? workspace : w))),
     workspace,
   });
+}
+
+/** Records that the workspace was opened at `at`; order is unchanged. */
+export function activateWorkspace(
+  registry: WorkspaceRegistry,
+  id: WorkspaceId,
+  at: Timestamp,
+): Result<RegistryChange, NotFoundError> {
+  const found = findWorkspace(registry, id);
+  if (!found.ok) return found;
+  const workspace: Workspace = Object.freeze({ ...found.value, lastActiveAt: at });
+  return ok({
+    registry: freeze(registry.workspaces.map((w) => (w.id === id ? workspace : w))),
+    workspace,
+  });
+}
+
+/** The most recently activated workspace, or null when none has been opened yet. */
+export function lastActiveWorkspace(registry: WorkspaceRegistry): Workspace | null {
+  let latest: Workspace | null = null;
+  for (const workspace of registry.workspaces) {
+    if (workspace.lastActiveAt === null) continue;
+    if (latest === null || workspace.lastActiveAt > (latest.lastActiveAt ?? 0)) latest = workspace;
+  }
+  return latest;
 }
 
 /** The workspace containing `path`; with nested workspaces the deepest one wins. */
