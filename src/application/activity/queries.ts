@@ -9,7 +9,7 @@ import type { WorkspaceRepository } from "../ports/workspace-repository";
 import { type ActivityDescription, describeEvent } from "./describe";
 
 /** One thing that happened, in words, with the workspace it happened in. */
-interface ActivityEntry {
+export interface ActivityEntry {
   readonly seq: number;
   readonly at: Timestamp;
   readonly workspaceId: WorkspaceId | null;

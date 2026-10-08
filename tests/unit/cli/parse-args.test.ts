@@ -168,3 +168,26 @@ describe("parseArgs: work", () => {
     expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
   });
 });
+
+describe("parseArgs: activity", () => {
+  test.each([
+    [["activity"], { kind: "activity", workspace: null, limit: null, json: false }],
+    [
+      ["activity", "-w", "mob", "-n", "5", "--json"],
+      { kind: "activity", workspace: "mob", limit: "5", json: true },
+    ],
+    [
+      ["activity", "--limit", "50"],
+      { kind: "activity", workspace: null, limit: "50", json: false },
+    ],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+  });
+
+  test.each([
+    [["activity", "today"], "Unexpected argument: today"],
+    [["activity", "--title", "x"], "--title does not apply to activity"],
+  ])("rejects %p", (argv, message) => {
+    expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
+  });
+});

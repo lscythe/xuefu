@@ -35,7 +35,15 @@ export type CliCommand =
       /** null means the workspace containing the current directory. */
       readonly workspace: string | null;
     }
-  | { readonly kind: "work.finish"; readonly workspace: string | null };
+  | { readonly kind: "work.finish"; readonly workspace: string | null }
+  | {
+      readonly kind: "activity";
+      /** null means every workspace. */
+      readonly workspace: string | null;
+      /** Raw; null means the default page size. */
+      readonly limit: string | null;
+      readonly json: boolean;
+    };
 
 export type CliInvocation =
   | { readonly kind: "help" }
@@ -192,6 +200,18 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     flags: ["workspace"],
     build: (_args, values) => ({ kind: "work.finish", workspace: text(values, "workspace") }),
   },
+  activity: {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace", "limit", "json"],
+    build: (_args, values) => ({
+      kind: "activity",
+      workspace: text(values, "workspace"),
+      limit: text(values, "limit"),
+      json: flag(values, "json"),
+    }),
+  },
   "timer pause": timerChange("pause"),
   "timer resume": timerChange("resume"),
   "timer stop": timerChange("stop"),
@@ -254,6 +274,7 @@ export function parseArgs(argv: readonly string[]): Result<CliInvocation, Valida
         workspace: { type: "string", short: "w" },
         issue: { type: "string" },
         title: { type: "string" },
+        limit: { type: "string", short: "n" },
       },
     });
   } catch (thrown) {

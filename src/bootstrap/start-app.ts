@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
+import { RECORDED_EVENTS } from "../application/activity/describe";
+import { ActivityQueries } from "../application/activity/queries";
 import { CommandBus } from "../application/commands/command-bus";
+import { EventCatalog } from "../application/events/catalog";
 import { EventBus } from "../application/events/event-bus";
 import type { Logger } from "../application/ports/logger";
 import type { Redactor } from "../application/security/redaction";
@@ -86,6 +89,7 @@ export interface App {
   readonly timers: TimerQueries;
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
+  readonly activity: ActivityQueries;
   close(): void;
 }
 
@@ -194,6 +198,11 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     database.close();
     return err(unexpected("Command registration failed", new Error(registered.error.message)));
   }
+  const catalog = EventCatalog.create(RECORDED_EVENTS);
+  if (!catalog.ok) {
+    database.close();
+    return err(unexpected("Event catalog is invalid", new Error(catalog.error.message)));
+  }
 
   logger.info("XueFu started", {
     version: options.version,
@@ -225,6 +234,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     timers: new TimerQueries(timerRepository, workspaceRepository),
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
+    activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();

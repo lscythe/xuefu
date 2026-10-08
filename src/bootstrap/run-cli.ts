@@ -11,6 +11,7 @@ import {
 import type { TimerView } from "../application/timesheet/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import {
+  formatActivity,
   formatConfirmation,
   formatDiagnostics,
   formatError,
@@ -25,6 +26,7 @@ import {
 import { type CliCommand, parseArgs } from "../cli/parse-args";
 import { assertNever } from "../domain/shared/assert-never";
 import { validationError } from "../domain/shared/errors";
+import { workspaceId } from "../domain/shared/ids";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import { clockDuration } from "../domain/shared/time";
@@ -451,6 +453,56 @@ async function finishWork(
   );
 }
 
+const ACTIVITY_LIMIT = { default: 20, max: 1000 };
+
+function activityLimit(raw: string | null): Result<number, AppError> {
+  if (raw === null) return ok(ACTIVITY_LIMIT.default);
+  const limit = Number(raw);
+  if (/^\d+$/.test(raw) && limit >= 1 && limit <= ACTIVITY_LIMIT.max) return ok(limit);
+  return err(
+    validationError(`Limit must be a whole number from 1 to ${ACTIVITY_LIMIT.max}`, [
+      { path: "limit", message: `received ${raw}` },
+    ]),
+  );
+}
+
+function showActivity(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "activity" }>,
+): number {
+  const limit = activityLimit(command.limit);
+  if (!limit.ok) return fail(out, limit.error);
+  const workspace = command.workspace === null ? null : workspaceId(command.workspace);
+  if (workspace !== null && !workspace.ok) return fail(out, workspace.error);
+  const page = app.activity.recent({
+    limit: limit.value,
+    ...(workspace === null ? {} : { workspaceId: workspace.value }),
+  });
+  if (!page.ok) return fail(out, page.error);
+  const { entries, nextCursor } = page.value;
+  if (command.json) {
+    printJson(
+      out,
+      entries.map((entry) => ({
+        seq: entry.seq,
+        at: new Date(entry.at).toISOString(),
+        workspaceId: entry.workspaceId,
+        workspaceName: entry.workspace?.name ?? null,
+        ...entry.description,
+      })),
+    );
+  } else if (entries.length === 0) {
+    out.runtime.stderr.write("Nothing recorded yet.\n");
+  } else {
+    print(out, formatActivity(entries));
+    if (nextCursor !== null) {
+      out.runtime.stderr.write("Older entries not shown; raise --limit to see them.\n");
+    }
+  }
+  return entries.length === 0 ? EXIT.none : EXIT.ok;
+}
+
 async function openCockpit(app: App, out: Output): Promise<number> {
   const closed = await runTui(app, out.runtime.tui, out.runtime.cwd);
   return closed.ok ? EXIT.ok : fail(out, closed.error);
@@ -484,6 +536,8 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return workStatus(app, out, command.json);
     case "work.start":
       return startWork(app, out, command);
+    case "activity":
+      return showActivity(app, out, command);
     case "work.finish":
       return finishWork(app, out, command);
     default:

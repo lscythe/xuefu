@@ -670,6 +670,87 @@ describe("runCli: work", () => {
   });
 });
 
+describe("runCli: activity", () => {
+  const line = (text: string) => new RegExp(`^ {2}\\d\\d:\\d\\d {2}${text}$`);
+
+  test("with nothing recorded it says so", async () => {
+    expect(await run(["activity"])).toEqual({
+      code: EXIT.none,
+      stdout: "",
+      stderr: "Nothing recorded yet.\n",
+    });
+    expect(await run(["activity", "-w", "ghost", "--json"])).toMatchObject({
+      code: EXIT.none,
+      stdout: "[]\n",
+    });
+  });
+
+  test("shows what happened, newest first, grouped by day", async () => {
+    const mobile = join(realpathSync(dir.path), "mobile");
+    mkdirSync(mobile);
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["work", "start", "MOB-2841", "--title", "Add biometric login"], {}, mobile);
+    await run(["timer", "pause"]);
+    await run(["work", "finish"], {}, mobile);
+
+    const shown = await run(["activity"]);
+    expect(shown.code).toBe(EXIT.ok);
+    const [day, ...lines] = shown.stdout.trimEnd().split("\n");
+    expect(day).toMatch(/^\w{3} \d\d \w{3}$/);
+    const expected = [
+      line("Mobile Banking {2}Stopped the timer {2}\\d\\d:\\d\\d:\\d\\d"),
+      line("Mobile Banking {2}Finished work on MOB-2841"),
+      line("Mobile Banking {2}Paused the timer {2}\\d\\d:\\d\\d:\\d\\d"),
+      line("Mobile Banking {2}Started the timer for MOB-2841"),
+      line("Mobile Banking {2}Started work on MOB-2841 {2}Add biometric login"),
+      line(`Mobile Banking {2}Added {2}${mobile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+    ];
+    expect(lines).toHaveLength(expected.length);
+    lines.forEach((text, i) => {
+      expect(text).toMatch(expected[i] ?? /never/);
+    });
+
+    expect(JSON.parse((await run(["activity", "--json", "-n", "1"])).stdout)).toEqual([
+      {
+        seq: 6,
+        at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+        workspaceId: "mobile-banking",
+        workspaceName: "Mobile Banking",
+        action: "Stopped the timer",
+        subject: null,
+        detail: expect.stringMatching(/^\d\d:\d\d:\d\d$/),
+      },
+    ]);
+  });
+
+  test("--limit caps the entries and says when older ones are left out", async () => {
+    for (const name of ["one", "two", "three"]) {
+      const path = join(realpathSync(dir.path), name);
+      mkdirSync(path);
+      await run(["workspace", "add", path]);
+    }
+    const capped = await run(["activity", "-n", "2"]);
+    expect(capped.stdout.trimEnd().split("\n")).toHaveLength(3);
+    expect(capped.stdout).toContain("three");
+    expect(capped.stdout).not.toContain("one");
+    expect(capped.stderr).toBe("Older entries not shown; raise --limit to see them.\n");
+    expect((await run(["activity", "-n", "3"])).stderr).toBe("");
+
+    const one = await run(["activity", "-w", "one"]);
+    expect(one.stdout).toContain("one  Added");
+    expect(one.stdout).not.toContain("two");
+  });
+
+  test("a bad limit or workspace id is a usage error", async () => {
+    for (const limit of ["0", "1001", "2.5", "lots"]) {
+      const refused = await run(["activity", "-n", limit]);
+      expect(refused.code).toBe(EXIT.usage);
+      expect(refused.stderr).toContain("Limit must be a whole number from 1 to 1000");
+    }
+    expect((await run(["activity", "-w", "Not An Id"])).code).toBe(EXIT.usage);
+  });
+});
+
 describe("exitCodeFor", () => {
   const prompt = {
     title: "t",
