@@ -2,13 +2,13 @@ import { type Accessor, Match, Show, Switch } from "solid-js";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
 import { clockDuration } from "../../domain/shared/time";
+import { wallClock } from "../../domain/shared/wall-clock";
 import type { Timer } from "../../domain/timesheet/timer";
 import { elapsed } from "../../domain/timesheet/timer";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { PALETTE } from "../theme/palette";
 import { useNow } from "../use-now";
-import { headerClock } from "./header-clock";
 
 export interface WorkPanelProps {
   readonly clock: Clock;
@@ -63,7 +63,7 @@ export function WorkPanel(props: WorkPanelProps) {
               {label("Started")}
               <span style={{ fg: PALETTE.text }}>
                 {(() => {
-                  const at = headerClock(work().startedAt, props.timeZone);
+                  const at = wallClock(work().startedAt, props.timeZone);
                   return `${at.date} ${at.time}`;
                 })()}
               </span>

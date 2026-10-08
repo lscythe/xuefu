@@ -7,6 +7,7 @@ import type { WorkView } from "../application/work/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import { clockDuration, type Timestamp } from "../domain/shared/time";
+import { wallClock } from "../domain/shared/wall-clock";
 import { elapsed } from "../domain/timesheet/timer";
 
 export function helpText(version: string): string {
@@ -219,27 +220,10 @@ export function workSubject(view: WorkView): string {
   return title === null ? issueKey : `${issueKey} (${title})`;
 }
 
-const startedFormatters = new Map<string, Intl.DateTimeFormat>();
-
 /** "Tue 06 Oct 09:14" in `timeZone`, the host zone when omitted. */
 function startedAt(at: Timestamp, timeZone: string | undefined): string {
-  const key = timeZone ?? "";
-  let formatter = startedFormatters.get(key);
-  if (formatter === undefined) {
-    formatter = new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      ...(timeZone === undefined ? {} : { timeZone }),
-    });
-    startedFormatters.set(key, formatter);
-  }
-  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
-  for (const part of formatter.formatToParts(at)) parts[part.type] = part.value;
-  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.hour}:${parts.minute}`;
+  const clock = wallClock(at, timeZone);
+  return `${clock.date} ${clock.time}`;
 }
 
 export function formatWorkList(views: readonly WorkView[], timeZone?: string): string {
