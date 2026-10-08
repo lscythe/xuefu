@@ -154,12 +154,17 @@ export class SqliteEventLedger implements EventLedger {
       clauses.push("seq > ?");
       params.push(query.afterSeq);
     }
+    if (query.beforeSeq !== undefined) {
+      clauses.push("seq < ?");
+      params.push(query.beforeSeq);
+    }
     const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
+    const order = query.newestFirst === true ? "DESC" : "ASC";
 
     let rows: unknown[];
     try {
       rows = this.db
-        .query(`SELECT * FROM events ${where} ORDER BY seq LIMIT ?`)
+        .query(`SELECT * FROM events ${where} ORDER BY seq ${order} LIMIT ?`)
         .all(...params, query.limit + 1);
     } catch (thrown) {
       return err(
