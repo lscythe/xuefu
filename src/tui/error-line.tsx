@@ -7,7 +7,10 @@ export function errorText(error: AppError): string {
   return reason === undefined ? error.message : `${error.message}: ${reason}`;
 }
 
-/** Error text stays Bone White beside a vermilion glyph: vermilion text is too low-contrast. */
+/**
+ * The message keeps the body colour beside a vermilion glyph: the glyph raises the alarm and the
+ * text stays easy to read.
+ */
 export function ErrorLine(props: { error: AppError; ascii: boolean }) {
   return (
     <text>
