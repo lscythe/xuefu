@@ -2,8 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import type { Note, NoteBody } from "../../../../src/domain/notes/note";
 import { storageError } from "../../../../src/domain/shared/errors";
+import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
 import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
@@ -51,6 +54,7 @@ async function renderShell(
         loadActivity={() => ok([])}
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
+        loadNote={() => ok(null)}
         onExternalChange={() => () => undefined}
         onQuit={() => {
           quits += 1;
@@ -469,6 +473,94 @@ describe("Shell activity", () => {
     shell.renderer.destroy();
     setup = undefined;
     expect(shell.activity.listening()).toBe(0);
+  });
+});
+
+describe("Shell notes", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const WORK = workIn("mobile-banking", "MOB-2841", "Add biometric login", NOW - 3_600_000);
+  const note = (issue: string | null, body: string): Note => ({
+    id: `n-${issue ?? "own"}` as NoteId,
+    workspaceId: "mobile-banking" as WorkspaceId,
+    issueKey: issue as Note["issueKey"],
+    body: body as NoteBody,
+    updatedAt: NOW as Timestamp,
+  });
+
+  /** Notes keyed by "workspace:issue"; `record()` stands in for a save the cockpit hears about. */
+  function storedNotes(...notes: Note[]) {
+    const all = new Map(notes.map((n) => [`${n.workspaceId}:${n.issueKey ?? ""}`, n]));
+    const listeners = new Set<() => void>();
+    return {
+      loadNote: (workspace: { id: string }, issue: string | null) =>
+        ok(all.get(`${workspace.id}:${issue ?? ""}`) ?? null),
+      onRecorded: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      record: (changed: Note) => {
+        all.set(`${changed.workspaceId}:${changed.issueKey ?? ""}`, changed);
+        for (const listener of listeners) listener();
+      },
+    };
+  }
+
+  async function openNotes(props: Partial<ShellProps> = {}) {
+    const shell = await renderShell({
+      navigation: new Map([
+        ["mobile-banking", "notes"],
+        ["", "notes"],
+      ]),
+      ...props,
+    });
+    await shell.waitForFrame((f) => f.includes("▍NOTES"));
+    return shell;
+  }
+
+  test("shows the workspace's note and the note on the work in progress", async () => {
+    const notes = storedNotes(
+      note(null, "Staging needs the VPN\nAsk Dana for access"),
+      note("MOB-2841", "Ask QA about the flaky test"),
+    );
+    const frame = (await openNotes({ work: WORK, ...notes })).captureCharFrame();
+    expect(rowContaining(frame, "Staging")).toContain("│ Staging needs the VPN");
+    expect(rowContaining(frame, "Dana")).toContain("│ Ask Dana for access");
+    expect(rowContaining(frame, "MOB-2841  Add")).toContain("│ MOB-2841  Add biometric login");
+    expect(rowContaining(frame, "flaky")).toContain("│ Ask QA about the flaky test");
+  });
+
+  test("says how to add a note where there is none", async () => {
+    const frame = (await openNotes({ work: WORK })).captureCharFrame();
+    expect(rowContaining(frame, "No note yet")).toContain("│ No note yet. Add one with:");
+    expect(rowContaining(frame, "append <text>")).toContain("│   xuefu note append <text>");
+    expect(frame).toContain("No note on MOB-2841 yet. Add one with:");
+    expect(frame).toContain("│   xuefu note append --issue MOB-2841 <text>");
+  });
+
+  test("without work in progress only the workspace's own note is shown", async () => {
+    const frame = (await openNotes(storedNotes(note(null, "Own note")))).captureCharFrame();
+    expect(frame).toContain("Own note");
+    expect(frame).not.toContain("MOB-");
+  });
+
+  test("reads the notes again when one is saved", async () => {
+    const notes = storedNotes(note(null, "before"));
+    const shell = await openNotes(notes);
+    notes.record(note(null, "after the save"));
+    await shell.waitForFrame((f) => f.includes("after the save"));
+  });
+
+  test("outside every workspace it says how to open one; a failed read is reported", async () => {
+    const outside = await openNotes({ tabs: { open: [], active: null } });
+    expect(outside.captureCharFrame()).toContain("Open a workspace with Ctrl+W to see its notes.");
+    outside.renderer.destroy();
+
+    const failing = await openNotes({
+      loadNote: () => err(storageError("Unable to read notes", "notes.read")),
+    });
+    expect(failing.captureCharFrame()).toContain("✗ Unable to read notes");
   });
 });
 

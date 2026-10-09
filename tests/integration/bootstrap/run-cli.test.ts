@@ -862,6 +862,27 @@ describe("runCli: notes", () => {
     expect(JSON.parse((await note(["list", "--json"])).stdout)).toHaveLength(2);
   });
 
+  test("the cockpit's Notes section shows notes masked, and follows the CLI", async () => {
+    await note(["append", "Staging password=hunter2"]);
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    screen.mockInput.pressKey("k");
+    await screen.waitForFrame((f) => f.includes("▍NOTES") && f.includes("password=[REDACTED]"));
+    expect(screen.captureCharFrame()).not.toContain("hunter2");
+
+    await note(["append", "Ask Dana for VPN access"]);
+    const deadline = Date.now() + 5_000;
+    while (!screen.captureCharFrame().includes("Ask Dana") && Date.now() < deadline) {
+      await Bun.sleep(50);
+      await screen.renderOnce();
+    }
+    expect(screen.captureCharFrame()).toContain("Ask Dana for VPN access");
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+  });
+
   test("save needs text piped in; bad input and places are reported", async () => {
     const unpiped = await note(["save"]);
     expect(unpiped.code).toBe(EXIT.usage);

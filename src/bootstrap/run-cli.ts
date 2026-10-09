@@ -625,7 +625,9 @@ function showActivity(
 }
 
 async function openCockpit(app: App, out: Output): Promise<number> {
-  const closed = await runTui(app, out.runtime.tui, out.runtime.cwd);
+  const closed = await runTui(app, out.runtime.tui, out.runtime.cwd, (text) =>
+    out.redactor.redactString(text),
+  );
   return closed.ok ? EXIT.ok : fail(out, closed.error);
 }
 
