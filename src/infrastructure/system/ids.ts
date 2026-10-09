@@ -4,6 +4,8 @@ import {
   correlationId,
   type EventId,
   eventId,
+  type NoteId,
+  noteId,
   type TimerId,
   timerId,
   type WorkId,
@@ -25,4 +27,5 @@ export const uuidV7Ids: IdGenerator = {
   correlationId: (): CorrelationId => mustParse(correlationId, Bun.randomUUIDv7()),
   timerId: (): TimerId => mustParse(timerId, Bun.randomUUIDv7()),
   workId: (): WorkId => mustParse(workId, Bun.randomUUIDv7()),
+  noteId: (): NoteId => mustParse(noteId, Bun.randomUUIDv7()),
 };

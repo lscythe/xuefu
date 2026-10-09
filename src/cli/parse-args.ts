@@ -37,6 +37,27 @@ export type CliCommand =
     }
   | { readonly kind: "work.finish"; readonly workspace: string | null }
   | {
+      readonly kind: "note.show";
+      /** null means the workspace containing the current directory. */
+      readonly workspace: string | null;
+      /** null means the workspace's own note. */
+      readonly issue: string | null;
+      readonly json: boolean;
+    }
+  | { readonly kind: "note.save"; readonly workspace: string | null; readonly issue: string | null }
+  | {
+      readonly kind: "note.append";
+      readonly text: string;
+      readonly workspace: string | null;
+      readonly issue: string | null;
+    }
+  | {
+      readonly kind: "note.clear";
+      readonly workspace: string | null;
+      readonly issue: string | null;
+    }
+  | { readonly kind: "note.list"; readonly json: boolean }
+  | {
       readonly kind: "activity";
       /** null means every workspace. */
       readonly workspace: string | null;
@@ -90,6 +111,7 @@ const GROUPS: Readonly<Record<string, string>> = {
   workspace: "list",
   timer: "status",
   work: "status",
+  note: "show",
 };
 
 const COMMANDS: Readonly<Record<string, CommandSpec>> = {
@@ -199,6 +221,60 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     maxArgs: 0,
     flags: ["workspace"],
     build: (_args, values) => ({ kind: "work.finish", workspace: text(values, "workspace") }),
+  },
+  "note show": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace", "issue", "json"],
+    build: (_args, values) => ({
+      kind: "note.show",
+      workspace: text(values, "workspace"),
+      issue: text(values, "issue"),
+      json: flag(values, "json"),
+    }),
+  },
+  "note save": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace", "issue"],
+    build: (_args, values) => ({
+      kind: "note.save",
+      workspace: text(values, "workspace"),
+      issue: text(values, "issue"),
+    }),
+  },
+  "note append": {
+    usage: "<text>",
+    minArgs: 1,
+    // Unquoted words are joined, so `xuefu note append ask QA` works as typed.
+    maxArgs: Number.POSITIVE_INFINITY,
+    flags: ["workspace", "issue"],
+    build: (args, values) => ({
+      kind: "note.append",
+      text: args.join(" "),
+      workspace: text(values, "workspace"),
+      issue: text(values, "issue"),
+    }),
+  },
+  "note clear": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["workspace", "issue"],
+    build: (_args, values) => ({
+      kind: "note.clear",
+      workspace: text(values, "workspace"),
+      issue: text(values, "issue"),
+    }),
+  },
+  "note list": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: ["json"],
+    build: (_args, values) => ({ kind: "note.list", json: flag(values, "json") }),
   },
   activity: {
     usage: "",

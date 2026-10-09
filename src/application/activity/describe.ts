@@ -1,6 +1,7 @@
 import type { DomainEvent } from "../../domain/shared/event";
 import { clockDuration, type Duration } from "../../domain/shared/time";
 import type { EventCatalog, EventDefinition } from "../events/catalog";
+import { NOTE_EVENTS, type NoteClearedPayload, type NoteSavedPayload } from "../notes/events";
 import {
   TIMER_EVENTS,
   type TimerPausedPayload,
@@ -20,6 +21,7 @@ export const RECORDED_EVENTS: readonly EventDefinition[] = [
   ...WORKSPACE_EVENTS,
   ...WORK_EVENTS,
   ...TIMER_EVENTS,
+  ...NOTE_EVENTS,
 ];
 
 /** What an event's subject is, so it can be set apart: an issue key or a name. */
@@ -67,6 +69,10 @@ const DESCRIPTIONS: Readonly<Record<string, (payload: never) => ActivityDescript
   TimerPaused: (p: TimerPausedPayload) => said("Paused the timer", null, tracked(p)),
   TimerResumed: () => said("Resumed the timer"),
   TimerStopped: (p: TimerStoppedPayload) => said("Stopped the timer", null, tracked(p)),
+  NoteSaved: (p: NoteSavedPayload) =>
+    p.issueKey === null ? said("Saved its note") : said("Saved the note on", issue(p.issueKey)),
+  NoteCleared: (p: NoteClearedPayload) =>
+    p.issueKey === null ? said("Cleared its note") : said("Cleared the note on", issue(p.issueKey)),
 };
 
 /**

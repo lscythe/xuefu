@@ -1,6 +1,7 @@
 import type { CliRenderer } from "@opentui/core";
 import type { AppError } from "../application/errors";
 import type { OpenTabs } from "../application/workspace/queries";
+import type { NoteBody } from "../domain/notes/note";
 import { unexpected } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
@@ -54,6 +55,8 @@ export async function runTui(
   app: App,
   host: TuiHost,
   cwd: string,
+  /** Masks credentials in text shown on screen, as the CLI does in what it prints. */
+  redact: (text: string) => string,
 ): Promise<Result<void, AppError>> {
   const tabs = await startingTabs(app, cwd);
   if (!tabs.ok) return tabs;
@@ -117,6 +120,13 @@ export async function runTui(
         if (!tabsNow.ok) return tabsNow;
         const now = timerAndWork(app);
         return now.ok ? ok({ tabs: tabsNow.value, ...now.value }) : now;
+      },
+      loadNote: (workspace, issue) => {
+        const found = app.notes.find(workspace.id, issue);
+        if (!found.ok) return found;
+        const { note } = found.value;
+        // Masked for display only; the stored note keeps what was written.
+        return ok(note === null ? null : { ...note, body: redact(note.body) as NoteBody });
       },
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),

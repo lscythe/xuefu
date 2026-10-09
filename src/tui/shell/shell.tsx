@@ -15,6 +15,7 @@ import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
 import type { OpenTabs, WorkspaceView } from "../../application/workspace/queries";
+import type { Note } from "../../domain/notes/note";
 import { assertNever } from "../../domain/shared/assert-never";
 import { ok, type Result } from "../../domain/shared/result";
 import { timerToggle } from "../../domain/timesheet/timer";
@@ -32,6 +33,7 @@ import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
 import { NAV_WIDTH, Nav } from "./nav";
+import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
 import { SECTIONS } from "./sections";
 import { TabBar } from "./tab-bar";
@@ -89,6 +91,11 @@ export interface ShellProps {
   /** Calls `listener` whenever something is recorded; returns how to stop. */
   readonly onRecorded: (listener: () => void) => () => void;
   readonly reload: () => Result<CockpitSnapshot, AppError>;
+  /** The note on `issue` in the workspace, or the workspace's own note when `issue` is null. */
+  readonly loadNote: (
+    workspace: Workspace,
+    issue: IssueKey | null,
+  ) => Result<Note | null, AppError>;
   /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
   readonly onExternalChange: (listener: () => void) => () => void;
   readonly onQuit: () => void;
@@ -159,6 +166,16 @@ export function Shell(props: ShellProps) {
     if (section()?.id !== "activity") return null;
     recorded();
     return props.loadActivity(workspace());
+  });
+  const notes = createMemo((): Result<LoadedNotes, AppError> | null => {
+    const current = workspace();
+    if (section()?.id !== "notes" || current === null) return null;
+    recorded();
+    const own = props.loadNote(current, null);
+    if (!own.ok) return own;
+    const issue = work()?.issueKey ?? null;
+    const onIssue = issue === null ? ok(null) : props.loadNote(current, issue);
+    return onIssue.ok ? ok({ own: own.value, issue: onIssue.value }) : onIssue;
   });
   /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
   const panelRows = () =>
@@ -320,6 +337,14 @@ export function Shell(props: ShellProps) {
                   workspace={workspace()}
                   work={work()}
                   timer={timer()}
+                />
+              </Match>
+              <Match when={section()?.id === "notes"}>
+                <NotesPanel
+                  workspace={workspace()}
+                  work={work()}
+                  notes={notes()}
+                  ascii={props.icons === "ascii"}
                 />
               </Match>
               <Match when={activity()}>

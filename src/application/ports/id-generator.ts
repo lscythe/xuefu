@@ -1,4 +1,4 @@
-import type { CorrelationId, EventId, TimerId, WorkId } from "../../domain/shared/ids";
+import type { CorrelationId, EventId, NoteId, TimerId, WorkId } from "../../domain/shared/ids";
 
 export interface IdGenerator {
   /** Time-ordered so ledger ids sort chronologically. */
@@ -6,4 +6,5 @@ export interface IdGenerator {
   correlationId(): CorrelationId;
   timerId(): TimerId;
   workId(): WorkId;
+  noteId(): NoteId;
 }

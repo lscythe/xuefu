@@ -1,6 +1,7 @@
 import type { ActivityEntry } from "../application/activity/queries";
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
+import type { NoteView } from "../application/notes/queries";
 import type { Redactor } from "../application/security/redaction";
 import type { TimerView } from "../application/timesheet/queries";
 import type { StartedTimer } from "../application/timesheet/timer-operations";
@@ -46,6 +47,16 @@ Commands:
                                   -w, --workspace <id>  another workspace than this folder's
   work finish                   Finish the work here and stop its timer
                                   -w, --workspace <id>  another workspace than this folder's
+  note [show]                   Print the note for this workspace
+                                  --issue <key>      the note on an issue instead
+                                  -w, --workspace <id>  another workspace than this folder's
+                                  --json             machine-readable output
+  note save                     Replace the note with text piped in (blank text clears it)
+  note append <text>            Add a line to the note
+  note clear                    Remove the note
+                                  (save, append and clear take --issue and -w too)
+  note list                     List every note with its first line
+                                  --json             machine-readable output
   activity                      Show what happened, newest first
                                   -w, --workspace <id>  only in this workspace
                                   -n, --limit <count>   how many entries (default 20)
@@ -268,4 +279,34 @@ export function formatActivity(entries: readonly ActivityEntry[], timeZone?: str
     lines.push(`  ${clock.time}  ${name}${padding}  ${activityText(entry)}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+const NOTE_PREVIEW = 50;
+
+/** The first line with text in it, cut to `width` columns. */
+function firstLine(body: string, width: number): string {
+  const line =
+    body
+      .split("\n")
+      .find((l) => l.trim() !== "")
+      ?.trim() ?? "";
+  if (displayWidth(line) <= width) return line;
+  let kept = "";
+  for (const char of line) {
+    if (displayWidth(kept + char) >= width) break;
+    kept += char;
+  }
+  return `${kept.trimEnd()}…`;
+}
+
+export function formatNoteList(views: readonly NoteView[], timeZone?: string): string {
+  return table([
+    ["WORKSPACE", "ISSUE", "UPDATED", "NOTE"],
+    ...views.map((view) => [
+      view.workspace?.name ?? `${view.note.workspaceId} (removed)`,
+      view.note.issueKey ?? "-",
+      startedAt(view.note.updatedAt, timeZone),
+      firstLine(view.note.body, NOTE_PREVIEW),
+    ]),
+  ]);
 }

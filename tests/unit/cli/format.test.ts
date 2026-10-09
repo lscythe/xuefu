@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ActivityEntry } from "../../../src/application/activity/queries";
 import type { DiagnosticsReport } from "../../../src/application/diagnostics";
+import type { NoteView } from "../../../src/application/notes/queries";
 import { createRedactor, SecretRegistry } from "../../../src/application/security/redaction";
 import type { WorkView } from "../../../src/application/work/queries";
 import type { WorkspaceView } from "../../../src/application/workspace/queries";
@@ -9,6 +10,7 @@ import {
   formatConfirmation,
   formatDiagnostics,
   formatError,
+  formatNoteList,
   formatWorkList,
   formatWorkspaceList,
   helpText,
@@ -106,6 +108,8 @@ describe("helpText", () => {
       "workspace which [path]",
       "activity",
       "-n, --limit <count>",
+      "note save",
+      "note append <text>",
     ]) {
       expect(text).toContain(fragment);
     }
@@ -283,6 +287,50 @@ describe("formatActivity", () => {
         "Mon 05 Oct",
         "  18:00  mobile-banking (removed)  Opened",
         "  17:00  -                         Unrecognised event FromTheFuture v1",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("formatNoteList", () => {
+  const note = (
+    issue: string | null,
+    body: string,
+    workspace: NoteView["workspace"],
+  ): NoteView => ({
+    note: {
+      id: "n1" as NoteView["note"]["id"],
+      workspaceId: "mobile-banking" as WorkspaceId,
+      issueKey: issue as NoteView["note"]["issueKey"],
+      body: body as NoteView["note"]["body"],
+      updatedAt: Date.UTC(2026, 9, 6, 9, 14) as Timestamp,
+    },
+    workspace,
+  });
+  const mobile = {
+    id: "mobile-banking" as WorkspaceId,
+    name: "Mobile Banking" as WorkspaceName,
+    path: "/work/m" as AbsolutePath,
+    group: null,
+    addedAt: 0 as Timestamp,
+    lastActiveAt: null,
+  };
+
+  test("one row per note: its first line, cut to fit", () => {
+    expect(
+      formatNoteList(
+        [
+          note(null, "\n  Staging needs the VPN\nand a token", mobile),
+          note("MOB-1", `Ask QA ${"about the flaky test ".repeat(4)}`, null),
+        ],
+        "UTC",
+      ),
+    ).toBe(
+      [
+        "WORKSPACE                 ISSUE  UPDATED           NOTE",
+        "Mobile Banking            -      Tue 06 Oct 09:14  Staging needs the VPN",
+        "mobile-banking (removed)  MOB-1  Tue 06 Oct 09:14  Ask QA about the flaky test about the flaky test…",
         "",
       ].join("\n"),
     );

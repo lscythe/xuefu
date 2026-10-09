@@ -16,6 +16,7 @@ process.exitCode = await runCli({
       return createCliRenderer({ exitOnCtrlC: false, useMouse: false, targetFps: 30 });
     },
   },
+  stdin: { piped: process.stdin.isTTY !== true, read: () => Bun.stdin.text() },
   stdout: process.stdout,
   stderr: process.stderr,
 });

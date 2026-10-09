@@ -1,8 +1,11 @@
 import { afterEach, describe, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import type { Note, NoteBody } from "../../../src/domain/notes/note";
 import { storageError } from "../../../src/domain/shared/errors";
+import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
 import { err, ok } from "../../../src/domain/shared/result";
+import type { Timestamp } from "../../../src/domain/shared/time";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
@@ -54,6 +57,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         loadActivity={() => ok([])}
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
+        loadNote={() => ok(null)}
         onExternalChange={() => () => undefined}
         onQuit={() => undefined}
         {...props}
@@ -237,6 +241,50 @@ describe("screenshots", () => {
     );
     await screen.waitForFrame((f) => f.includes("▍ACTIVITY"));
     expectScreenshot("activity-all", screen.captureSpans());
+  });
+
+  test("notes for the workspace and its work in progress", async () => {
+    const at = NOW as Timestamp;
+    const own: Note = {
+      id: "n1" as NoteId,
+      workspaceId: "mobile-banking" as WorkspaceId,
+      issueKey: null,
+      body: [
+        "Staging needs the VPN; ask Dana in #platform for access.",
+        "Release train leaves Thursdays at 15:00.",
+        "Login API on staging: token=[REDACTED]",
+      ].join("\n") as NoteBody,
+      updatedAt: at,
+    };
+    const onIssue: Note = {
+      ...own,
+      id: "n2" as NoteId,
+      issueKey: "MOB-2841" as IssueKey,
+      body: [
+        "Face ID fallback goes to the PIN screen, not the password one.",
+        "Ask QA about the flaky BiometricPromptTest on API 28.",
+        "Design review on Wednesday.",
+      ].join("\n") as NoteBody,
+    };
+    const screen = await shell({
+      work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 600_000),
+      navigation: new Map([["mobile-banking", "notes"]]),
+      loadNote: (_workspace, issue) => ok(issue === null ? own : onIssue),
+    });
+    await screen.waitForFrame((f) => f.includes("▍NOTES"));
+    expectScreenshot("notes", screen.captureSpans());
+  });
+
+  test("no notes yet, at 80 columns", async () => {
+    const screen = await shell(
+      {
+        work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 600_000),
+        navigation: new Map([["mobile-banking", "notes"]]),
+      },
+      { width: 80, height: 24 },
+    );
+    await screen.waitForFrame((f) => f.includes("▍NOTES"));
+    expectScreenshot("notes-empty", screen.captureSpans());
   });
 
   test("palette", async () => {

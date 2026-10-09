@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import {
   createRedactor,
+  looksLikeSecret,
   REDACTED,
   SecretRegistry,
 } from "../../../../src/application/security/redaction";
@@ -41,6 +42,24 @@ describe("redactString: value patterns", () => {
     const text =
       "feat(auth): add token refresh; Token rotation; Bot replies; tokens: 5; max_token=3; MOB-2841 on feature/x";
     expect(redactor().redactString(text)).toBe(text);
+  });
+});
+
+describe("looksLikeSecret", () => {
+  test.each([
+    "staging login: password=hunter2",
+    "use ghp_abcdefghijklmnopqrstuvwxyz0123456789 for the API",
+    "curl -H 'Authorization: Bearer abc.def-123_xyz'",
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
+  ])("spots %p", (text) => {
+    expect(looksLikeSecret(text)).toBe(true);
+  });
+
+  test("passes ordinary notes, and gives the same answer every time", () => {
+    const text = "Ask QA about the flaky login test; token refresh is MOB-2841";
+    expect(looksLikeSecret(text)).toBe(false);
+    const secret = "password=hunter2";
+    expect([looksLikeSecret(secret), looksLikeSecret(secret)]).toEqual([true, true]);
   });
 });
 

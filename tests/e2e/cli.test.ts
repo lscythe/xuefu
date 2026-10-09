@@ -13,9 +13,12 @@ beforeEach(() => {
 });
 afterEach(() => dir.cleanup());
 
-async function xuefuIn(cwd: string, ...args: string[]) {
+const xuefuIn = (cwd: string, ...args: string[]) => xuefuWith(cwd, null, ...args);
+
+async function xuefuWith(cwd: string, stdin: string | null, ...args: string[]) {
   const proc = Bun.spawn([process.execPath, ENTRY, ...args], {
     cwd,
+    stdin: stdin === null ? "ignore" : new TextEncoder().encode(stdin),
     env: {
       PATH: process.env["PATH"] ?? "",
       HOME: dir.path,
@@ -69,5 +72,14 @@ describe("xuefu entrypoint", () => {
     });
     const listed = JSON.parse((await xuefu("workspace", "list", "--json")).stdout);
     expect(listed).toMatchObject([{ id: "mobile-banking", capabilities: { git: true } }]);
+  });
+
+  test("note save reads the text piped in", async () => {
+    const project = join(realpathSync(dir.path), "project");
+    mkdirSync(project);
+    await xuefuIn(project, "workspace", "add");
+    const saved = await xuefuWith(project, "Staging needs the VPN\n", "note", "save");
+    expect(saved).toMatchObject({ code: 0, stdout: "✓ Saved the note for project\n" });
+    expect((await xuefuIn(project, "note")).stdout).toBe("Staging needs the VPN\n");
   });
 });

@@ -81,6 +81,26 @@ describe("describeEvent", () => {
     });
   });
 
+  test("notes: the workspace's own, or an issue's", () => {
+    const note = { noteId: "n", workspaceId: "m" };
+    expect(describes("NoteSaved", { ...note, issueKey: null, characters: 12 })).toEqual({
+      action: "Saved its note",
+      subject: null,
+      detail: null,
+    });
+    expect(describes("NoteSaved", { ...note, issueKey: "MOB-1", characters: 12 })).toMatchObject({
+      action: "Saved the note on",
+      subject: { kind: "issue", text: "MOB-1" },
+    });
+    expect(describes("NoteCleared", { ...note, issueKey: null })).toMatchObject({
+      action: "Cleared its note",
+    });
+    expect(describes("NoteCleared", { ...note, issueKey: "MOB-1" })).toMatchObject({
+      action: "Cleared the note on",
+      subject: { text: "MOB-1" },
+    });
+  });
+
   test("an event it cannot read is shown as such, never dropped", () => {
     const unrecognised = {
       action: "Unrecognised event",
@@ -107,6 +127,8 @@ describe("describeEvent", () => {
       TimerPaused: { timerId: "t", elapsedMs: 0 },
       TimerResumed: { timerId: "t" },
       TimerStopped: { timerId: "t", elapsedMs: 0 },
+      NoteSaved: { noteId: "n", workspaceId: "m", issueKey: null, characters: 1 },
+      NoteCleared: { noteId: "n", workspaceId: "m", issueKey: null },
     };
     expect(Object.keys(samples).sort()).toEqual(RECORDED_EVENTS.map((e) => e.type).sort());
     for (const [type, payload] of Object.entries(samples)) {

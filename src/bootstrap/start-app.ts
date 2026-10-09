@@ -5,6 +5,12 @@ import { ActivityQueries } from "../application/activity/queries";
 import { CommandBus } from "../application/commands/command-bus";
 import { EventCatalog } from "../application/events/catalog";
 import { EventBus } from "../application/events/event-bus";
+import {
+  type NoteCommands,
+  noteCommands,
+  registerNoteCommands,
+} from "../application/notes/commands";
+import { NoteQueries } from "../application/notes/queries";
 import type { Logger } from "../application/ports/logger";
 import type { Redactor } from "../application/security/redaction";
 import {
@@ -47,6 +53,7 @@ import { type MigrationReport, migrate } from "../infrastructure/persistence/mig
 import { SqliteChangeWatcher } from "../infrastructure/persistence/sqlite/change-watcher";
 import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
+import { SqliteNoteRepository } from "../infrastructure/persistence/sqlite/note-repository";
 import { SqliteTimerRepository } from "../infrastructure/persistence/sqlite/timer-repository";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkContextRepository } from "../infrastructure/persistence/sqlite/work-context-repository";
@@ -91,6 +98,8 @@ export interface App {
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
   readonly activity: ActivityQueries;
+  readonly noteCommands: NoteCommands;
+  readonly notes: NoteQueries;
   /** Data committed by other XueFu processes. */
   readonly changes: SqliteChangeWatcher;
   close(): void;
@@ -189,10 +198,18 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     unitOfWork,
     ids: uuidV7Ids,
   });
+  const noteRepository = new SqliteNoteRepository(database);
+  const notes = noteCommands({
+    notes: noteRepository,
+    workspaces: workspaceRepository,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
   const registered = [
     () => registerWorkspaceCommands(commandBus, workspaces),
     () => registerTimerCommands(commandBus, timers),
     () => registerWorkCommands(commandBus, work),
+    () => registerNoteCommands(commandBus, notes),
   ].reduce<ReturnType<typeof registerWorkCommands>>(
     (result, next) => (result.ok ? next() : result),
     ok(undefined),
@@ -235,6 +252,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
     activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),
+    noteCommands: notes,
+    notes: new NoteQueries(noteRepository, workspaceRepository),
     changes: new SqliteChangeWatcher(database, logger),
     close: () => {
       logger.debug("XueFu stopping");
