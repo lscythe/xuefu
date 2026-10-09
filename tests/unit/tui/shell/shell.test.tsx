@@ -6,6 +6,7 @@ import { storageError } from "../../../../src/domain/shared/errors";
 import { err, ok } from "../../../../src/domain/shared/result";
 import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
+import { activityEntry, fakeActivity } from "../../../support/fake-activity";
 import { fakeTabs } from "../../../support/fake-tabs";
 import { fakeTimer } from "../../../support/fake-timer";
 import { fakeWork } from "../../../support/fake-work";
@@ -46,6 +47,8 @@ async function renderShell(
         finishWork={() => Promise.resolve(err(storageError("not wired", "test")))}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
+        loadActivity={() => ok([])}
+        onRecorded={() => () => undefined}
         onQuit={() => {
           quits += 1;
         }}
@@ -375,6 +378,94 @@ describe("Shell work", () => {
     );
     const none = await openWork({ tabs: fakeTabs(VIEWS).initial });
     expect(none.captureCharFrame()).toContain("Open a workspace with Ctrl+W to see its work.");
+  });
+});
+
+describe("Shell activity", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const HOUR = 3_600_000;
+  const mobile = MOBILE.workspace;
+  const auth = VIEWS[2]?.workspace ?? null;
+  const ENTRIES = [
+    activityEntry(NOW - HOUR, mobile, "Started the timer for", { kind: "issue", text: "MOB-2841" }),
+    activityEntry(NOW - 2 * HOUR, auth, "Opened"),
+    activityEntry(NOW - 26 * HOUR, mobile, "Paused the timer", null, "01:42:18"),
+  ];
+
+  async function openActivity(activity = fakeActivity(ENTRIES), props: Partial<ShellProps> = {}) {
+    const shell = await renderShell({
+      navigation: new Map([["mobile-banking", "activity"]]),
+      loadActivity: activity.load,
+      onRecorded: activity.onRecorded,
+      ...props,
+    });
+    await shell.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    return Object.assign(shell, { activity });
+  }
+
+  test("shows what happened in the workspace in front, newest first, by day", async () => {
+    const shell = await openActivity();
+    const frame = shell.captureCharFrame();
+    expect(rowContaining(frame, "Today")).toContain("│ Today");
+    expect(rowContaining(frame, "MOB-2841")).toContain("│ 12:59  Started the timer for MOB-2841");
+    expect(rowContaining(frame, "Yesterday")).toContain("│ Yesterday");
+    expect(rowContaining(frame, "Paused")).toContain("│ 11:59  Paused the timer  01:42:18");
+    expect(frame).not.toContain("Opened");
+    expect(shell.activity.loads).toEqual(["mobile-banking"]);
+  });
+
+  test("reads it again whenever something is recorded, and only while in front", async () => {
+    const shell = await openActivity();
+    shell.activity.record(activityEntry(NOW, mobile, "Finished work on"));
+    await shell.waitForFrame((f) => f.includes("13:59  Finished work on"));
+    shell.mockInput.pressKey("k");
+    await shell.waitForFrame((f) => f.includes("▍JENKINS") || f.includes("▍ANDROID"));
+    const loads = shell.activity.loads.length;
+    shell.activity.record(activityEntry(NOW, mobile, "Opened"));
+    await shell.renderOnce();
+    expect(shell.activity.loads).toHaveLength(loads);
+  });
+
+  test("outside every workspace it shows them all, each named", async () => {
+    const shell = await openActivity(fakeActivity(ENTRIES), {
+      tabs: { open: [], active: null },
+      navigation: new Map([["", "activity"]]),
+    });
+    const frame = shell.captureCharFrame();
+    expect(rowContaining(frame, "Opened")).toContain("11:59  Auth Service    Opened");
+    expect(rowContaining(frame, "MOB-2841")).toContain("12:59  Mobile Banking  Started");
+    expect(shell.activity.loads).toEqual([null]);
+  });
+
+  test("says when nothing is recorded, and reports a failure to read", async () => {
+    const empty = await openActivity(fakeActivity());
+    expect(empty.captureCharFrame()).toContain("Nothing recorded in Mobile Banking yet.");
+    empty.renderer.destroy();
+
+    const failing = await openActivity(undefined, {
+      loadActivity: () => err(storageError("Unable to read the activity ledger", "ledger.read")),
+    });
+    expect(failing.captureCharFrame()).toContain("✗ Unable to read the activity ledger");
+  });
+
+  test("fills the panel without spilling, cutting long lines at the edge", async () => {
+    const many = Array.from({ length: 40 }, (_, i) =>
+      activityEntry(NOW - i * 60_000, mobile, "Added", null, `/work/${"deep/".repeat(20)}folder`),
+    );
+    const shell = await openActivity(fakeActivity(many), {});
+    const frame = shell.captureCharFrame();
+    const shown = frame.split("\n").filter((line) => line.includes("Added"));
+    expect(shown).toHaveLength(30 - 6 - 1);
+    for (const line of shown) expect(line).toMatch(/deep… │$/);
+    expect(rowContaining(frame, "navigate")).toContain("q quit");
+  });
+
+  test("stops listening when the cockpit closes", async () => {
+    const shell = await openActivity();
+    expect(shell.activity.listening()).toBe(1);
+    shell.renderer.destroy();
+    setup = undefined;
+    expect(shell.activity.listening()).toBe(0);
   });
 });
 

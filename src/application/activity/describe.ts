@@ -23,7 +23,7 @@ export const RECORDED_EVENTS: readonly EventDefinition[] = [
 ];
 
 /** What an event's subject is, so it can be set apart: an issue key or a name. */
-interface ActivitySubject {
+export interface ActivitySubject {
   readonly kind: "issue" | "name";
   readonly text: string;
 }

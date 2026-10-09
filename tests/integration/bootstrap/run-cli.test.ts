@@ -741,6 +741,23 @@ describe("runCli: activity", () => {
     expect(one.stdout).not.toContain("two");
   });
 
+  test("the cockpit's Activity section follows what is done there", async () => {
+    const mobile = join(realpathSync(dir.path), "mobile");
+    mkdirSync(mobile);
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    screen.mockInput.pressKey("k");
+    screen.mockInput.pressKey("k");
+    await screen.waitForFrame((f) => f.includes("▍ACTIVITY") && f.includes("Opened"));
+    screen.mockInput.pressKey("t");
+    await screen.waitForFrame((f) => f.includes("Started the timer"));
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+  });
+
   test("a bad limit or workspace id is a usage error", async () => {
     for (const limit of ["0", "1001", "2.5", "lots"]) {
       const refused = await run(["activity", "-n", limit]);

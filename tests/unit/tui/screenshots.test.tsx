@@ -5,6 +5,7 @@ import { storageError } from "../../../src/domain/shared/errors";
 import { err, ok } from "../../../src/domain/shared/result";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
+import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { ManualClock } from "../../support/manual-clock";
@@ -50,6 +51,8 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         finishWork={() => Promise.resolve(err(storageError("not wired", "test")))}
         toggleTimer={() => Promise.resolve(ok(null))}
         stopTimer={() => Promise.resolve(ok(undefined))}
+        loadActivity={() => ok([])}
+        onRecorded={() => () => undefined}
         onQuit={() => undefined}
         {...props}
       />
@@ -93,6 +96,38 @@ async function openSwitcher(screen: TestRendererSetup, query = "") {
     await screen.mockInput.typeText(query);
     await screen.waitForFrame((f) => f.includes(`> ${query}`));
   }
+}
+
+/** A believable day and a half of activity across three workspaces, newest first. */
+function dayOfActivity() {
+  const [mobile, , deployd, , auth] = VIEWS.map((v) => v.workspace);
+  const at = (hours: number, minutes: number, daysAgo = 0) =>
+    Date.UTC(2026, 9, 6 - daysAgo, hours, minutes);
+  const issue = (text: string) => ({ kind: "issue" as const, text });
+  return [
+    activityEntry(at(13, 58), mobile ?? null, "Paused the timer", null, "01:42:18"),
+    activityEntry(at(13, 31), auth ?? null, "Moved to group", { kind: "name", text: "Platform" }),
+    activityEntry(at(12, 20), mobile ?? null, "Resumed the timer"),
+    activityEntry(at(11, 47), mobile ?? null, "Paused the timer", null, "01:01:13"),
+    activityEntry(at(10, 46), mobile ?? null, "Started the timer for", issue("MOB-2841")),
+    activityEntry(
+      at(10, 46),
+      mobile ?? null,
+      "Started work on",
+      issue("MOB-2841"),
+      "Add biometric authentication to the login screen",
+    ),
+    activityEntry(at(10, 45), deployd ?? null, "Stopped the timer", null, "00:38:02"),
+    activityEntry(at(10, 7), deployd ?? null, "Started the timer"),
+    activityEntry(at(9, 2), mobile ?? null, "Opened"),
+    activityEntry(at(18, 12, 1), mobile ?? null, "Stopped the timer", null, "03:12:40"),
+    activityEntry(at(18, 12, 1), mobile ?? null, "Finished work on", issue("MOB-2799")),
+    activityEntry(at(17, 5, 1), null, "Unrecognised event", {
+      kind: "name",
+      text: "ReleaseCut v2",
+    }),
+    activityEntry(at(15, 0, 1), mobile ?? null, "Added", null, "/work/mobile-banking"),
+  ].map((entry, i, all) => ({ ...entry, seq: all.length - i }));
 }
 
 describe("screenshots", () => {
@@ -172,6 +207,34 @@ describe("screenshots", () => {
     screen.mockInput.pressKey("j");
     await screen.waitForFrame((f) => f.includes("▍WORK"));
     expectScreenshot("work-none", screen.captureSpans());
+  });
+
+  test("activity in the workspace in front", async () => {
+    const activity = fakeActivity(dayOfActivity());
+    const screen = await shell({
+      work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 13_260_000),
+      ...(await trackedTimer("mobile-banking", 6_138_000, 60_000, "MOB-2841")),
+      navigation: new Map([["mobile-banking", "activity"]]),
+      loadActivity: activity.load,
+      onRecorded: activity.onRecorded,
+    });
+    await screen.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    expectScreenshot("activity", screen.captureSpans());
+  });
+
+  test("activity in every workspace, at 80 columns", async () => {
+    const activity = fakeActivity(dayOfActivity());
+    const screen = await shell(
+      {
+        tabs: { open: [], active: null },
+        navigation: new Map([["", "activity"]]),
+        loadActivity: activity.load,
+        onRecorded: activity.onRecorded,
+      },
+      { width: 80, height: 24 },
+    );
+    await screen.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    expectScreenshot("activity-all", screen.captureSpans());
   });
 
   test("palette", async () => {

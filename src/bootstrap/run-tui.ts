@@ -15,6 +15,9 @@ export interface TuiHost {
   createRenderer(): Promise<CliRenderer>;
 }
 
+/** More entries than any terminal has rows for. */
+const ACTIVITY_PAGE = 200;
+
 /** Switches to the workspace (opening or focusing its tab); resolves to the open tabs. */
 function activate(app: App, workspace: Workspace): Promise<Result<OpenTabs, AppError>> {
   return app.commandBus.invoke(app.workspaceCommands.activate, { id: workspace.id });
@@ -88,6 +91,14 @@ export async function runTui(
         }),
       finishWork: (workspace) =>
         app.commandBus.invoke(app.workCommands.finish, { workspace: workspace.id }),
+      loadActivity: (front) => {
+        const page = app.activity.recent({
+          limit: ACTIVITY_PAGE,
+          ...(front === null ? {} : { workspaceId: front.id }),
+        });
+        return page.ok ? ok(page.value.entries) : page;
+      },
+      onRecorded: (listener) => app.eventBus.subscribe("*", listener, "cockpit.activity"),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {
