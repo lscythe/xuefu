@@ -8,6 +8,7 @@ import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
+import { bigClockRows } from "../../../../src/tui/big-clock";
 import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { activityEntry, fakeActivity } from "../../../support/fake-activity";
@@ -358,12 +359,34 @@ describe("Shell work", () => {
       },
     });
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => f.includes("Timer     00:00:00 running"));
+    const running = await shell.waitForFrame((f) =>
+      f.includes("Started Tue 06 Oct 12:59 · running"),
+    );
+    for (const row of bigClockRows("00:00:00", "large")) expect(running).toContain(row);
+    expect(running).toContain("─ running ─");
+    expect(running).toContain(" t pause · T stop ");
     expect(issues).toEqual(["MOB-2841"]);
     expect<string | null | undefined>(timer.current()?.timer.issueKey).toBe("MOB-2841");
     clock.advance(90_000);
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => f.includes("Timer     00:01:30 paused"));
+    const paused = await shell.waitForFrame((f) => f.includes("Started Tue 06 Oct 12:59 · paused"));
+    for (const row of bigClockRows("00:01:30", "large")) expect(paused).toContain(row);
+    expect(paused).toContain(" t resume · T stop ");
+  });
+
+  test("in ascii the time is written plainly rather than drawn in blocks", async () => {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    await timer.toggle(MOBILE.workspace, "MOB-2841" as IssueKey);
+    const frame = (
+      await openWork({ clock, timer: timer.current(), icons: "ascii" })
+    ).captureCharFrame();
+    expect(frame).toContain("Timer     00:00:00 running");
+    expect(frame).not.toContain("█");
+    expect(frame).toContain(" t pause | T stop ");
   });
 
   test("a timer for other work does not count as this work's", async () => {

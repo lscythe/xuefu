@@ -380,6 +380,9 @@ export function Shell(props: ShellProps) {
                   workspace={workspace()}
                   work={work()}
                   timer={timer()}
+                  width={dimensions().width - nav() - PANEL_CHROME_COLUMNS}
+                  rows={panelRows()}
+                  ascii={props.icons === "ascii"}
                 />
               </Match>
               <Match when={section()?.id === "notes"}>
