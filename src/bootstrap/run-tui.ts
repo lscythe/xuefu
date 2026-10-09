@@ -6,6 +6,7 @@ import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import type { Workspace } from "../domain/workspace/workspace";
 import { systemClock } from "../infrastructure/system/clock";
+import type { CockpitSnapshot } from "../tui/shell/shell";
 import type { App } from "./start-app";
 
 /** The terminal the cockpit draws on; tests substitute a headless renderer. */
@@ -17,6 +18,20 @@ export interface TuiHost {
 
 /** More entries than any terminal has rows for. */
 const ACTIVITY_PAGE = 200;
+/** How often to look for changes made by other XueFu processes; a cheap read. */
+const CHANGE_POLL_MS = 500;
+
+/** The timer and work in progress, keyed by workspace id, as stored now. */
+function timerAndWork(app: App): Result<Omit<CockpitSnapshot, "tabs">, AppError> {
+  const timer = app.timers.active();
+  if (!timer.ok) return timer;
+  const work = app.work.inProgress();
+  if (!work.ok) return work;
+  return ok({
+    timer: timer.value,
+    work: new Map(work.value.map((view) => [view.work.workspaceId as string, view.work])),
+  });
+}
 
 /** Switches to the workspace (opening or focusing its tab); resolves to the open tabs. */
 function activate(app: App, workspace: Workspace): Promise<Result<OpenTabs, AppError>> {
@@ -44,10 +59,8 @@ export async function runTui(
   if (!tabs.ok) return tabs;
   const navigation = app.workspaces.navigation();
   if (!navigation.ok) return navigation;
-  const timer = app.timers.active();
-  if (!timer.ok) return timer;
-  const work = app.work.inProgress();
-  if (!work.ok) return work;
+  const stored = timerAndWork(app);
+  if (!stored.ok) return stored;
 
   // Loaded lazily so plain CLI commands do not pay for OpenTUI's native library.
   const { openShell } = await import("../tui/open-shell");
@@ -75,8 +88,8 @@ export async function runTui(
           id: workspace.id,
           navigation: section,
         }),
-      timer: timer.value,
-      work: new Map(work.value.map((view) => [view.work.workspaceId, view.work])),
+      timer: stored.value.timer,
+      work: stored.value.work,
       toggleTimer: (front, issue) =>
         app.commandBus.invoke(app.timerCommands.toggle, {
           workspace: front?.id ?? null,
@@ -99,6 +112,13 @@ export async function runTui(
         return page.ok ? ok(page.value.entries) : page;
       },
       onRecorded: (listener) => app.eventBus.subscribe("*", listener, "cockpit.activity"),
+      reload: () => {
+        const tabsNow = app.workspaces.tabs();
+        if (!tabsNow.ok) return tabsNow;
+        const now = timerAndWork(app);
+        return now.ok ? ok({ tabs: tabsNow.value, ...now.value }) : now;
+      },
+      onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
     });
   } catch (thrown) {

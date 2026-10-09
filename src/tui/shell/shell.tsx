@@ -1,5 +1,14 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
-import { type Accessor, createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import {
+  type Accessor,
+  batch,
+  createMemo,
+  createSignal,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+} from "solid-js";
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
@@ -29,6 +38,14 @@ import { TabBar } from "./tab-bar";
 import { fitsTerminal } from "./terminal-size";
 import { TooSmall } from "./too-small";
 import { WorkPanel } from "./work-panel";
+
+/** What the cockpit shows from storage, read again when another process changes it. */
+export interface CockpitSnapshot {
+  readonly tabs: OpenTabs;
+  readonly timer: TimerView | null;
+  /** Work in progress, keyed by workspace id. */
+  readonly work: ReadonlyMap<string, WorkContext>;
+}
 
 export interface ShellProps {
   readonly clock: Clock;
@@ -71,6 +88,9 @@ export interface ShellProps {
   ) => Result<readonly ActivityEntry[], AppError>;
   /** Calls `listener` whenever something is recorded; returns how to stop. */
   readonly onRecorded: (listener: () => void) => () => void;
+  readonly reload: () => Result<CockpitSnapshot, AppError>;
+  /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
+  readonly onExternalChange: (listener: () => void) => () => void;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
@@ -100,6 +120,7 @@ export function Shell(props: ShellProps) {
     ),
   );
 
+  // Bumped whenever stored activity may have changed, here or in another process.
   const [recorded, setRecorded] = createSignal(0);
   onCleanup(props.onRecorded(() => setRecorded((n) => n + 1)));
 
@@ -116,6 +137,22 @@ export function Shell(props: ShellProps) {
       if (!saved.ok) setNotice(saved.error);
     });
   };
+
+  onCleanup(
+    props.onExternalChange(() => {
+      const loaded = props.reload();
+      if (!loaded.ok) {
+        setNotice(loaded.error);
+        return;
+      }
+      batch(() => {
+        setTabs(loaded.value.tabs);
+        setTimer(loaded.value.timer);
+        setAllWork(loaded.value.work);
+        setRecorded((n) => n + 1);
+      });
+    }),
+  );
 
   // Read only while the section is in front, and again whenever something is recorded.
   const activity = createMemo(() => {
