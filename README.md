@@ -58,8 +58,10 @@ change, so they keep counting across restarts and crashes.
 
 Changes to workspaces, work and timers are recorded as they happen. The Activity section shows
 them for the workspace in front, newest first under a heading for each day (every workspace's
-when none is open), and follows along as you work in the cockpit. `xuefu activity` prints the
-same timeline.
+when none is open). `xuefu activity` prints the same timeline.
+
+The cockpit keeps up with commands run in other terminals: start work or a timer from the CLI and
+the header, the Work section and Activity update within a second, without reopening.
 
 On macOS, Alt shortcuts need the terminal to send Option as Meta (Terminal: Settings, Profiles,
 Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc+").
