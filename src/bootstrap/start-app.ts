@@ -194,14 +194,11 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     (result, next) => (result.ok ? next() : result),
     ok(undefined),
   );
-  if (!registered.ok) {
-    database.close();
-    return err(unexpected("Command registration failed", new Error(registered.error.message)));
-  }
-  const catalog = EventCatalog.create(RECORDED_EVENTS);
+  // Duplicate command names or event definitions are wiring mistakes, caught here at startup.
+  const catalog = registered.ok ? EventCatalog.create(RECORDED_EVENTS) : registered;
   if (!catalog.ok) {
     database.close();
-    return err(unexpected("Event catalog is invalid", new Error(catalog.error.message)));
+    return err(unexpected("XueFu is wired incorrectly", new Error(catalog.error.message)));
   }
 
   logger.info("XueFu started", {
