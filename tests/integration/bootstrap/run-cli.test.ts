@@ -663,6 +663,25 @@ describe("runCli: work", () => {
     );
   });
 
+  test("the cockpit catches up with work started from another terminal", async () => {
+    const terminal = headlessTerminal();
+    const running = run([], {}, mobile, terminal.host);
+    const screen = await terminal.screen;
+    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    const header = () => screen.captureCharFrame().split("\n")[0] ?? "";
+    expect(header()).not.toContain("MOB-5");
+
+    await run(["work", "start", "MOB-5", "--title", "From the CLI"], {}, mobile);
+    const deadline = Date.now() + 5_000;
+    while (!/MOB-5 From the CLI.*Timer \d\d:\d\d:\d\d/.test(header()) && Date.now() < deadline) {
+      await Bun.sleep(50);
+      await screen.renderOnce();
+    }
+    expect(header()).toMatch(/MOB-5 From the CLI.*Timer \d\d:\d\d:\d\d/);
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+  });
+
   test("bad input and missing workspaces are reported", async () => {
     expect((await run(["work", "start", "nope"], {}, mobile)).code).toBe(EXIT.usage);
     expect((await run(["work", "start", "MOB-1"])).stderr).toContain("Not inside a workspace");

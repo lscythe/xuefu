@@ -44,6 +44,7 @@ import { JsonLinesFileSink } from "../infrastructure/logging/file-sink";
 import { createLogger } from "../infrastructure/logging/logger";
 import { MIGRATIONS } from "../infrastructure/persistence/migrations/catalog";
 import { type MigrationReport, migrate } from "../infrastructure/persistence/migrations/runner";
+import { SqliteChangeWatcher } from "../infrastructure/persistence/sqlite/change-watcher";
 import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
 import { SqliteTimerRepository } from "../infrastructure/persistence/sqlite/timer-repository";
@@ -90,6 +91,8 @@ export interface App {
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
   readonly activity: ActivityQueries;
+  /** Data committed by other XueFu processes. */
+  readonly changes: SqliteChangeWatcher;
   close(): void;
 }
 
@@ -232,6 +235,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
     activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),
+    changes: new SqliteChangeWatcher(database, logger),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();

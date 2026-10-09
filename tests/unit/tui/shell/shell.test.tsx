@@ -4,7 +4,8 @@ import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { storageError } from "../../../../src/domain/shared/errors";
 import { err, ok } from "../../../../src/domain/shared/result";
-import { Shell, type ShellProps } from "../../../../src/tui/shell/shell";
+import type { IssueKey } from "../../../../src/domain/work/issue-key";
+import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { activityEntry, fakeActivity } from "../../../support/fake-activity";
 import { fakeTabs } from "../../../support/fake-tabs";
@@ -49,6 +50,8 @@ async function renderShell(
         stopTimer={() => Promise.resolve(ok(undefined))}
         loadActivity={() => ok([])}
         onRecorded={() => () => undefined}
+        reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
+        onExternalChange={() => () => undefined}
         onQuit={() => {
           quits += 1;
         }}
@@ -466,6 +469,96 @@ describe("Shell activity", () => {
     shell.renderer.destroy();
     setup = undefined;
     expect(shell.activity.listening()).toBe(0);
+  });
+});
+
+describe("Shell refresh", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+
+  /** Stands in for another terminal: `change()` is what the cockpit hears after its commit. */
+  function elsewhere() {
+    const listeners = new Set<() => void>();
+    return {
+      onExternalChange: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      change: () => {
+        for (const listener of listeners) listener();
+      },
+      listening: () => listeners.size,
+    };
+  }
+
+  test("timer, work and tabs changed in another terminal show up without reopening", async () => {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    const outside = elsewhere();
+    let stored: CockpitSnapshot = {
+      tabs: fakeTabs(VIEWS, "mobile-banking").initial,
+      timer: null,
+      work: new Map(),
+    };
+    const shell = await renderShell({
+      clock,
+      tickMs: 5,
+      reload: () => ok(stored),
+      onExternalChange: outside.onExternalChange,
+    });
+    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+
+    await timer.toggle(VIEWS[1]?.workspace ?? null, "DEP-7" as IssueKey);
+    stored = {
+      tabs: fakeTabs(VIEWS, "mobile-banking", "deployd").initial,
+      timer: timer.current(),
+      work: workIn("deployd", "DEP-7", "Ship it", NOW),
+    };
+    outside.change();
+    const frame = await shell.waitForFrame((f) => /Timer 00:00:00/.test(header(f)));
+    expect(header(frame)).toContain("deployd  │  DEP-7 Ship it");
+    expect(tabBar(frame)).toContain(" 1 Mobile Banking  2 deployd ");
+  });
+
+  test("the Activity section is read again", async () => {
+    const outside = elsewhere();
+    const activity = fakeActivity();
+    const shell = await renderShell({
+      navigation: new Map([["mobile-banking", "activity"]]),
+      loadActivity: activity.load,
+      onRecorded: activity.onRecorded,
+      reload: () =>
+        ok({ tabs: fakeTabs(VIEWS, "mobile-banking").initial, timer: null, work: new Map() }),
+      onExternalChange: outside.onExternalChange,
+    });
+    await shell.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    const before = activity.loads.length;
+    outside.change();
+    await shell.waitForFrame(() => activity.loads.length > before);
+  });
+
+  test("a failed reload is reported and the screen kept", async () => {
+    const outside = elsewhere();
+    const shell = await renderShell({
+      reload: () => err(storageError("Unable to read the timer", "timers.active")),
+      onExternalChange: outside.onExternalChange,
+    });
+    outside.change();
+    const frame = await shell.waitForFrame((f) => f.includes("✗ Unable to read the timer"));
+    expect(header(frame)).toContain("Mobile Banking");
+  });
+
+  test("stops listening when the cockpit closes", async () => {
+    const outside = elsewhere();
+    const shell = await renderShell({ onExternalChange: outside.onExternalChange });
+    expect(outside.listening()).toBe(1);
+    shell.renderer.destroy();
+    setup = undefined;
+    expect(outside.listening()).toBe(0);
   });
 });
 

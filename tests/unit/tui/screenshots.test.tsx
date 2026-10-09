@@ -53,6 +53,8 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         stopTimer={() => Promise.resolve(ok(undefined))}
         loadActivity={() => ok([])}
         onRecorded={() => () => undefined}
+        reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
+        onExternalChange={() => () => undefined}
         onQuit={() => undefined}
         {...props}
       />
