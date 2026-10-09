@@ -29,14 +29,18 @@ xuefu work finish                                              # finish it and s
 xuefu timer start --issue MOB-2841                             # time this workspace (stops any other timer)
 xuefu timer                                                    # the running or paused timer
 xuefu timer pause | resume | stop                              # pause, resume or stop it
+xuefu note append "Staging needs the VPN"                      # add a line to this workspace's note
+xuefu note --issue MOB-2841                                    # print the note on an issue
+pbpaste | xuefu note save                                      # replace the note (blank text clears it)
+xuefu note list                                                # every note with its first line
 xuefu activity -w mobile-banking -n 50                         # what happened there, newest first
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, and `work` and `timer` exit `1` when nothing
-is in progress, which makes them usable in shell prompts. `activity` exits `1` when nothing is
-recorded.
+is in progress, which makes them usable in shell prompts. `activity` and `note` exit `1` when
+there is nothing to show.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -59,6 +63,11 @@ change, so they keep counting across restarts and crashes.
 Changes to workspaces, work and timers are recorded as they happen. The Activity section shows
 them for the workspace in front, newest first under a heading for each day (every workspace's
 when none is open). `xuefu activity` prints the same timeline.
+
+Each workspace has a note of its own and one per issue. The Notes section shows the workspace's
+note and the note on its work in progress. Notes are stored unencrypted: saving one that looks like
+it holds a token or password warns you, and anything shaped like a credential is masked wherever
+XueFu shows it.
 
 The cockpit keeps up with commands run in other terminals: start work or a timer from the CLI and
 the header, the Work section and Activity update within a second, without reopening.
