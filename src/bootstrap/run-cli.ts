@@ -15,6 +15,7 @@ import {
   formatConfirmation,
   formatDiagnostics,
   formatError,
+  formatNoteList,
   formatStartedTimer,
   formatTimerStatus,
   formatWorkList,
@@ -31,6 +32,7 @@ import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import { clockDuration } from "../domain/shared/time";
 import { elapsed } from "../domain/timesheet/timer";
+import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
@@ -66,6 +68,8 @@ export interface CliRuntime {
   readonly cwd: string;
   readonly version: string;
   readonly tui: TuiHost;
+  /** Text piped in; `piped` is false when stdin is a terminal. */
+  readonly stdin: { readonly piped: boolean; read(): Promise<string> };
   readonly stdout: Writer;
   readonly stderr: Writer;
 }
@@ -119,6 +123,7 @@ const HINTS: Readonly<Record<string, string>> = {
   workspace: "List registered workspaces with: xuefu workspace list",
   timer: "Start one with: xuefu timer start",
   work: "Start some with: xuefu work start <issue>",
+  note: "Start one with: xuefu note append <text>",
 };
 
 function withHint(error: AppError): AppError {
@@ -453,6 +458,122 @@ async function finishWork(
   );
 }
 
+/** "note for Mobile Banking", or "note on MOB-1 in Mobile Banking". */
+function noteSubject(workspace: Workspace, issue: string | null): string {
+  return issue === null ? `note for ${workspace.name}` : `note on ${issue} in ${workspace.name}`;
+}
+
+const SECRET_WARNING =
+  "! This note looks like it holds a secret, such as a token or password. Notes are stored\n" +
+  "  unencrypted; keep secrets in your keychain or password manager instead.\n";
+
+async function showNote(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "note.show" }>,
+): Promise<number> {
+  const workspace = await targetWorkspace(app, out, command.workspace);
+  if (!workspace.ok) return fail(out, workspace.error);
+  const id = workspaceId(workspace.value);
+  if (!id.ok) return fail(out, id.error);
+  const issue = command.issue === null ? ok(null) : issueKey(command.issue);
+  if (!issue.ok) return fail(out, issue.error);
+  const found = app.notes.find(id.value, issue.value);
+  if (!found.ok) return fail(out, found.error);
+  const { note } = found.value;
+  if (command.json) {
+    printJson(
+      out,
+      note === null
+        ? null
+        : {
+            id: note.id,
+            workspaceId: note.workspaceId,
+            issueKey: note.issueKey,
+            body: note.body,
+            updatedAt: new Date(note.updatedAt).toISOString(),
+          },
+    );
+  } else if (note === null) {
+    const subject = noteSubject(found.value.workspace, issue.value);
+    out.runtime.stderr.write(`No ${subject} yet. Start one with: xuefu note append <text>\n`);
+  } else {
+    print(out, `${note.body}\n`);
+  }
+  return note === null ? EXIT.none : EXIT.ok;
+}
+
+async function changeNote(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "note.save" | "note.append" | "note.clear" }>,
+): Promise<number> {
+  const workspace = await targetWorkspace(app, out, command.workspace);
+  if (!workspace.ok) return fail(out, workspace.error);
+  const issue = command.issue === null ? ok(null) : issueKey(command.issue);
+  if (!issue.ok) return fail(out, issue.error);
+  let body = "";
+  if (command.kind === "note.append") body = command.text;
+  if (command.kind === "note.save") {
+    if (!out.runtime.stdin.piped) {
+      return fail(
+        out,
+        validationError("Pipe the note's text in, for example: pbpaste | xuefu note save", [
+          { path: "stdin", message: "is a terminal" },
+        ]),
+      );
+    }
+    body = await out.runtime.stdin.read();
+  }
+  const saved = await app.commandBus.invoke(app.noteCommands.save, {
+    workspace: workspace.value,
+    body,
+    ...(issue.value === null ? {} : { issue: issue.value }),
+    ...(command.kind === "note.append" ? { append: true } : {}),
+  });
+  if (!saved.ok) return fail(out, saved.error);
+  const { note, changed, secret } = saved.value;
+  const subject = noteSubject(saved.value.workspace, issue.value);
+  if (secret) out.runtime.stderr.write(SECRET_WARNING);
+  if (note === null && !changed) {
+    out.runtime.stderr.write(`No ${subject} to clear.\n`);
+    return EXIT.none;
+  }
+  const done =
+    note === null
+      ? `✓ Cleared the ${subject}`
+      : !changed
+        ? `✓ The ${subject} already says that`
+        : command.kind === "note.append"
+          ? `✓ Added to the ${subject}`
+          : `✓ Saved the ${subject}`;
+  return print(out, `${done}\n`);
+}
+
+function listNotes(app: App, out: Output, json: boolean): number {
+  const listed = app.notes.list();
+  if (!listed.ok) return fail(out, listed.error);
+  const views = listed.value;
+  if (json) {
+    printJson(
+      out,
+      views.map(({ note, workspace }) => ({
+        id: note.id,
+        workspaceId: note.workspaceId,
+        workspaceName: workspace?.name ?? null,
+        issueKey: note.issueKey,
+        body: note.body,
+        updatedAt: new Date(note.updatedAt).toISOString(),
+      })),
+    );
+  } else if (views.length === 0) {
+    out.runtime.stderr.write("No notes yet. Start one with: xuefu note append <text>\n");
+  } else {
+    print(out, formatNoteList(views));
+  }
+  return views.length === 0 ? EXIT.none : EXIT.ok;
+}
+
 const ACTIVITY_LIMIT = { default: 20, max: 1000 };
 
 function activityLimit(raw: string | null): Result<number, AppError> {
@@ -538,6 +659,14 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return startWork(app, out, command);
     case "activity":
       return showActivity(app, out, command);
+    case "note.show":
+      return showNote(app, out, command);
+    case "note.save":
+    case "note.append":
+    case "note.clear":
+      return changeNote(app, out, command);
+    case "note.list":
+      return listNotes(app, out, command.json);
     case "work.finish":
       return finishWork(app, out, command);
     default:

@@ -47,6 +47,7 @@ async function run(
   extraEnv: Record<string, string> = {},
   cwd = dir.path,
   tui: TuiHost = NO_TERMINAL,
+  stdin: string | null = null,
 ) {
   let stdout = "";
   let stderr = "";
@@ -61,6 +62,7 @@ async function run(
     cwd,
     version: "9.9.9",
     tui,
+    stdin: { piped: stdin !== null, read: () => Promise.resolve(stdin ?? "") },
     stdout: {
       write: (s) => {
         stdout += s;
@@ -784,6 +786,89 @@ describe("runCli: activity", () => {
       expect(refused.stderr).toContain("Limit must be a whole number from 1 to 1000");
     }
     expect((await run(["activity", "-w", "Not An Id"])).code).toBe(EXIT.usage);
+  });
+});
+
+describe("runCli: notes", () => {
+  let mobile: string;
+  beforeEach(async () => {
+    mobile = join(realpathSync(dir.path), "mobile");
+    mkdirSync(mobile);
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+  });
+  const note = (argv: string[], stdin: string | null = null) =>
+    run(["note", ...argv], {}, mobile, NO_TERMINAL, stdin);
+
+  test("with no note, show says how to start one", async () => {
+    expect(await note([])).toEqual({
+      code: EXIT.none,
+      stdout: "",
+      stderr: "No note for Mobile Banking yet. Start one with: xuefu note append <text>\n",
+    });
+    expect(await note(["--json"])).toMatchObject({ code: EXIT.none, stdout: "null\n" });
+    expect((await note(["list"])).stderr).toBe(
+      "No notes yet. Start one with: xuefu note append <text>\n",
+    );
+  });
+
+  test("save takes the text piped in; show prints it back", async () => {
+    expect(await note(["save"], "Staging needs the VPN\r\nAsk Dana for access\n")).toEqual({
+      code: EXIT.ok,
+      stdout: "✓ Saved the note for Mobile Banking\n",
+      stderr: "",
+    });
+    expect((await note([])).stdout).toBe("Staging needs the VPN\nAsk Dana for access\n");
+    expect((await note(["save"], "Staging needs the VPN\nAsk Dana for access")).stdout).toBe(
+      "✓ The note for Mobile Banking already says that\n",
+    );
+    expect(JSON.parse((await note(["show", "--json"])).stdout)).toMatchObject({
+      workspaceId: "mobile-banking",
+      issueKey: null,
+      body: "Staging needs the VPN\nAsk Dana for access",
+      updatedAt: expect.stringMatching(/^\d{4}-/),
+    });
+  });
+
+  test("append and clear an issue's note, apart from the workspace's", async () => {
+    await note(["append", "Ask", "QA", "--issue", "mob-1"]);
+    expect((await note(["append", "Then rebase", "--issue", "MOB-1"])).stdout).toBe(
+      "✓ Added to the note on MOB-1 in Mobile Banking\n",
+    );
+    expect((await note(["--issue", "MOB-1"])).stdout).toBe("Ask QA\nThen rebase\n");
+    expect((await note([])).code).toBe(EXIT.none);
+    expect((await note(["clear", "--issue", "MOB-1"])).stdout).toBe(
+      "✓ Cleared the note on MOB-1 in Mobile Banking\n",
+    );
+    expect(await note(["clear", "--issue", "MOB-1"])).toMatchObject({
+      code: EXIT.none,
+      stderr: "No note on MOB-1 in Mobile Banking to clear.\n",
+    });
+  });
+
+  test("text that looks secret is saved with a warning, and shown masked", async () => {
+    const saved = await note(["append", "staging password=hunter2"]);
+    expect(saved.code).toBe(EXIT.ok);
+    expect(saved.stderr).toContain("looks like it holds a secret");
+    expect((await note([])).stdout).toBe("staging password=[REDACTED]\n");
+  });
+
+  test("list shows every note with its first line", async () => {
+    await note(["append", "Staging needs the VPN"]);
+    await note(["append", "Ask QA", "--issue", "MOB-1"]);
+    const listed = await note(["list"]);
+    expect(listed.stdout).toMatch(/^WORKSPACE {7}ISSUE {2}UPDATED {11}NOTE\n/);
+    expect(listed.stdout).toContain("MOB-1  ");
+    expect(listed.stdout).toContain("Staging needs the VPN");
+    expect(JSON.parse((await note(["list", "--json"])).stdout)).toHaveLength(2);
+  });
+
+  test("save needs text piped in; bad input and places are reported", async () => {
+    const unpiped = await note(["save"]);
+    expect(unpiped.code).toBe(EXIT.usage);
+    expect(unpiped.stderr).toContain("Pipe the note's text in");
+    expect((await note(["append", "x", "--issue", "nope"])).code).toBe(EXIT.usage);
+    expect((await run(["note", "append", "x"])).stderr).toContain("Not inside a workspace");
+    expect((await note(["-w", "ghost"])).code).toBe(EXIT.noInput);
   });
 });
 

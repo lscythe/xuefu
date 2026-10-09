@@ -191,3 +191,32 @@ describe("parseArgs: activity", () => {
     expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
   });
 });
+
+describe("parseArgs: note", () => {
+  const here = { workspace: null, issue: null };
+  test.each([
+    [["note"], { kind: "note.show", ...here, json: false }],
+    [
+      ["note", "show", "--issue", "MOB-1", "-w", "mob", "--json"],
+      { kind: "note.show", workspace: "mob", issue: "MOB-1", json: true },
+    ],
+    [["note", "save"], { kind: "note.save", ...here }],
+    [
+      ["note", "append", "Ask", "QA", "--issue", "MOB-1"],
+      { kind: "note.append", text: "Ask QA", workspace: null, issue: "MOB-1" },
+    ],
+    [["note", "clear", "-w", "mob"], { kind: "note.clear", workspace: "mob", issue: null }],
+    [["note", "list", "--json"], { kind: "note.list", json: true }],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+  });
+
+  test.each([
+    [["note", "append"], "note append expects <text>"],
+    [["note", "list", "--issue", "x"], "--issue does not apply to note list"],
+    [["note", "save", "text"], "Unexpected argument: text"],
+    [["note", "edit"], "Unknown note command: edit"],
+  ])("rejects %p", (argv, message) => {
+    expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
+  });
+});
