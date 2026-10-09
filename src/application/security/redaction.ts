@@ -105,6 +105,12 @@ const RULES: readonly Rule[] = [
   },
 ];
 
+/** True when the text holds something shaped like a credential: a token, key or password. */
+export function looksLikeSecret(text: string): boolean {
+  // Replacing rather than test(): the rules are global, and test() would carry state between calls.
+  return RULES.some((rule) => text.replace(rule.pattern, rule.replacement) !== text);
+}
+
 export function createRedactor(registry: SecretRegistry): Redactor {
   const redactString = (text: string): string => {
     let out = text;
