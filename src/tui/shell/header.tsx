@@ -1,12 +1,12 @@
 import { type Accessor, Show } from "solid-js";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
+import { wallClock } from "../../domain/shared/wall-clock";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { useNow } from "../use-now";
-import { headerClock } from "./header-clock";
 import { fitHeaderLeft } from "./header-fit";
 import { type HeaderTimer, headerTimer } from "./header-timer";
 
@@ -31,7 +31,7 @@ const CHROME = 4;
 export function Header(props: HeaderProps) {
   const now = useNow(props.clock, props.tickMs);
 
-  const clock = () => headerClock(now(), props.timeZone);
+  const clock = () => wallClock(now(), props.timeZone);
   const separator = () => (props.icons === "ascii" ? " | " : " • ");
   const tracked = () => headerTimer(props.timer, props.workspace?.id ?? null, now());
   const right = () => {

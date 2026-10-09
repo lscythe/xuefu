@@ -16,6 +16,9 @@ export interface LedgerQuery {
   /** Exclusive upper bound on occurredAt. */
   readonly to?: Timestamp;
   readonly afterSeq?: number;
+  readonly beforeSeq?: number;
+  /** Latest events first; continue with `beforeSeq: nextCursor`. Oldest first otherwise. */
+  readonly newestFirst?: boolean;
   readonly limit: number;
 }
 

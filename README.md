@@ -29,12 +29,14 @@ xuefu work finish                                              # finish it and s
 xuefu timer start --issue MOB-2841                             # time this workspace (stops any other timer)
 xuefu timer                                                    # the running or paused timer
 xuefu timer pause | resume | stop                              # pause, resume or stop it
+xuefu activity -w mobile-banking -n 50                         # what happened there, newest first
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, and `work` and `timer` exit `1` when nothing
-is in progress, which makes them usable in shell prompts.
+is in progress, which makes them usable in shell prompts. `activity` exits `1` when nothing is
+recorded.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -53,6 +55,11 @@ Each workspace has at most one piece of work in progress; starting another issue
 the old one. Only one timer runs at a time: starting work or a timer in another workspace stops
 the current timer first, while that workspace's work stays in progress. Timers are saved as they
 change, so they keep counting across restarts and crashes.
+
+Changes to workspaces, work and timers are recorded as they happen. The Activity section shows
+them for the workspace in front, newest first under a heading for each day (every workspace's
+when none is open), and follows along as you work in the cockpit. `xuefu activity` prints the
+same timeline.
 
 On macOS, Alt shortcuts need the terminal to send Option as Meta (Terminal: Settings, Profiles,
 Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc+").

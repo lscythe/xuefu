@@ -1,5 +1,6 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
-import { type Accessor, createSignal, Show } from "solid-js";
+import { type Accessor, createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js";
+import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView } from "../../application/timesheet/queries";
@@ -17,10 +18,11 @@ import { Palette } from "../palette/palette";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { ActivityPanel } from "./activity-panel";
 import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
-import { Nav } from "./nav";
+import { NAV_WIDTH, Nav } from "./nav";
 import { paletteEntries } from "./palette-entries";
 import { SECTIONS } from "./sections";
 import { TabBar } from "./tab-bar";
@@ -63,11 +65,22 @@ export interface ShellProps {
     title: string | null,
   ) => Promise<Result<StartedWork, AppError>>;
   readonly finishWork: (workspace: Workspace) => Promise<Result<FinishedWork, AppError>>;
+  /** The latest activity in `workspace`, or in every workspace when null; newest first. */
+  readonly loadActivity: (
+    workspace: Workspace | null,
+  ) => Result<readonly ActivityEntry[], AppError>;
+  /** Calls `listener` whenever something is recorded; returns how to stop. */
+  readonly onRecorded: (listener: () => void) => () => void;
   readonly onQuit: () => void;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
   readonly tickMs?: number;
 }
+
+/** Header, the panel's frame and title, and the key bar. */
+const PANEL_CHROME_ROWS = 5;
+/** The panel's frame and padding. */
+const PANEL_CHROME_COLUMNS = 4;
 
 export function Shell(props: ShellProps) {
   const dimensions = useTerminalDimensions();
@@ -87,6 +100,9 @@ export function Shell(props: ShellProps) {
     ),
   );
 
+  const [recorded, setRecorded] = createSignal(0);
+  onCleanup(props.onRecorded(() => setRecorded((n) => n + 1)));
+
   const workspace = () => tabs().active;
   const work = () => allWork().get(workspace()?.id ?? "") ?? null;
   const selected = () => sections().get(workspace()?.id ?? "") ?? 0;
@@ -100,6 +116,16 @@ export function Shell(props: ShellProps) {
       if (!saved.ok) setNotice(saved.error);
     });
   };
+
+  // Read only while the section is in front, and again whenever something is recorded.
+  const activity = createMemo(() => {
+    if (section()?.id !== "activity") return null;
+    recorded();
+    return props.loadActivity(workspace());
+  });
+  /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
+  const panelRows = () =>
+    dimensions().height - PANEL_CHROME_ROWS - (tabs().open.length > 0 ? 1 : 0) - (notice() ? 1 : 0);
 
   /** Shows a failure above the key bar; for actions started by a key rather than the palette. */
   const report = (done: Promise<Result<unknown, AppError>>) => {
@@ -248,19 +274,32 @@ export function Shell(props: ShellProps) {
             <text fg={PALETTE.accentSecondary}>
               <b>{`${props.icons === "ascii" ? "" : "▍"}${section()?.label.toUpperCase()}`}</b>
             </text>
-            <Show
-              when={section()?.id === "work"}
-              fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}
-            >
-              <WorkPanel
-                clock={props.clock}
-                timeZone={props.timeZone}
-                tickMs={props.tickMs ?? 1000}
-                workspace={workspace()}
-                work={work()}
-                timer={timer()}
-              />
-            </Show>
+            <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
+              <Match when={section()?.id === "work"}>
+                <WorkPanel
+                  clock={props.clock}
+                  timeZone={props.timeZone}
+                  tickMs={props.tickMs ?? 1000}
+                  workspace={workspace()}
+                  work={work()}
+                  timer={timer()}
+                />
+              </Match>
+              <Match when={activity()}>
+                {(loaded: Accessor<Result<readonly ActivityEntry[], AppError>>) => (
+                  <ActivityPanel
+                    clock={props.clock}
+                    timeZone={props.timeZone}
+                    tickMs={props.tickMs ?? 1000}
+                    workspace={workspace()}
+                    activity={loaded()}
+                    rows={panelRows()}
+                    width={dimensions().width - NAV_WIDTH - PANEL_CHROME_COLUMNS}
+                    ascii={props.icons === "ascii"}
+                  />
+                )}
+              </Match>
+            </Switch>
           </box>
         </box>
         <Show when={notice()}>

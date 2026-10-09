@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
+import { RECORDED_EVENTS } from "../application/activity/describe";
+import { ActivityQueries } from "../application/activity/queries";
 import { CommandBus } from "../application/commands/command-bus";
+import { EventCatalog } from "../application/events/catalog";
 import { EventBus } from "../application/events/event-bus";
 import type { Logger } from "../application/ports/logger";
 import type { Redactor } from "../application/security/redaction";
@@ -86,6 +89,7 @@ export interface App {
   readonly timers: TimerQueries;
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
+  readonly activity: ActivityQueries;
   close(): void;
 }
 
@@ -190,9 +194,11 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     (result, next) => (result.ok ? next() : result),
     ok(undefined),
   );
-  if (!registered.ok) {
+  // Duplicate command names or event definitions are wiring mistakes, caught here at startup.
+  const catalog = registered.ok ? EventCatalog.create(RECORDED_EVENTS) : registered;
+  if (!catalog.ok) {
     database.close();
-    return err(unexpected("Command registration failed", new Error(registered.error.message)));
+    return err(unexpected("XueFu is wired incorrectly", new Error(catalog.error.message)));
   }
 
   logger.info("XueFu started", {
@@ -225,6 +231,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     timers: new TimerQueries(timerRepository, workspaceRepository),
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
+    activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),
     close: () => {
       logger.debug("XueFu stopping");
       database.close();

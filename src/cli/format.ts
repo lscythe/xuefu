@@ -1,3 +1,4 @@
+import type { ActivityEntry } from "../application/activity/queries";
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
 import type { Redactor } from "../application/security/redaction";
@@ -7,6 +8,7 @@ import type { WorkView } from "../application/work/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import { clockDuration, type Timestamp } from "../domain/shared/time";
+import { wallClock } from "../domain/shared/wall-clock";
 import { elapsed } from "../domain/timesheet/timer";
 
 export function helpText(version: string): string {
@@ -44,6 +46,10 @@ Commands:
                                   -w, --workspace <id>  another workspace than this folder's
   work finish                   Finish the work here and stop its timer
                                   -w, --workspace <id>  another workspace than this folder's
+  activity                      Show what happened, newest first
+                                  -w, --workspace <id>  only in this workspace
+                                  -n, --limit <count>   how many entries (default 20)
+                                  --json             machine-readable output
 
 Options:
   -h, --help                    Show this help
@@ -219,27 +225,10 @@ export function workSubject(view: WorkView): string {
   return title === null ? issueKey : `${issueKey} (${title})`;
 }
 
-const startedFormatters = new Map<string, Intl.DateTimeFormat>();
-
 /** "Tue 06 Oct 09:14" in `timeZone`, the host zone when omitted. */
 function startedAt(at: Timestamp, timeZone: string | undefined): string {
-  const key = timeZone ?? "";
-  let formatter = startedFormatters.get(key);
-  if (formatter === undefined) {
-    formatter = new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      ...(timeZone === undefined ? {} : { timeZone }),
-    });
-    startedFormatters.set(key, formatter);
-  }
-  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
-  for (const part of formatter.formatToParts(at)) parts[part.type] = part.value;
-  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.hour}:${parts.minute}`;
+  const clock = wallClock(at, timeZone);
+  return `${clock.date} ${clock.time}`;
 }
 
 export function formatWorkList(views: readonly WorkView[], timeZone?: string): string {
@@ -252,4 +241,31 @@ export function formatWorkList(views: readonly WorkView[], timeZone?: string): s
       view.work.title ?? "-",
     ]),
   ]);
+}
+
+/** "Started work on MOB-2841  Add biometric login": the action, its subject, then the detail. */
+function activityText(entry: ActivityEntry): string {
+  const { action, subject, detail } = entry.description;
+  const said = subject === null ? action : `${action} ${subject.text}`;
+  return detail === null ? said : `${said}  ${detail}`;
+}
+
+/** The timeline under a heading for each day, newest first, in `timeZone`. */
+export function formatActivity(entries: readonly ActivityEntry[], timeZone?: string): string {
+  const where = (entry: ActivityEntry) =>
+    entry.workspace?.name ?? (entry.workspaceId === null ? "-" : `${entry.workspaceId} (removed)`);
+  const width = Math.max(0, ...entries.map((entry) => displayWidth(where(entry))));
+  const lines: string[] = [];
+  let day: string | null = null;
+  for (const entry of entries) {
+    const clock = wallClock(entry.at, timeZone);
+    if (clock.date !== day) {
+      day = clock.date;
+      lines.push(day);
+    }
+    const name = where(entry);
+    const padding = " ".repeat(width - displayWidth(name));
+    lines.push(`  ${clock.time}  ${name}${padding}  ${activityText(entry)}`);
+  }
+  return `${lines.join("\n")}\n`;
 }

@@ -8,12 +8,14 @@ export interface NavProps {
   readonly icons: IconSet;
 }
 
+export const NAV_WIDTH = 16;
+
 export function Nav(props: NavProps) {
   const marker = () => (props.icons === "ascii" ? ">" : "▌");
   return (
     <box
       flexDirection="column"
-      width={16}
+      width={NAV_WIDTH}
       border
       borderColor={PALETTE.borderIdle}
       backgroundColor={PALETTE.panelBg}

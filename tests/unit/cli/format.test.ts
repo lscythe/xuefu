@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { ActivityEntry } from "../../../src/application/activity/queries";
 import type { DiagnosticsReport } from "../../../src/application/diagnostics";
 import { createRedactor, SecretRegistry } from "../../../src/application/security/redaction";
 import type { WorkView } from "../../../src/application/work/queries";
 import type { WorkspaceView } from "../../../src/application/workspace/queries";
 import {
+  formatActivity,
   formatConfirmation,
   formatDiagnostics,
   formatError,
@@ -102,6 +104,8 @@ describe("helpText", () => {
       "workspace add [path]",
       "workspace remove <id>",
       "workspace which [path]",
+      "activity",
+      "-n, --limit <count>",
     ]) {
       expect(text).toContain(fragment);
     }
@@ -220,6 +224,65 @@ describe("formatWorkList", () => {
         "WORKSPACE                 ISSUE     STARTED           TITLE",
         "Mobile Banking            MOB-2841  Tue 06 Oct 09:14  Biometrics",
         "mobile-banking (removed)  MOB-2841  Tue 06 Oct 09:14  -",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("formatActivity", () => {
+  const mobile = {
+    id: "mobile-banking" as WorkspaceId,
+    name: "Mobile Banking" as WorkspaceName,
+    path: "/work/m" as AbsolutePath,
+    group: null,
+    addedAt: 0 as Timestamp,
+    lastActiveAt: null,
+  };
+  const entry = (
+    seq: number,
+    iso: string,
+    workspace: "mobile" | "removed" | "none",
+    description: ActivityEntry["description"],
+  ): ActivityEntry => ({
+    seq,
+    at: Date.parse(iso) as Timestamp,
+    workspaceId: workspace === "none" ? null : mobile.id,
+    workspace: workspace === "mobile" ? mobile : null,
+    description,
+  });
+
+  test("groups by day, newest first, in the given zone", () => {
+    const entries = [
+      entry(4, "2026-10-06T09:56:00Z", "mobile", {
+        action: "Paused the timer",
+        subject: null,
+        detail: "00:42:18",
+      }),
+      entry(3, "2026-10-06T09:14:00Z", "mobile", {
+        action: "Started work on",
+        subject: { kind: "issue", text: "MOB-2841" },
+        detail: "Add biometric login",
+      }),
+      entry(2, "2026-10-05T18:00:00Z", "removed", {
+        action: "Opened",
+        subject: null,
+        detail: null,
+      }),
+      entry(1, "2026-10-05T17:00:00Z", "none", {
+        action: "Unrecognised event",
+        subject: { kind: "name", text: "FromTheFuture v1" },
+        detail: null,
+      }),
+    ];
+    expect(formatActivity(entries, "UTC")).toBe(
+      [
+        "Tue 06 Oct",
+        "  09:56  Mobile Banking            Paused the timer  00:42:18",
+        "  09:14  Mobile Banking            Started work on MOB-2841  Add biometric login",
+        "Mon 05 Oct",
+        "  18:00  mobile-banking (removed)  Opened",
+        "  17:00  -                         Unrecognised event FromTheFuture v1",
         "",
       ].join("\n"),
     );

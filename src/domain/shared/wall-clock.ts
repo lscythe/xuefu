@@ -1,6 +1,7 @@
-import type { Timestamp } from "../../domain/shared/time";
+import type { Timestamp } from "./time";
 
-export interface HeaderClock {
+/** A moment as a person reads it on their own clock. */
+export interface WallClock {
   readonly date: string;
   readonly time: string;
 }
@@ -26,7 +27,7 @@ function formatterFor(timeZone: string | undefined): Intl.DateTimeFormat {
 }
 
 /** "Tue 06 Oct" and "13:59"; the host time zone unless one is given. */
-export function headerClock(at: Timestamp, timeZone?: string): HeaderClock {
+export function wallClock(at: Timestamp, timeZone?: string): WallClock {
   const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
   for (const part of formatterFor(timeZone).formatToParts(at)) parts[part.type] = part.value;
   return {

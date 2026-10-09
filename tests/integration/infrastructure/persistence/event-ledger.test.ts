@@ -99,6 +99,23 @@ describe("SqliteEventLedger", () => {
     expect(last.nextCursor).toBeNull();
   });
 
+  test("pages newest first, continuing before the cursor", () => {
+    const mobile = "mobile-banking" as WorkspaceId;
+    ledger.append([
+      testEvent({ workspaceId: mobile }),
+      testEvent({ workspaceId: null }),
+      testEvent({ workspaceId: mobile }),
+      testEvent({ workspaceId: mobile }),
+      testEvent({ workspaceId: mobile }),
+    ]);
+    const first = list({ limit: 2, newestFirst: true });
+    expect(first.events.map((e) => e.seq)).toEqual([5, 4]);
+    expect(first.nextCursor).toBe(4);
+    const rest = list({ limit: 5, newestFirst: true, beforeSeq: 4, workspaceId: mobile });
+    expect(rest.events.map((e) => e.seq)).toEqual([3, 1]);
+    expect(rest.nextCursor).toBeNull();
+  });
+
   test("corrupt rows are reported instead of being returned", () => {
     db.run(
       `INSERT INTO events (id, type, version, occurred_at, workspace_id, correlation_id, payload)
