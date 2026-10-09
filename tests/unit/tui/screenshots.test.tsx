@@ -188,7 +188,7 @@ describe("screenshots", () => {
       ...(await trackedTimer("mobile-banking", 6_138_000, undefined, "MOB-2841")),
     });
     screen.mockInput.pressKey("j");
-    await screen.waitForFrame((f) => f.includes("▍WORK"));
+    await screen.waitForFrame((f) => f.includes("─ Work ─"));
     expectScreenshot("work", screen.captureSpans());
   });
 
@@ -211,7 +211,7 @@ describe("screenshots", () => {
   test("nothing in progress", async () => {
     const screen = await shell();
     screen.mockInput.pressKey("j");
-    await screen.waitForFrame((f) => f.includes("▍WORK"));
+    await screen.waitForFrame((f) => f.includes("─ Work ─"));
     expectScreenshot("work-none", screen.captureSpans());
   });
 
@@ -224,7 +224,7 @@ describe("screenshots", () => {
       loadActivity: activity.load,
       onRecorded: activity.onRecorded,
     });
-    await screen.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    await screen.waitForFrame((f) => f.includes("─ Activity ─"));
     expectScreenshot("activity", screen.captureSpans());
   });
 
@@ -239,7 +239,7 @@ describe("screenshots", () => {
       },
       { width: 80, height: 24 },
     );
-    await screen.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    await screen.waitForFrame((f) => f.includes("─ Activity ─"));
     expectScreenshot("activity-all", screen.captureSpans());
   });
 
@@ -271,7 +271,7 @@ describe("screenshots", () => {
       navigation: new Map([["mobile-banking", "notes"]]),
       loadNote: (_workspace, issue) => ok(issue === null ? own : onIssue),
     });
-    await screen.waitForFrame((f) => f.includes("▍NOTES"));
+    await screen.waitForFrame((f) => f.includes("─ Notes ─"));
     expectScreenshot("notes", screen.captureSpans());
   });
 
@@ -283,7 +283,7 @@ describe("screenshots", () => {
       },
       { width: 80, height: 24 },
     );
-    await screen.waitForFrame((f) => f.includes("▍NOTES"));
+    await screen.waitForFrame((f) => f.includes("─ Notes ─"));
     expectScreenshot("notes-empty", screen.captureSpans());
   });
 

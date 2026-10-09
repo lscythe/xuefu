@@ -18,13 +18,14 @@ import type { OpenTabs, WorkspaceView } from "../../application/workspace/querie
 import type { Note } from "../../domain/notes/note";
 import { assertNever } from "../../domain/shared/assert-never";
 import { ok, type Result } from "../../domain/shared/result";
-import { timerToggle } from "../../domain/timesheet/timer";
+import { type TimerToggle, timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
 import { Palette } from "../palette/palette";
+import { Panel } from "../panel";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
@@ -32,11 +33,10 @@ import { ActivityPanel } from "./activity-panel";
 import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
-import { NAV_WIDTH, Nav } from "./nav";
+import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
 import { SECTIONS } from "./sections";
-import { TabBar } from "./tab-bar";
 import { fitsTerminal } from "./terminal-size";
 import { TooSmall } from "./too-small";
 import { WorkPanel } from "./work-panel";
@@ -104,10 +104,55 @@ export interface ShellProps {
   readonly tickMs?: number;
 }
 
-/** Header, the panel's frame and title, and the key bar. */
+/** The header's two rows, the panel's frame and the key bar. */
 const PANEL_CHROME_ROWS = 5;
 /** The panel's frame and padding. */
 const PANEL_CHROME_COLUMNS = 4;
+
+/** What the timer key does, set into the Work panel's frame. */
+function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | null {
+  const and = ascii ? " | " : " · ";
+  switch (toggle) {
+    case null:
+      return null;
+    case "start":
+      return "t start timer";
+    case "pause":
+      return `t pause${and}T stop`;
+    case "resume":
+      return `t resume${and}T stop`;
+    default:
+      return assertNever(toggle);
+  }
+}
+
+/** A word on the state of the section in front, set into the right of its frame. */
+function sectionStatus(
+  id: string | undefined,
+  state: {
+    readonly work: WorkContext | null;
+    readonly timer: TimerView | null;
+    readonly workspace: Workspace | null;
+  },
+): string | null {
+  switch (id) {
+    case "work": {
+      const active = state.timer?.timer;
+      const timing =
+        active !== undefined &&
+        state.work !== null &&
+        active.workspaceId === state.work.workspaceId &&
+        active.issueKey === state.work.issueKey;
+      return timing ? (active.status === "paused" ? "paused" : "running") : null;
+    }
+    case "notes":
+      return state.work?.issueKey ?? null;
+    case "activity":
+      return state.workspace === null ? "everywhere" : null;
+    default:
+      return null;
+  }
+}
 
 export function Shell(props: ShellProps) {
   const dimensions = useTerminalDimensions();
@@ -178,8 +223,9 @@ export function Shell(props: ShellProps) {
     return onIssue.ok ? ok({ own: own.value, issue: onIssue.value }) : onIssue;
   });
   /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
-  const panelRows = () =>
-    dimensions().height - PANEL_CHROME_ROWS - (tabs().open.length > 0 ? 1 : 0) - (notice() ? 1 : 0);
+  const panelRows = () => dimensions().height - PANEL_CHROME_ROWS - (notice() ? 1 : 0);
+  const nav = () => navWidth(dimensions().width, props.icons);
+  const toggle = () => timerToggle(timer()?.timer ?? null, workspace()?.id ?? null);
 
   /** Shows a failure above the key bar; for actions started by a key rather than the palette. */
   const report = (done: Promise<Result<unknown, AppError>>) => {
@@ -308,26 +354,23 @@ export function Shell(props: ShellProps) {
           timeZone={props.timeZone}
           tickMs={props.tickMs ?? 1000}
           icons={props.icons}
-          workspace={workspace()}
-          work={work()}
+          tabs={tabs()}
           timer={timer()}
           width={dimensions().width}
         />
-        <Show when={tabs().open.length > 0}>
-          <TabBar tabs={tabs()} width={dimensions().width} />
-        </Show>
         <box flexDirection="row" flexGrow={1}>
-          <Nav selected={selected()} icons={props.icons} />
-          <box
+          <Nav selected={selected()} icons={props.icons} width={nav()} />
+          <Panel
+            title={section()?.label ?? ""}
+            focused
             flexGrow={1}
-            flexDirection="column"
-            border
-            borderColor={PALETTE.borderFocused}
-            paddingX={1}
+            status={sectionStatus(section()?.id, {
+              work: work(),
+              timer: timer(),
+              workspace: workspace(),
+            })}
+            keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
           >
-            <text fg={PALETTE.accentSecondary}>
-              <b>{`${props.icons === "ascii" ? "" : "▍"}${section()?.label.toUpperCase()}`}</b>
-            </text>
             <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
               <Match when={section()?.id === "work"}>
                 <WorkPanel
@@ -356,13 +399,13 @@ export function Shell(props: ShellProps) {
                     workspace={workspace()}
                     activity={loaded()}
                     rows={panelRows()}
-                    width={dimensions().width - NAV_WIDTH - PANEL_CHROME_COLUMNS}
+                    width={dimensions().width - nav() - PANEL_CHROME_COLUMNS}
                     ascii={props.icons === "ascii"}
                   />
                 )}
               </Match>
             </Switch>
-          </box>
+          </Panel>
         </box>
         <Show when={notice()}>
           {(error: Accessor<AppError>) => (
@@ -372,10 +415,8 @@ export function Shell(props: ShellProps) {
           )}
         </Show>
         <KeyBar
-          hints={keyHints(props.icons, {
-            tabs: tabs().open.length > 0,
-            timer: timerToggle(timer()?.timer ?? null, workspace()?.id ?? null) !== null,
-          })}
+          icons={props.icons}
+          hints={keyHints(props.icons, { tabs: tabs().open.length > 0, timer: toggle() !== null })}
         />
         <Show when={switcherOpen()}>
           <Switcher

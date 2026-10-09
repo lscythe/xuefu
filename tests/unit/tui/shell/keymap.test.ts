@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { actionFor, type KeyPress, keyHints } from "../../../../src/tui/shell/keymap";
+import {
+  actionFor,
+  COMMANDS_HINT,
+  type KeyPress,
+  keyHints,
+} from "../../../../src/tui/shell/keymap";
 
 const press = (name: string, modifiers: Partial<Omit<KeyPress, "name">> = {}): KeyPress => ({
   name,
@@ -49,16 +54,21 @@ describe("keyHints", () => {
     expect(keyHints("unicode", { tabs: false, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
-      { keys: ":", label: "commands" },
       { keys: "q", label: "quit" },
     ]);
     expect(keyHints("unicode", { tabs: true, timer: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "alt+1-9", label: "tabs" },
-      { keys: ":", label: "commands" },
       { keys: "q", label: "quit" },
     ]);
+  });
+
+  test("the palette, set apart at the right of the key bar, is bound to its key", () => {
+    expect(COMMANDS_HINT).toEqual({ keys: ":", label: "commands" });
+    expect(actionFor({ name: ":", ctrl: false, meta: false, shift: false })).toEqual({
+      kind: "palette.open",
+    });
   });
 
   test("the timer key shows when it has something to do", () => {

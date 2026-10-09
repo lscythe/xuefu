@@ -70,8 +70,9 @@ export function keyHints(
     { keys: "^W", label: "workspaces" },
     ...(state.tabs ? [{ keys: "alt+1-9", label: "tabs" }] : []),
     ...(state.timer ? [{ keys: "t", label: "timer" }] : []),
-    // Everything else, Alt+W included, is listed in the palette with its key.
-    { keys: ":", label: "commands" },
     { keys: "q", label: "quit" },
   ];
 }
+
+/** Set apart at the right of the key bar: everything else, Alt+W included, is listed there. */
+export const COMMANDS_HINT: KeyHint = { keys: ":", label: "commands" };

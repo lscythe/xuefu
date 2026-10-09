@@ -72,13 +72,15 @@ function rowContaining(frame: string, text: string): string {
   return frame.split("\n").find((line) => line.includes(text)) ?? "";
 }
 
-const header = (frame: string) => rowContaining(frame, "XUEFU");
-const tabBar = (frame: string) => frame.split("\n")[1] ?? "";
+const header = (frame: string) => rowContaining(frame, "血符");
+/** The section in front, by the title in its frame. */
+const showing = (label: string) => (frame: string) => frame.includes(`─ ${label} ─`);
 
 describe("Shell tabs", () => {
-  test("shows a numbered tab per open workspace under the header", async () => {
+  test("shows a numbered tab per open workspace in the header, underlining the front one", async () => {
     const frame = (await renderShell()).captureCharFrame();
-    expect(tabBar(frame)).toContain(" 1 Mobile Banking ");
+    expect(frame.split("\n")[1]).toBe(`       ${"▔".repeat(18)}`.padEnd(100));
+    expect(header(frame)).toContain(" 1 Mobile Banking ");
     expect(rowContaining(frame, "navigate")).toContain("alt+1-9 tabs");
     expect(rowContaining(frame, "navigate")).toContain(": commands");
   });
@@ -90,7 +92,8 @@ describe("Shell tabs", () => {
     await shell.mockInput.typeText("auth");
     shell.mockInput.pressEnter();
     const opened = await shell.waitForFrame((f) => header(f).includes("Auth Service"));
-    expect(tabBar(opened)).toContain(" 1 Mobile Banking  2 Auth Service ");
+    expect(header(opened)).toContain(" 1 Mobile Banking  2 Auth Service ");
+    expect(opened.split("\n")[1]).toContain(`${" ".repeat(25)}${"▔".repeat(16)}`);
 
     shell.mockInput.pressKey("1", { meta: true });
     await shell.waitForFrame((f) => header(f).includes("Mobile Banking"));
@@ -104,14 +107,14 @@ describe("Shell tabs", () => {
   test("each tab remembers its own section", async () => {
     const shell = await renderShell();
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    await shell.waitForFrame((f) => showing("Work")(f));
     shell.mockInput.pressKey("w", { ctrl: true });
     await shell.waitForFrame((f) => f.includes("Switch workspace"));
     await shell.mockInput.typeText("dep");
     shell.mockInput.pressEnter();
-    await shell.waitForFrame((f) => header(f).includes("deployd") && f.includes("▍DASHBOARD"));
+    await shell.waitForFrame((f) => header(f).includes("deployd") && showing("Dashboard")(f));
     shell.mockInput.pressKey("1", { meta: true });
-    await shell.waitForFrame((f) => header(f).includes("Mobile Banking") && f.includes("▍WORK"));
+    await shell.waitForFrame((f) => header(f).includes("Mobile Banking") && showing("Work")(f));
   });
 
   test("starts each workspace on its saved section and saves every change", async () => {
@@ -129,11 +132,11 @@ describe("Shell tabs", () => {
         return Promise.resolve(ok(undefined));
       },
     });
-    expect(shell.captureCharFrame()).toContain("▍PRS");
+    expect(shell.captureCharFrame()).toContain("─ PRs ─");
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍TIMESHEET"));
+    await shell.waitForFrame((f) => showing("Timesheet")(f));
     shell.mockInput.pressKey("1", { meta: true });
-    await shell.waitForFrame((f) => header(f).includes("deployd") && f.includes("▍DASHBOARD"));
+    await shell.waitForFrame((f) => header(f).includes("deployd") && showing("Dashboard")(f));
     expect(saved).toEqual(["mobile-banking:timesheet"]);
   });
 
@@ -156,7 +159,7 @@ describe("Shell tabs", () => {
       },
     });
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    await shell.waitForFrame((f) => showing("Work")(f));
     expect(saves).toBe(0);
   });
 
@@ -170,7 +173,7 @@ describe("Shell tabs", () => {
     expect(header(shell.captureCharFrame())).toContain("deployd");
     shell.mockInput.pressKey("w", { meta: true });
     const one = await shell.waitForFrame((f) => header(f).includes("Mobile Banking"));
-    expect(tabBar(one)).not.toContain("deployd");
+    expect(header(one)).not.toContain("deployd");
     shell.mockInput.pressKey("w", { meta: true });
     const none = await shell.waitForFrame((f) => header(f).includes("No workspace"));
     expect(none).not.toContain("1 Mobile Banking");
@@ -223,41 +226,41 @@ describe("Shell timer", () => {
   test("t starts the front workspace's timer, which counts up in the header", async () => {
     const shell = await timerShell();
     expect(keyBar(shell.captureCharFrame())).toContain("t timer");
-    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+    expect(header(shell.captureCharFrame())).not.toContain("●");
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("13:59 • Timer 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:00:00  │  Tue 06 Oct  13:59"));
     shell.clock.advance(6_138_000);
-    await shell.waitForFrame((f) => header(f).includes("Timer 01:42:18"));
+    await shell.waitForFrame((f) => header(f).includes("● 01:42:18"));
   });
 
   test("t pauses and resumes; shift+t stops", async () => {
     const shell = await timerShell();
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:00:00"));
     shell.clock.advance(90_000);
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("Paused 00:01:30"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:01:30 paused"));
     shell.clock.advance(600_000);
     await Bun.sleep(25);
-    expect(header(shell.captureCharFrame())).toContain("Paused 00:01:30");
+    expect(header(shell.captureCharFrame())).toContain("● 00:01:30 paused");
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("Timer 00:01:30"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:01:30  │"));
     await shell.mockInput.typeText("T");
-    await shell.waitForFrame((f) => !header(f).includes("Timer"));
+    await shell.waitForFrame((f) => !header(f).includes("●"));
     expect(shell.timer.current()).toBeNull();
   });
 
   test("a timer running elsewhere shows whose it is; t here starts this one's own", async () => {
     const shell = await timerShell();
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:00:00"));
     shell.mockInput.pressKey("w", { ctrl: true });
     await shell.waitForFrame((f) => f.includes("Switch workspace"));
     await shell.mockInput.typeText("auth");
     shell.mockInput.pressEnter();
-    await shell.waitForFrame((f) => header(f).includes("Mobile Banking 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("Mobile Banking ● 00:00:00"));
     shell.mockInput.pressKey("t");
-    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("  ● 00:00:00"));
     expect<string | undefined>(shell.timer.current()?.workspace?.name).toBe("Auth Service");
   });
 
@@ -272,7 +275,7 @@ describe("Shell timer", () => {
     await timer.toggle(MOBILE.workspace);
     clock.advance(3_600_000);
     const frame = (await renderShell({ clock, timer: timer.current() })).captureCharFrame();
-    expect(header(frame)).toContain("Paused 00:01:00");
+    expect(header(frame)).toContain("● 00:01:00 paused");
   });
 
   test("with no workspace and no timer the key does nothing and is not offered", async () => {
@@ -288,7 +291,7 @@ describe("Shell timer", () => {
     shell.mockInput.pressKey("t");
     await shell.renderOnce();
     expect(toggles).toBe(1);
-    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+    expect(header(shell.captureCharFrame())).not.toContain("●");
   });
 
   test("failures are reported above the key bar", async () => {
@@ -302,7 +305,7 @@ describe("Shell timer", () => {
     await shell.waitForFrame((f) => f.includes("✗ No timer is running"));
   });
 
-  test("at 80 columns a long workspace name gives way to the clock and timer", async () => {
+  test("at 80 columns a long workspace name gives way to the timer and time", async () => {
     const long = view("long", "Mobile Banking Platform Modernisation Programme");
     const tabs = fakeTabs([long], "long");
     const clock = new ManualClock(NOW);
@@ -314,8 +317,8 @@ describe("Shell timer", () => {
         { width: 80, height: 24 },
       )
     ).captureCharFrame();
-    expect(header(frame)).toContain("Mobile Banking Platform M…  Tue");
-    expect(header(frame)).toContain("Tue 06 Oct • 13:59 • Timer 00:00:00 ");
+    expect(header(frame)).toContain(" 1 Mobile Banking Platform Modernisation Program… ");
+    expect(header(frame)).toMatch(/ {2}● 00:00:00 {2}│ {2}13:59 $/);
   });
 });
 
@@ -327,14 +330,9 @@ describe("Shell work", () => {
   async function openWork(props: Partial<ShellProps> = {}) {
     const shell = await renderShell({ work: WORK, ...props });
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    await shell.waitForFrame((f) => showing("Work")(f));
     return shell;
   }
-
-  test("the header names the work in progress after the workspace", async () => {
-    const frame = (await renderShell({ work: WORK })).captureCharFrame();
-    expect(header(frame)).toContain("Mobile Banking  │  MOB-2841 Add biometric login");
-  });
 
   test("the Work section shows the issue, when it started and its timer", async () => {
     const shell = await openWork();
@@ -406,7 +404,7 @@ describe("Shell activity", () => {
       onRecorded: activity.onRecorded,
       ...props,
     });
-    await shell.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    await shell.waitForFrame((f) => showing("Activity")(f));
     return Object.assign(shell, { activity });
   }
 
@@ -426,7 +424,7 @@ describe("Shell activity", () => {
     shell.activity.record(activityEntry(NOW, mobile, "Finished work on"));
     await shell.waitForFrame((f) => f.includes("13:59  Finished work on"));
     shell.mockInput.pressKey("k");
-    await shell.waitForFrame((f) => f.includes("▍JENKINS") || f.includes("▍ANDROID"));
+    await shell.waitForFrame((f) => showing("Jenkins")(f) || showing("Android")(f));
     const loads = shell.activity.loads.length;
     shell.activity.record(activityEntry(NOW, mobile, "Opened"));
     await shell.renderOnce();
@@ -462,8 +460,8 @@ describe("Shell activity", () => {
     const shell = await openActivity(fakeActivity(many), {});
     const frame = shell.captureCharFrame();
     const shown = frame.split("\n").filter((line) => line.includes("Added"));
-    expect(shown).toHaveLength(30 - 6 - 1);
-    for (const line of shown) expect(line).toMatch(/deep… │$/);
+    expect(shown).toHaveLength(30 - 5 - 1);
+    for (const line of shown) expect(line).toMatch(/dee… │$/);
     expect(rowContaining(frame, "navigate")).toContain("q quit");
   });
 
@@ -515,7 +513,7 @@ describe("Shell notes", () => {
       ]),
       ...props,
     });
-    await shell.waitForFrame((f) => f.includes("▍NOTES"));
+    await shell.waitForFrame((f) => showing("Notes")(f));
     return shell;
   }
 
@@ -602,7 +600,7 @@ describe("Shell refresh", () => {
       reload: () => ok(stored),
       onExternalChange: outside.onExternalChange,
     });
-    expect(header(shell.captureCharFrame())).not.toContain("Timer");
+    expect(header(shell.captureCharFrame())).not.toContain("●");
 
     await timer.toggle(VIEWS[1]?.workspace ?? null, "DEP-7" as IssueKey);
     stored = {
@@ -611,9 +609,9 @@ describe("Shell refresh", () => {
       work: workIn("deployd", "DEP-7", "Ship it", NOW),
     };
     outside.change();
-    const frame = await shell.waitForFrame((f) => /Timer 00:00:00/.test(header(f)));
-    expect(header(frame)).toContain("deployd  │  DEP-7 Ship it");
-    expect(tabBar(frame)).toContain(" 1 Mobile Banking  2 deployd ");
+    const frame = await shell.waitForFrame((f) => header(f).includes("● 00:00:00"));
+    expect(header(frame)).toContain(" 1 Mobile Banking  2 deployd ");
+    expect(frame.split("\n")[1]).toContain(`${" ".repeat(25)}${"▔".repeat(11)}`);
   });
 
   test("the Activity section is read again", async () => {
@@ -627,7 +625,7 @@ describe("Shell refresh", () => {
         ok({ tabs: fakeTabs(VIEWS, "mobile-banking").initial, timer: null, work: new Map() }),
       onExternalChange: outside.onExternalChange,
     });
-    await shell.waitForFrame((f) => f.includes("▍ACTIVITY"));
+    await shell.waitForFrame((f) => showing("Activity")(f));
     const before = activity.loads.length;
     outside.change();
     await shell.waitForFrame(() => activity.loads.length > before);
@@ -707,8 +705,7 @@ describe("Shell palette", () => {
     await shell.mockInput.typeText("Add biometric login");
     shell.mockInput.pressEnter();
     const frame = await shell.waitForFrame((f) => !f.includes(" Start work "));
-    expect(header(frame)).toContain("MOB-2841 Add biometric log…");
-    expect(header(frame)).toContain("Timer 00:00:00");
+    expect(header(frame)).toContain("● 00:00:00");
     expect<string | undefined>(shell.work.open().get("mobile-banking")?.issueKey).toBe("MOB-2841");
   });
 
@@ -723,11 +720,11 @@ describe("Shell palette", () => {
       stopTimer: shell.timer.stop,
       finishWork: shell.work.finish,
     });
-    expect(header(again.captureCharFrame())).toContain("MOB-1");
+    expect(header(again.captureCharFrame())).toContain("● 00:00:00");
     await run(again, "finish");
     const frame = await again.waitForFrame((f) => !f.includes(" Commands "));
-    expect(header(frame)).not.toContain("MOB-1");
-    expect(header(frame)).not.toContain("Timer");
+    expect(again.work.open().size).toBe(0);
+    expect(header(frame)).not.toContain("●");
   });
 
   test("timer entries follow the timer; their failures stay in the palette", async () => {
@@ -736,7 +733,7 @@ describe("Shell palette", () => {
         Promise.resolve(err(storageError("Unable to save the timer", "timers.save"))),
     });
     await run(shell, "start timer");
-    await shell.waitForFrame((f) => header(f).includes("Timer 00:00:00"));
+    await shell.waitForFrame((f) => header(f).includes("● 00:00:00"));
     await run(shell, "stop timer");
     await shell.waitForFrame(
       (f) => f.includes("✗ Unable to save the timer") && f.includes(" Commands "),
@@ -744,7 +741,7 @@ describe("Shell palette", () => {
     shell.mockInput.pressEscape();
     await Bun.sleep(30);
     await shell.waitForFrame((f) => !f.includes(" Commands "));
-    expect(header(shell.captureCharFrame())).toContain("Timer 00:00:00");
+    expect(header(shell.captureCharFrame())).toContain("● 00:00:00");
   });
 
   test("switch workspace and close tab work from the palette too", async () => {
@@ -782,51 +779,56 @@ describe("Shell palette", () => {
 describe("Shell", () => {
   test("shows the brand, workspace, clock, navigation, panel and key bar", async () => {
     const frame = (await renderShell()).captureCharFrame();
-    const header = rowContaining(frame, "XUEFU");
-    expect(header).toContain("血符 XUEFU");
-    expect(header).toContain("Mobile Banking");
-    expect(header).toContain("Tue 06 Oct • 13:59");
+    expect(header(frame)).toContain("血符   1 Mobile Banking ");
+    expect(header(frame)).toContain("Tue 06 Oct  13:59");
     for (const label of ["Dashboard", "Work", "Jira", "Git", "PRs", "Timesheet", "Notes"]) {
       expect(frame).toContain(label);
     }
-    expect(frame).toContain("▍DASHBOARD");
+    expect(frame).toContain("─ Dashboard ─");
     expect(rowContaining(frame, "navigate")).toContain("↑↓ navigate");
     expect(rowContaining(frame, "navigate")).toContain("^W workspaces");
     expect(rowContaining(frame, "navigate")).toContain("q quit");
+    expect(rowContaining(frame, "navigate")).toMatch(/│ : commands $/);
   });
 
   test("says so when the current folder is not a workspace", async () => {
     const frame = (await renderShell({ tabs: fakeTabs(VIEWS).initial })).captureCharFrame();
-    expect(rowContaining(frame, "XUEFU")).toContain("No workspace");
+    expect(header(frame)).toContain("血符  No workspace open");
   });
 
-  test("marks only the selected section", async () => {
-    const frame = (await renderShell()).captureCharFrame();
-    expect(rowContaining(frame, "Dashboard")).toContain("▌⌂ Dashboard");
-    expect(rowContaining(frame, "Jira")).not.toContain("▌");
+  test("marks only the selected section, with a lavender block and bold label", async () => {
+    const shell = await renderShell();
+    const spans = shell.captureSpans().lines.flatMap((line) => line.spans);
+    const lavender = RGBA.fromHex(PALETTE.accentSecondary);
+    const marked = spans.filter((span) => span.bg.equals(lavender) && span.text.trim() !== "");
+    expect(marked.map((span) => span.text.trim())).toEqual(["1 Mobile Banking", "⌂"]);
+    const bold = spans.filter((span) => span.attributes & 1).map((span) => span.text.trim());
+    expect(bold).toContain("Dashboard");
+    expect(bold).not.toContain("Work");
+    expect(shell.captureCharFrame()).toContain("│  ⌂  Dashboard");
   });
 
   test("arrow keys and j/k move through sections and wrap at the ends", async () => {
     const shell = await renderShell();
     shell.mockInput.pressArrow("down");
-    expect(await shell.waitForFrame((f) => f.includes("▍WORK"))).toContain("▌▤ Work");
+    await shell.waitForFrame((f) => showing("Work")(f));
 
     shell.mockInput.pressKey("k");
-    await shell.waitForFrame((f) => f.includes("▍DASHBOARD"));
+    await shell.waitForFrame((f) => showing("Dashboard")(f));
 
     shell.mockInput.pressArrow("up");
-    expect(await shell.waitForFrame((f) => f.includes("▍NOTES"))).toContain("▌✎ Notes");
+    await shell.waitForFrame((f) => showing("Notes")(f));
 
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍DASHBOARD"));
+    await shell.waitForFrame((f) => showing("Dashboard")(f));
   });
 
   test("home and end jump to the first and last section", async () => {
     const shell = await renderShell();
     shell.mockInput.pressKey("END");
-    await shell.waitForFrame((f) => f.includes("▍NOTES"));
+    await shell.waitForFrame((f) => showing("Notes")(f));
     shell.mockInput.pressKey("HOME");
-    await shell.waitForFrame((f) => f.includes("▍DASHBOARD"));
+    await shell.waitForFrame((f) => showing("Dashboard")(f));
   });
 
   test("q and ctrl+c ask to quit; other keys do not", async () => {
@@ -847,7 +849,7 @@ describe("Shell", () => {
     await shell.mockInput.typeText("auth");
     shell.mockInput.pressEnter();
     const after = await shell.waitForFrame((f) => !f.includes("Switch workspace"));
-    expect(rowContaining(after, "XUEFU")).toContain("Auth Service");
+    expect(header(after)).toContain("Auth Service");
 
     shell.mockInput.pressKey("w", { ctrl: true });
     const reopened = await shell.waitForFrame((f) => f.includes("Switch workspace"));
@@ -865,7 +867,7 @@ describe("Shell", () => {
     shell.mockInput.pressEnter();
     const frame = await shell.waitForFrame((f) => f.includes("Unable to save workspaces"));
     expect(frame).toContain("Switch workspace");
-    expect(rowContaining(frame, "XUEFU")).toContain("Mobile Banking");
+    expect(header(frame)).toContain("Mobile Banking");
   });
 
   test("while the switcher is open, letters go to the query, not the shell", async () => {
@@ -873,16 +875,16 @@ describe("Shell", () => {
     shell.mockInput.pressKey("w", { ctrl: true });
     await shell.waitForFrame((f) => f.includes("Switch workspace"));
     await shell.mockInput.typeText("jq");
-    const frame = await shell.waitForFrame((f) => f.includes("> jq"));
-    expect(rowContaining(frame, "Dashboard")).toContain("▌⌂ Dashboard");
+    await shell.waitForFrame((f) => f.includes("> jq"));
     expect(shell.quits()).toBe(0);
 
     shell.mockInput.pressEscape();
     await Bun.sleep(30);
     const closed = await shell.waitForFrame((f) => !f.includes("Switch workspace"));
-    expect(rowContaining(closed, "XUEFU")).toContain("Mobile Banking");
+    expect(header(closed)).toContain("Mobile Banking");
+    expect(closed).toContain("─ Dashboard ─");
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => f.includes("▍WORK"));
+    await shell.waitForFrame((f) => showing("Work")(f));
   });
 
   test("ctrl+c quits even with the switcher open", async () => {
@@ -899,7 +901,7 @@ describe("Shell", () => {
     const shell = await renderShell({ clock, tickMs: 5 });
     clock.advance(60_000);
     await Bun.sleep(25);
-    await shell.waitForFrame((f) => f.includes("Tue 06 Oct • 14:00"));
+    await shell.waitForFrame((f) => f.includes("Tue 06 Oct  14:00"));
   });
 
   test("a terminal below 80×24 gets a notice instead of a broken layout", async () => {
@@ -915,20 +917,21 @@ describe("Shell", () => {
 
   test("ascii icons drop glyphs and arrows but keep every label", async () => {
     const frame = (await renderShell({ icons: "ascii" })).captureCharFrame();
-    expect(rowContaining(frame, "Dashboard")).toContain("> Dashboard");
+    expect(frame).toContain("│ > Dashboard");
     expect(frame).not.toContain("⌂");
-    expect(frame).not.toContain("▍");
-    expect(frame).toContain("DASHBOARD");
+    expect(frame).not.toContain("▔");
+    expect(frame.split("\n")[1]).toContain(`       ${"-".repeat(18)}`);
     expect(rowContaining(frame, "navigate")).toContain("j/k navigate");
-    expect(rowContaining(frame, "XUEFU")).toContain("Tue 06 Oct | 13:59");
+    expect(rowContaining(frame, "navigate")).toContain("| : commands");
   });
 
-  test("uses the palette: vermilion brand mark and focus bar", async () => {
+  test("uses the palette: vermilion brand mark, peach for the panel in focus only", async () => {
     const shell = await renderShell();
     const spans = shell.captureSpans().lines.flatMap((line) => line.spans);
     const brand = spans.find((span) => span.text.includes("血符"));
-    const bar = spans.find((span) => span.text.startsWith("▌"));
+    const peach = RGBA.fromHex(PALETTE.borderFocused);
     expect(brand?.fg.equals(RGBA.fromHex(PALETTE.accentPrimary))).toBe(true);
-    expect(bar?.fg.equals(RGBA.fromHex(PALETTE.borderFocused))).toBe(true);
+    expect(spans.find((span) => span.text.includes(" Dashboard "))?.fg.equals(peach)).toBe(true);
+    expect(spans.find((span) => span.text.includes(" Go "))?.fg.equals(peach)).toBe(false);
   });
 });
