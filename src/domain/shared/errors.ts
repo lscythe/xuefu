@@ -100,6 +100,14 @@ export interface ProcessError extends ErrorShape<"process"> {
   readonly exitCode: number | null;
 }
 
+/** A remote service could not be reached, or answered with a failure. */
+export interface RemoteError extends ErrorShape<"remote"> {
+  /** The service's host, never a whole URL: query strings may carry tokens. */
+  readonly service: string;
+  /** The HTTP status it answered with; null when it could not be reached at all. */
+  readonly status: number | null;
+}
+
 export type UnexpectedError = ErrorShape<"unexpected">;
 
 export type CoreError =
@@ -116,6 +124,7 @@ export type CoreError =
   | CancelledError
   | TimeoutError
   | ProcessError
+  | RemoteError
   | UnexpectedError;
 
 export interface ErrorOptions {
@@ -250,6 +259,19 @@ export function timeout(
   options: ErrorOptions = {},
 ): TimeoutError {
   return Object.freeze({ ...base("timeout", message, options), afterMs });
+}
+
+export function remoteError(
+  message: string,
+  service: string,
+  status: number | null,
+  options: Omit<ErrorOptions, "context"> = {},
+): RemoteError {
+  return Object.freeze({
+    ...base("remote", message, { ...options, context: { service, status } }),
+    service,
+    status,
+  });
 }
 
 export function processError(

@@ -64,6 +64,7 @@ function start(settings: unknown, specs: ProcessSpec[] = [], repository = false)
   const context = {
     bus,
     processes: fakeGitRunner(specs, repository),
+    http: { request: () => Promise.reject(new Error("git makes no HTTP requests")) },
     secrets: fakeSecrets(),
     logger,
     clock,

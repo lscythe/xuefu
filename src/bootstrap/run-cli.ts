@@ -52,6 +52,7 @@ export const EXIT = {
   data: 65,
   noInput: 66,
   unavailable: 69,
+  noPermission: 77,
   software: 70,
   io: 74,
   tempFail: 75,
@@ -113,6 +114,8 @@ export function exitCodeFor(error: AppError): number {
       return EXIT.tempFail;
     case "process":
       return EXIT.unavailable;
+    case "remote":
+      return error.status === 401 || error.status === 403 ? EXIT.noPermission : EXIT.unavailable;
     case "cancelled":
       return EXIT.cancelled;
     case "command-not-found":

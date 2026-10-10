@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type { AnyCommand } from "../application/commands/command";
 import type { CommandBus } from "../application/commands/command-bus";
 import type { Clock } from "../application/ports/clock";
+import type { HttpClient } from "../application/ports/http-client";
 import type { Logger } from "../application/ports/logger";
 import type { ProcessRunner } from "../application/ports/process-runner";
 import type { SecretProvider } from "../application/ports/secret-provider";
@@ -16,6 +17,7 @@ export interface PluginContext {
   /** Runs the plugin's own commands, once XueFu has registered them, as it runs every command. */
   readonly bus: Pick<CommandBus, "invoke">;
   readonly processes: ProcessRunner;
+  readonly http: HttpClient;
   /** Credentials from where config says they are kept; each is masked in every output. */
   readonly secrets: SecretProvider;
   readonly logger: Logger;

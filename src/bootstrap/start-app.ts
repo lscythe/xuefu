@@ -47,6 +47,7 @@ import { resolvePaths, type XueFuPaths } from "../infrastructure/config/paths";
 import { readConfigFile } from "../infrastructure/config/read-config-file";
 import type { GlobalConfig } from "../infrastructure/config/schema";
 import { fsWorkspaceProbe } from "../infrastructure/filesystem/workspace-probe";
+import { FetchHttpClient } from "../infrastructure/http/fetch-http-client";
 import { JsonLinesFileSink } from "../infrastructure/logging/file-sink";
 import { createLogger } from "../infrastructure/logging/logger";
 import { MIGRATIONS } from "../infrastructure/persistence/migrations/catalog";
@@ -237,6 +238,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     {
       bus: { invoke: (command, input, options) => commandBus.invoke(command, input, options) },
       processes,
+      http: new FetchHttpClient(logger),
       secrets: new SystemSecrets(options.env, processes, process.platform, options.secrets),
       logger,
       clock: systemClock,
