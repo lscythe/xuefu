@@ -20,16 +20,14 @@
 <text x="27 36" y="50" fill="#9a9db6">Go</text>
 <rect x="54" y="36" width="99" height="18" fill="#1c1d29"/>
 <text x="54 63 72 81 90 99 108 117 126 135 144" y="50" fill="#3d405a">──────────╮</text>
-<rect x="153" y="36" width="9" height="18" fill="#1c1d29"/>
-<text x="153" y="50" fill="#f2a774">╭</text>
-<rect x="162" y="36" width="18" height="18" fill="#272939"/>
-<text x="162 171" y="50" fill="#f2a774">┌─</text>
-<rect x="180" y="36" width="108" height="18" fill="#272939"/>
-<text x="189 198 207 216 225 243 252 261 270" y="50" fill="#b8a6f6">Startwork</text>
-<rect x="288" y="36" width="450" height="18" fill="#272939"/>
-<text x="288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="50" fill="#f2a774">─────────────────────────────────────────────────┐</text>
-<rect x="738" y="36" width="162" height="18" fill="#1c1d29"/>
-<text x="738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="50" fill="#3d405a">─────────────────╮</text>
+<rect x="153" y="36" width="450" height="18" fill="#1c1d29"/>
+<text x="153 162 180 198 207 216 225 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594" y="50" fill="#f2a774">╭─1Work───────────────────────────────────────╮</text>
+<rect x="603" y="36" width="18" height="18" fill="#1c1d29"/>
+<text x="603 612" y="50" fill="#3d405a">╭─</text>
+<rect x="621" y="36" width="81" height="18" fill="#1c1d29"/>
+<text x="630 648 657 666 675 684" y="50" fill="#9a9db6">2Today</text>
+<rect x="702" y="36" width="198" height="18" fill="#1c1d29"/>
+<text x="702 711 720 729 738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="50" fill="#3d405a">─────────────────────╮</text>
 <rect x="0" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="68" fill="#3d405a">│</text>
 <rect x="9" y="54" width="9" height="18" fill="#1c1d29"/>
@@ -42,16 +40,17 @@
 <text x="144" y="68" fill="#3d405a">│</text>
 <rect x="153" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="153" y="68" fill="#f2a774">│</text>
-<rect x="162" y="54" width="9" height="18" fill="#272939"/>
-<text x="162" y="68" fill="#f2a774">│</text>
-<rect x="171" y="54" width="9" height="18" fill="#272939"/>
-<rect x="180" y="54" width="81" height="18" fill="#272939"/>
-<text x="180 189 198 207 216 234 243 252" y="68" fill="#9a9db6">Issuekey</text>
-<rect x="261" y="54" width="468" height="18" fill="#272939"/>
-<rect x="729" y="54" width="9" height="18" fill="#272939"/>
-<text x="729" y="68" fill="#f2a774">│</text>
-<rect x="738" y="54" width="81" height="18" fill="#1c1d29"/>
-<text x="738 747 765 774 783 792 801 810" y="68" fill="#9a9db6">edtoday.</text>
+<rect x="162" y="54" width="9" height="18" fill="#1c1d29"/>
+<rect x="171" y="54" width="342" height="18" fill="#1c1d29"/>
+<text x="171 180 189 198 207 216 225 243 252 270 279 288 297 306 315 324 333 351 360 378 387 396 405 414 423 441 450 459 468 477 486 495 504" y="68" fill="#dadcea">NothinginprogressinMobileBanking.</text>
+<rect x="513" y="54" width="81" height="18" fill="#1c1d29"/>
+<rect x="594" y="54" width="9" height="18" fill="#1c1d29"/>
+<text x="594" y="68" fill="#f2a774">│</text>
+<rect x="603" y="54" width="9" height="18" fill="#1c1d29"/>
+<text x="603" y="68" fill="#3d405a">│</text>
+<rect x="612" y="54" width="9" height="18" fill="#1c1d29"/>
+<rect x="621" y="54" width="198" height="18" fill="#1c1d29"/>
+<text x="621 630 639 648 657 666 675 693 702 711 720 729 738 747 765 774 783 792 801 810" y="68" fill="#9a9db6">Nothingtrackedtoday.</text>
 <rect x="819" y="54" width="72" height="18" fill="#1c1d29"/>
 <rect x="891" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="68" fill="#3d405a">│</text>
@@ -62,19 +61,15 @@
 <text x="144" y="86" fill="#3d405a">│</text>
 <rect x="153" y="72" width="9" height="18" fill="#1c1d29"/>
 <text x="153" y="86" fill="#f2a774">│</text>
-<rect x="162" y="72" width="9" height="18" fill="#272939"/>
-<text x="162" y="86" fill="#f2a774">│</text>
-<rect x="171" y="72" width="9" height="18" fill="#272939"/>
-<rect x="180" y="72" width="18" height="18" fill="#272939"/>
-<text x="180" y="86" fill="#e8685c">&gt;</text>
-<rect x="198" y="72" width="90" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 243 252 261 270 279" y="86" fill="#dadcea">biometrics</text>
-<rect x="288" y="72" width="9" height="18" fill="#272939"/>
-<text x="288" y="86" fill="#b8a6f6">▏</text>
-<rect x="297" y="72" width="432" height="18" fill="#272939"/>
-<rect x="729" y="72" width="9" height="18" fill="#272939"/>
-<text x="729" y="86" fill="#f2a774">│</text>
-<rect x="738" y="72" width="153" height="18" fill="#1c1d29"/>
+<rect x="162" y="72" width="9" height="18" fill="#1c1d29"/>
+<rect x="171" y="72" width="369" height="18" fill="#1c1d29"/>
+<text x="171 180 189 198 207 225 234 243 252 270 279 288 297 306 324 333 342 351 360 378 387 396 405 423 432 441 450 459 477 486 495 504 513 522 531" y="86" fill="#9a9db6">Startsomewith:xuefuworkstart&lt;issue&gt;</text>
+<rect x="540" y="72" width="54" height="18" fill="#1c1d29"/>
+<rect x="594" y="72" width="9" height="18" fill="#1c1d29"/>
+<text x="594" y="86" fill="#f2a774">│</text>
+<rect x="603" y="72" width="9" height="18" fill="#1c1d29"/>
+<text x="603" y="86" fill="#3d405a">│</text>
+<rect x="612" y="72" width="279" height="18" fill="#1c1d29"/>
 <rect x="891" y="72" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="86" fill="#3d405a">│</text>
 <rect x="0" y="90" width="9" height="18" fill="#1c1d29"/>
@@ -89,17 +84,12 @@
 <text x="144" y="104" fill="#3d405a">│</text>
 <rect x="153" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="153" y="104" fill="#f2a774">│</text>
-<rect x="162" y="90" width="9" height="18" fill="#272939"/>
-<text x="162" y="104" fill="#f2a774">│</text>
-<rect x="171" y="90" width="9" height="18" fill="#272939"/>
-<rect x="180" y="90" width="18" height="18" fill="#272939"/>
-<text x="180" y="104" fill="#e8685c">✗</text>
-<rect x="198" y="90" width="405" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 252 261 270 288 297 315 324 333 342 351 360 369 378 396 405 414 423 441 450 459 468 486 495 504 513 531 540 549 558 567 576 585 594" y="104" fill="#dadcea">Issuekeyisinvalid:mustlooklikePROJ-123</text>
-<rect x="603" y="90" width="126" height="18" fill="#272939"/>
-<rect x="729" y="90" width="9" height="18" fill="#272939"/>
-<text x="729" y="104" fill="#f2a774">│</text>
-<rect x="738" y="90" width="153" height="18" fill="#1c1d29"/>
+<rect x="162" y="90" width="432" height="18" fill="#1c1d29"/>
+<rect x="594" y="90" width="9" height="18" fill="#1c1d29"/>
+<text x="594" y="104" fill="#f2a774">│</text>
+<rect x="603" y="90" width="9" height="18" fill="#1c1d29"/>
+<text x="603" y="104" fill="#3d405a">│</text>
+<rect x="612" y="90" width="279" height="18" fill="#1c1d29"/>
 <rect x="891" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="104" fill="#3d405a">│</text>
 <rect x="0" y="108" width="9" height="18" fill="#1c1d29"/>
@@ -109,15 +99,12 @@
 <text x="144" y="122" fill="#3d405a">│</text>
 <rect x="153" y="108" width="9" height="18" fill="#1c1d29"/>
 <text x="153" y="122" fill="#f2a774">│</text>
-<rect x="162" y="108" width="9" height="18" fill="#272939"/>
-<text x="162" y="122" fill="#f2a774">│</text>
-<rect x="171" y="108" width="9" height="18" fill="#272939"/>
-<rect x="180" y="108" width="180" height="18" fill="#272939"/>
-<text x="180 189 198 207 216 234 243 252 261 288 297 306 324 333 342 351" y="122" fill="#9a9db6">enternextescback</text>
-<rect x="360" y="108" width="369" height="18" fill="#272939"/>
-<rect x="729" y="108" width="9" height="18" fill="#272939"/>
-<text x="729" y="122" fill="#f2a774">│</text>
-<rect x="738" y="108" width="153" height="18" fill="#1c1d29"/>
+<rect x="162" y="108" width="432" height="18" fill="#1c1d29"/>
+<rect x="594" y="108" width="9" height="18" fill="#1c1d29"/>
+<text x="594" y="122" fill="#f2a774">│</text>
+<rect x="603" y="108" width="9" height="18" fill="#1c1d29"/>
+<text x="603" y="122" fill="#3d405a">│</text>
+<rect x="612" y="108" width="279" height="18" fill="#1c1d29"/>
 <rect x="891" y="108" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="122" fill="#3d405a">│</text>
 <rect x="0" y="126" width="9" height="18" fill="#1c1d29"/>
@@ -132,9 +119,12 @@
 <text x="144" y="140" fill="#3d405a">│</text>
 <rect x="153" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="153" y="140" fill="#f2a774">│</text>
-<rect x="162" y="126" width="576" height="18" fill="#272939"/>
-<text x="162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="140" fill="#f2a774">└──────────────────────────────────────────────────────────────┘</text>
-<rect x="738" y="126" width="153" height="18" fill="#1c1d29"/>
+<rect x="162" y="126" width="432" height="18" fill="#1c1d29"/>
+<rect x="594" y="126" width="9" height="18" fill="#1c1d29"/>
+<text x="594" y="140" fill="#f2a774">│</text>
+<rect x="603" y="126" width="9" height="18" fill="#1c1d29"/>
+<text x="603" y="140" fill="#3d405a">│</text>
+<rect x="612" y="126" width="279" height="18" fill="#1c1d29"/>
 <rect x="891" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="140" fill="#3d405a">│</text>
 <rect x="0" y="144" width="9" height="18" fill="#1c1d29"/>
@@ -204,16 +194,16 @@
 <rect x="0" y="216" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="230" fill="#3d405a">│</text>
 <rect x="9" y="216" width="135" height="18" fill="#1c1d29"/>
-<rect x="144" y="216" width="27" height="18" fill="#1c1d29"/>
-<text x="144 153 162" y="230" fill="#3d405a">│╭─</text>
-<rect x="171" y="216" width="81" height="18" fill="#1c1d29"/>
-<text x="180 198 207 216 225 234" y="230" fill="#9a9db6">3Notes</text>
-<rect x="252" y="216" width="369" height="18" fill="#1c1d29"/>
-<text x="252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612" y="230" fill="#3d405a">──────────────────────────────────────╮╭─</text>
-<rect x="621" y="216" width="108" height="18" fill="#1c1d29"/>
-<text x="630 648 657 666 675 684 693 702 711" y="230" fill="#9a9db6">4Activity</text>
-<rect x="729" y="216" width="171" height="18" fill="#1c1d29"/>
-<text x="729 738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="230" fill="#3d405a">──────────────────╮</text>
+<rect x="144" y="216" width="18" height="18" fill="#1c1d29"/>
+<text x="144 153" y="230" fill="#3d405a">│╭</text>
+<rect x="162" y="216" width="18" height="18" fill="#272939"/>
+<text x="162 171" y="230" fill="#f2a774">┌─</text>
+<rect x="180" y="216" width="108" height="18" fill="#272939"/>
+<text x="189 198 207 216 225 243 252 261 270" y="230" fill="#b8a6f6">Startwork</text>
+<rect x="288" y="216" width="450" height="18" fill="#272939"/>
+<text x="288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="230" fill="#f2a774">─────────────────────────────────────────────────┐</text>
+<rect x="738" y="216" width="162" height="18" fill="#1c1d29"/>
+<text x="738 747 756 765 774 783 792 801 810 819 828 837 846 855 864 873 882 891" y="230" fill="#3d405a">─────────────────╮</text>
 <rect x="0" y="234" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="248" fill="#3d405a">│</text>
 <rect x="9" y="234" width="9" height="18" fill="#1c1d29"/>
@@ -224,15 +214,16 @@
 <rect x="135" y="234" width="9" height="18" fill="#1c1d29"/>
 <rect x="144" y="234" width="18" height="18" fill="#1c1d29"/>
 <text x="144 153" y="248" fill="#3d405a">││</text>
-<rect x="162" y="234" width="9" height="18" fill="#1c1d29"/>
-<rect x="171" y="234" width="126" height="18" fill="#1c1d29"/>
-<text x="171 180 189 198 207 216 234 243 252 261 270 279 288" y="248" fill="#f2a774" font-weight="bold">MobileBanking</text>
-<rect x="297" y="234" width="297" height="18" fill="#1c1d29"/>
-<rect x="594" y="234" width="18" height="18" fill="#1c1d29"/>
-<text x="594 603" y="248" fill="#3d405a">││</text>
-<rect x="612" y="234" width="9" height="18" fill="#1c1d29"/>
-<rect x="621" y="234" width="243" height="18" fill="#1c1d29"/>
-<text x="621 630 639 648 657 666 675 693 702 711 720 729 738 747 756 774 783 801 810 819 828 837 846" y="248" fill="#9a9db6">NothingrecordedinMobile</text>
+<rect x="162" y="234" width="9" height="18" fill="#272939"/>
+<text x="162" y="248" fill="#f2a774">│</text>
+<rect x="171" y="234" width="9" height="18" fill="#272939"/>
+<rect x="180" y="234" width="81" height="18" fill="#272939"/>
+<text x="180 189 198 207 216 234 243 252" y="248" fill="#9a9db6">Issuekey</text>
+<rect x="261" y="234" width="468" height="18" fill="#272939"/>
+<rect x="729" y="234" width="9" height="18" fill="#272939"/>
+<text x="729" y="248" fill="#f2a774">│</text>
+<rect x="738" y="234" width="126" height="18" fill="#1c1d29"/>
+<text x="738 747 756 774 783 801 810 819 828 837 846" y="248" fill="#9a9db6">dedinMobile</text>
 <rect x="864" y="234" width="27" height="18" fill="#1c1d29"/>
 <rect x="891" y="234" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="248" fill="#3d405a">│</text>
@@ -241,16 +232,19 @@
 <rect x="9" y="252" width="135" height="18" fill="#1c1d29"/>
 <rect x="144" y="252" width="18" height="18" fill="#1c1d29"/>
 <text x="144 153" y="266" fill="#3d405a">││</text>
-<rect x="162" y="252" width="9" height="18" fill="#1c1d29"/>
-<rect x="171" y="252" width="234" height="18" fill="#1c1d29"/>
-<text x="171 180 198 207 216 225 243 252 261 270 288 297 306 324 333 342 360 369 378 387 396" y="266" fill="#9a9db6">Nonoteyet.Addonewith:</text>
-<rect x="405" y="252" width="189" height="18" fill="#1c1d29"/>
-<rect x="594" y="252" width="18" height="18" fill="#1c1d29"/>
-<text x="594 603" y="266" fill="#3d405a">││</text>
-<rect x="612" y="252" width="9" height="18" fill="#1c1d29"/>
-<rect x="621" y="252" width="108" height="18" fill="#1c1d29"/>
-<text x="621 630 639 648 657 666 675 693 702 711 720" y="266" fill="#9a9db6">Bankingyet.</text>
-<rect x="729" y="252" width="162" height="18" fill="#1c1d29"/>
+<rect x="162" y="252" width="9" height="18" fill="#272939"/>
+<text x="162" y="266" fill="#f2a774">│</text>
+<rect x="171" y="252" width="9" height="18" fill="#272939"/>
+<rect x="180" y="252" width="18" height="18" fill="#272939"/>
+<text x="180" y="266" fill="#e8685c">&gt;</text>
+<rect x="198" y="252" width="90" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 243 252 261 270 279" y="266" fill="#dadcea">biometrics</text>
+<rect x="288" y="252" width="9" height="18" fill="#272939"/>
+<text x="288" y="266" fill="#b8a6f6">▏</text>
+<rect x="297" y="252" width="432" height="18" fill="#272939"/>
+<rect x="729" y="252" width="9" height="18" fill="#272939"/>
+<text x="729" y="266" fill="#f2a774">│</text>
+<rect x="738" y="252" width="153" height="18" fill="#1c1d29"/>
 <rect x="891" y="252" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="266" fill="#3d405a">│</text>
 <rect x="0" y="270" width="9" height="18" fill="#1c1d29"/>
@@ -263,13 +257,17 @@
 <rect x="117" y="270" width="27" height="18" fill="#1c1d29"/>
 <rect x="144" y="270" width="18" height="18" fill="#1c1d29"/>
 <text x="144 153" y="284" fill="#3d405a">││</text>
-<rect x="162" y="270" width="9" height="18" fill="#1c1d29"/>
-<rect x="171" y="270" width="234" height="18" fill="#1c1d29"/>
-<text x="189 198 207 216 225 243 252 261 270 288 297 306 315 324 333 351 360 369 378 387 396" y="284" fill="#9a9db6">xuefunoteappend&lt;text&gt;</text>
-<rect x="405" y="270" width="189" height="18" fill="#1c1d29"/>
-<rect x="594" y="270" width="18" height="18" fill="#1c1d29"/>
-<text x="594 603" y="284" fill="#3d405a">││</text>
-<rect x="612" y="270" width="279" height="18" fill="#1c1d29"/>
+<rect x="162" y="270" width="9" height="18" fill="#272939"/>
+<text x="162" y="284" fill="#f2a774">│</text>
+<rect x="171" y="270" width="9" height="18" fill="#272939"/>
+<rect x="180" y="270" width="18" height="18" fill="#272939"/>
+<text x="180" y="284" fill="#e8685c">✗</text>
+<rect x="198" y="270" width="405" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 252 261 270 288 297 315 324 333 342 351 360 369 378 396 405 414 423 441 450 459 468 486 495 504 513 531 540 549 558 567 576 585 594" y="284" fill="#dadcea">Issuekeyisinvalid:mustlooklikePROJ-123</text>
+<rect x="603" y="270" width="126" height="18" fill="#272939"/>
+<rect x="729" y="270" width="9" height="18" fill="#272939"/>
+<text x="729" y="284" fill="#f2a774">│</text>
+<rect x="738" y="270" width="153" height="18" fill="#1c1d29"/>
 <rect x="891" y="270" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="284" fill="#3d405a">│</text>
 <rect x="0" y="288" width="9" height="18" fill="#1c1d29"/>
@@ -277,10 +275,15 @@
 <rect x="9" y="288" width="135" height="18" fill="#1c1d29"/>
 <rect x="144" y="288" width="18" height="18" fill="#1c1d29"/>
 <text x="144 153" y="302" fill="#3d405a">││</text>
-<rect x="162" y="288" width="432" height="18" fill="#1c1d29"/>
-<rect x="594" y="288" width="18" height="18" fill="#1c1d29"/>
-<text x="594 603" y="302" fill="#3d405a">││</text>
-<rect x="612" y="288" width="279" height="18" fill="#1c1d29"/>
+<rect x="162" y="288" width="9" height="18" fill="#272939"/>
+<text x="162" y="302" fill="#f2a774">│</text>
+<rect x="171" y="288" width="9" height="18" fill="#272939"/>
+<rect x="180" y="288" width="180" height="18" fill="#272939"/>
+<text x="180 189 198 207 216 234 243 252 261 288 297 306 324 333 342 351" y="302" fill="#9a9db6">enternextescback</text>
+<rect x="360" y="288" width="369" height="18" fill="#272939"/>
+<rect x="729" y="288" width="9" height="18" fill="#272939"/>
+<text x="729" y="302" fill="#f2a774">│</text>
+<rect x="738" y="288" width="153" height="18" fill="#1c1d29"/>
 <rect x="891" y="288" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="302" fill="#3d405a">│</text>
 <rect x="0" y="306" width="9" height="18" fill="#1c1d29"/>
@@ -293,10 +296,9 @@
 <rect x="117" y="306" width="27" height="18" fill="#1c1d29"/>
 <rect x="144" y="306" width="18" height="18" fill="#1c1d29"/>
 <text x="144 153" y="320" fill="#3d405a">││</text>
-<rect x="162" y="306" width="432" height="18" fill="#1c1d29"/>
-<rect x="594" y="306" width="18" height="18" fill="#1c1d29"/>
-<text x="594 603" y="320" fill="#3d405a">││</text>
-<rect x="612" y="306" width="279" height="18" fill="#1c1d29"/>
+<rect x="162" y="306" width="576" height="18" fill="#272939"/>
+<text x="162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="320" fill="#f2a774">└──────────────────────────────────────────────────────────────┘</text>
+<rect x="738" y="306" width="153" height="18" fill="#1c1d29"/>
 <rect x="891" y="306" width="9" height="18" fill="#1c1d29"/>
 <text x="891" y="320" fill="#3d405a">│</text>
 <rect x="0" y="324" width="9" height="18" fill="#1c1d29"/>
