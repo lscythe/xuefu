@@ -160,3 +160,140 @@ describe("gitActions branches", () => {
     expect(refused.ok ? null : refused.error.kind).toBe("validation");
   });
 });
+
+describe("gitActions fetch, pull and push", () => {
+  function remoteSetup(branch: string | null = "main") {
+    const calls: string[] = [];
+    const bus = new CommandBus({
+      logger: testLogger().logger,
+      clock: new ManualClock(),
+      ids: new SequentialIds(),
+    });
+    const actions = gitActions(
+      fakeGit({
+        status: () =>
+          Promise.resolve(
+            ok({
+              branch,
+              commit: "1a2b3c4",
+              upstream: null,
+              ahead: 0,
+              behind: 0,
+              changes: [],
+              conflicts: [],
+              untracked: [],
+              stashes: 0,
+            }),
+          ),
+        fetch: () => {
+          calls.push("fetch");
+          return Promise.resolve(ok(undefined));
+        },
+        pull: () => {
+          calls.push("pull");
+          return Promise.resolve(ok(undefined));
+        },
+        push: (_folder, publish) => {
+          calls.push(publish === null ? "push" : `publish ${publish.remote} ${publish.branch}`);
+          return Promise.resolve(ok(undefined));
+        },
+      }),
+    );
+    bus.register(actions.fetch);
+    bus.register(actions.pull);
+    bus.register(actions.push);
+    /** Asks, approves what was asked, and gives the prompt with the outcome. */
+    const approve = async (command: typeof actions.push | typeof actions.pull, input: object) => {
+      const asked = await bus.invoke(command as typeof actions.push, input);
+      if (asked.ok || asked.error.kind !== "confirmation-required") throw new Error("not asked");
+      const done = await bus.invoke(command as typeof actions.push, input, {
+        confirmation: confirmationTokenFor(asked.error),
+      });
+      return { prompt: asked.error.prompt, done };
+    };
+    return { bus, actions, calls, approve };
+  }
+
+  test("fetching runs at once", async () => {
+    const { bus, actions, calls } = remoteSetup();
+    expect(await bus.invoke(actions.fetch, { folder: FOLDER })).toEqual(ok(undefined));
+    expect(calls).toEqual(["fetch"]);
+  });
+
+  test("pushing asks first, naming the branch, where it goes and how much", async () => {
+    const { actions, calls, approve } = remoteSetup();
+    const { prompt, done } = await approve(actions.push, {
+      folder: FOLDER,
+      branch: "main",
+      remote: "origin",
+      upstream: "origin/main",
+      ahead: 2,
+    });
+    expect(prompt).toMatchObject({
+      title: "Push",
+      details: [
+        { label: "Branch", value: "main" },
+        { label: "To", value: "origin/main" },
+        { label: "Repository", value: FOLDER },
+      ],
+      consequence: "Sends 2 commits to origin/main, where others will see them.",
+    });
+    expect(done).toEqual(ok(undefined));
+    expect(calls).toEqual(["push"]);
+  });
+
+  test("a branch with no upstream is published on the remote", async () => {
+    const { actions, calls, approve } = remoteSetup("feat/x");
+    const { prompt } = await approve(actions.push, {
+      folder: FOLDER,
+      branch: "feat/x",
+      remote: "origin",
+      upstream: null,
+      ahead: 0,
+    });
+    expect(prompt).toMatchObject({
+      title: "Publish branch",
+      consequence: "Makes feat/x on origin with its commits, and tracks it from now on.",
+      confirmLabel: "Publish",
+    });
+    expect(calls).toEqual(["publish origin feat/x"]);
+  });
+
+  test("pulling asks first, saying how many commits come in", async () => {
+    const { actions, calls, approve } = remoteSetup();
+    const { prompt } = await approve(actions.pull, {
+      folder: FOLDER,
+      branch: "main",
+      upstream: "origin/main",
+      behind: 1,
+    });
+    expect(prompt.consequence).toBe(
+      "Brings 1 commit from origin/main into main, merging or rebasing as your git config says.",
+    );
+    expect(calls).toEqual(["pull"]);
+  });
+
+  test("what was approved for one branch is not done once another is in front", async () => {
+    const { actions, calls, approve } = remoteSetup("other");
+    const { done } = await approve(actions.pull, {
+      folder: FOLDER,
+      branch: "main",
+      upstream: "origin/main",
+      behind: 0,
+    });
+    expect(done.ok ? null : done.error.message).toBe("The branch is now other, not main");
+    expect(calls).toEqual([]);
+  });
+
+  test("a remote named like an option is refused", async () => {
+    const { bus } = remoteSetup();
+    const refused = await bus.dispatch("git.push", {
+      folder: FOLDER,
+      branch: "main",
+      remote: "--force",
+      upstream: null,
+      ahead: 0,
+    });
+    expect(refused.ok ? null : refused.error.kind).toBe("validation");
+  });
+});

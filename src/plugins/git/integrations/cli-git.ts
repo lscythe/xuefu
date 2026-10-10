@@ -8,6 +8,8 @@ import { parseStatus } from "../domain/status";
 
 const STATUS_TIMEOUT_MS = 10_000;
 const INDEX_TIMEOUT_MS = 30_000;
+/** Talking to a remote over a slow link. */
+const NETWORK_TIMEOUT_MS = 2 * 60_000;
 /** Commit hooks may lint and type-check the whole project. */
 const COMMIT_TIMEOUT_MS = 5 * 60_000;
 /** A status this long is a repository in trouble, not one worth listing. */
@@ -16,8 +18,13 @@ const MAX_STATUS_BYTES = 8 * 1024 * 1024;
 const ENV = {
   // Never wait on a password prompt nobody can see.
   GIT_TERMINAL_PROMPT: "0",
-  // Nor on an editor: every message is given on the command line.
+  // Nor on an editor: every message is given on the command line, and merges keep git's own.
   GIT_EDITOR: "true",
+  GIT_MERGE_AUTOEDIT: "no",
+  // ssh asks for passphrases and host keys on the terminal, which the cockpit is drawing on. This
+  // makes it ask a program that always says no, so it fails at once instead.
+  SSH_ASKPASS_REQUIRE: "force",
+  SSH_ASKPASS: "false",
   // Messages in English, so "not a git repository" can be recognised.
   LC_ALL: "C",
 };
@@ -32,6 +39,11 @@ const STATUS_ENV = {
 const NOT_A_REPOSITORY = /not a git repository/i;
 const NOT_MERGED = /is not fully merged/i;
 const LOCAL_CHANGES = /local changes .* would be overwritten/i;
+const REJECTED = /\[rejected\][^\n]*\((non-fast-forward|fetch first)\)/;
+const AUTHENTICATION =
+  /permission denied \(publickey|authentication failed|could not read (username|password)|host key verification failed/i;
+const DIVERGENT = /reconcile divergent branches/i;
+const CONFLICT = /^CONFLICT /m;
 
 /**
  * Why git failed, in a line: its first fatal or error line, or else the last thing it said, which
@@ -47,8 +59,18 @@ function reason({ stderr, stdout }: ProcessOutput): string {
 }
 
 /** What to do about a failure git explains in a way XueFu recognises. */
-function hintFor({ stderr }: ProcessOutput): string | undefined {
+function hintFor({ stderr, stdout }: ProcessOutput): string | undefined {
   if (LOCAL_CHANGES.test(stderr)) return "Commit or stash your changes first.";
+  if (REJECTED.test(stderr)) return "The remote has commits you do not; pull first, then push.";
+  if (AUTHENTICATION.test(stderr)) {
+    return "XueFu cannot answer prompts: load your SSH key into ssh-agent, or set up a credential helper.";
+  }
+  if (DIVERGENT.test(stderr)) {
+    return "Set pull.rebase or pull.ff in your git config to say how to combine them.";
+  }
+  if (CONFLICT.test(stderr) || CONFLICT.test(stdout)) {
+    return "Resolve the conflicts, stage the files and commit.";
+  }
   return undefined;
 }
 
@@ -179,6 +201,32 @@ export function cliGit(processes: ProcessRunner): GitClient {
       return !force && NOT_MERGED.test(ran.value.stderr)
         ? ok(false)
         : failed("git branch", ran.value);
+    },
+
+    async remotes(folder, signal) {
+      const listed = await change("git remote", folder, ["remote"], STATUS_TIMEOUT_MS, signal);
+      return listed.ok ? ok(listed.value.stdout.split("\n").filter((name) => name !== "")) : listed;
+    },
+
+    async fetch(folder, signal) {
+      const args = ["fetch", "--quiet"];
+      const fetched = await change("git fetch", folder, args, NETWORK_TIMEOUT_MS, signal);
+      return fetched.ok ? ok(undefined) : fetched;
+    },
+
+    async pull(folder, signal) {
+      const args = ["pull", "--quiet"];
+      const pulled = await change("git pull", folder, args, NETWORK_TIMEOUT_MS, signal);
+      return pulled.ok ? ok(undefined) : pulled;
+    },
+
+    async push(folder, publish, signal) {
+      const args =
+        publish === null
+          ? ["push", "--quiet"]
+          : ["push", "--quiet", "--set-upstream", publish.remote, publish.branch];
+      const pushed = await change("git push", folder, args, NETWORK_TIMEOUT_MS, signal);
+      return pushed.ok ? ok(undefined) : pushed;
     },
 
     async commit(folder, message, signal) {

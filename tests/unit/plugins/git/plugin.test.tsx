@@ -86,6 +86,9 @@ describe("gitPlugin", () => {
       "git.branch.create",
       "git.branch.checkout",
       "git.branch.delete",
+      "git.fetch",
+      "git.pull",
+      "git.push",
     ]);
   });
 

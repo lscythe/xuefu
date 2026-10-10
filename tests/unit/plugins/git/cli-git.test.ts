@@ -85,6 +85,9 @@ describe("cliGit stage and unstage", () => {
     expect(calls[0]?.spec.env).toEqual({
       GIT_TERMINAL_PROMPT: "0",
       GIT_EDITOR: "true",
+      GIT_MERGE_AUTOEDIT: "no",
+      SSH_ASKPASS_REQUIRE: "force",
+      SSH_ASKPASS: "false",
       LC_ALL: "C",
     });
     expect(calls[0]?.options.signal).toBe(signal);
@@ -191,5 +194,51 @@ describe("cliGit branches", () => {
     expect(!refused.ok && refused.error.message).toBe(
       "git branch failed: cannot delete branch 'main'",
     );
+  });
+});
+
+describe("cliGit remotes, fetch, pull and push", () => {
+  test("lists remotes by name", async () => {
+    const { runner } = fakeRunner({ stdout: "origin\nupstream\n" });
+    expect(await cliGit(runner).remotes(HERE)).toEqual(ok(["origin", "upstream"]));
+  });
+
+  test("fetches, pulls and pushes as git's config says, publishing a branch when asked", async () => {
+    const { runner, calls } = fakeRunner({});
+    const git = cliGit(runner);
+    await git.fetch(HERE);
+    await git.pull(HERE);
+    await git.push(HERE, null);
+    await git.push(HERE, { remote: "origin", branch: "feat/x" as BranchName });
+    expect(calls.map((call) => call.spec.args)).toEqual([
+      ["fetch", "--quiet"],
+      ["pull", "--quiet"],
+      ["push", "--quiet"],
+      ["push", "--quiet", "--set-upstream", "origin", "feat/x"],
+    ]);
+    expect(calls.every((call) => call.options.timeoutMs === 120_000)).toBe(true);
+  });
+
+  test.each([
+    [
+      "! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'origin'\n",
+      "The remote has commits you do not; pull first, then push.",
+    ],
+    [
+      "git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n",
+      "XueFu cannot answer prompts: load your SSH key into ssh-agent, or set up a credential helper.",
+    ],
+    [
+      "hint: You have divergent branches and need to specify how to reconcile divergent branches.\nfatal: Need to specify how to reconcile divergent branches.\n",
+      "Set pull.rebase or pull.ff in your git config to say how to combine them.",
+    ],
+    [
+      "CONFLICT (content): Merge conflict in a.txt\n",
+      "Resolve the conflicts, stage the files and commit.",
+    ],
+  ])("a failure git explains comes with what to do: %#", async (stderr, hint) => {
+    const { runner } = fakeRunner({ exitCode: 1, stderr });
+    const pushed = await cliGit(runner).push(HERE, null);
+    expect(!pushed.ok && pushed.error.hint).toBe(hint);
   });
 });

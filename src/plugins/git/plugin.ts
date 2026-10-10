@@ -29,6 +29,9 @@ export const gitPlugin = definePlugin({
         actions.createBranch,
         actions.checkout,
         actions.deleteBranch,
+        actions.fetch,
+        actions.pull,
+        actions.push,
       ],
       view: lazy(async () => {
         const { gitView } = await import("./tui/git-view");

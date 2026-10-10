@@ -299,3 +299,61 @@ describe("cliGit branches", () => {
     expect(!switched.ok && switched.error.hint).toBe("Commit or stash your changes first.");
   });
 });
+
+describe("cliGit fetch, pull and push", () => {
+  /** A bare origin with one commit on main, and two clones of it. */
+  function shared() {
+    const seed = repo();
+    const bare = makeTempDir();
+    cleanups.push(bare.cleanup);
+    const origin = realpathSync(bare.path);
+    git(origin, "clone", "-q", "--bare", seed.path, ".");
+    const clone = () => {
+      const dir = makeTempDir();
+      cleanups.push(dir.cleanup);
+      const path = realpathSync(dir.path) as AbsolutePath;
+      git(path, "clone", "-q", origin, ".");
+      return {
+        path,
+        run: (...args: string[]) => git(path, ...args),
+        write: (file: string, text: string) => writeFileSync(join(path, file), text),
+      };
+    };
+    return { mine: clone(), theirs: clone() };
+  }
+
+  test("pushes commits, and the other clone fetches, then pulls them", async () => {
+    const { mine, theirs } = shared();
+    mine.write("a.txt", "a\n");
+    mine.run("add", "a.txt");
+    mine.run("commit", "-q", "-m", "add a");
+    expect(await client.remotes(mine.path)).toEqual(ok(["origin"]));
+    expect(await client.push(mine.path, null)).toEqual(ok(undefined));
+
+    expect(await client.fetch(theirs.path)).toEqual(ok(undefined));
+    expect(await status(theirs.path)).toMatchObject({ behind: 1 });
+    expect(await client.pull(theirs.path)).toEqual(ok(undefined));
+    expect(theirs.run("log", "-1", "--format=%s").trim()).toBe("add a");
+  });
+
+  test("publishes a new branch and tracks it", async () => {
+    const { mine } = shared();
+    mine.run("switch", "-q", "-c", "feat/x");
+    mine.run("commit", "-q", "--allow-empty", "-m", "feat");
+    expect(await client.push(mine.path, { remote: "origin", branch: name("feat/x") })).toEqual(
+      ok(undefined),
+    );
+    expect(await status(mine.path)).toMatchObject({ upstream: "origin/feat/x", ahead: 0 });
+  });
+
+  test("a push behind the remote is refused, saying to pull first", async () => {
+    const { mine, theirs } = shared();
+    theirs.run("commit", "-q", "--allow-empty", "-m", "theirs");
+    theirs.run("push", "-q");
+    mine.run("commit", "-q", "--allow-empty", "-m", "mine");
+    const pushed = await client.push(mine.path, null);
+    expect(!pushed.ok && pushed.error.hint).toBe(
+      "The remote has commits you do not; pull first, then push.",
+    );
+  });
+});

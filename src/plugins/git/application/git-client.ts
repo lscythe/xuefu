@@ -56,6 +56,21 @@ export interface GitClient {
     force: boolean,
     signal?: AbortSignal,
   ): Promise<Result<boolean, GitFailure>>;
+  /** The repository's remotes, by name. */
+  remotes(folder: AbsolutePath, signal?: AbortSignal): Promise<Result<string[], GitFailure>>;
+  /** Updates what is known of the remotes' branches, changing nothing here. */
+  fetch(folder: AbsolutePath, signal?: AbortSignal): Promise<Result<void, GitFailure>>;
+  /** Brings in the upstream's commits, merging or rebasing as the user's git config says. */
+  pull(folder: AbsolutePath, signal?: AbortSignal): Promise<Result<void, GitFailure>>;
+  /**
+   * Sends the current branch's commits to its upstream; with `publish`, first makes the branch
+   * on that remote and tracks it.
+   */
+  push(
+    folder: AbsolutePath,
+    publish: { readonly remote: string; readonly branch: BranchName } | null,
+    signal?: AbortSignal,
+  ): Promise<Result<void, GitFailure>>;
   /** Commits what is staged, running the repository's hooks; resolves to the new commit's id. */
   commit(
     folder: AbsolutePath,
