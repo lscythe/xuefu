@@ -114,6 +114,44 @@ describe("helpText", () => {
       expect(text).toContain(fragment);
     }
   });
+
+  test("lists plugins' commands after the core's, laid out the same way", () => {
+    const text = helpText("0.1.0", [
+      {
+        group: "git",
+        name: "status",
+        isDefault: true,
+        usage: "",
+        minArgs: 0,
+        maxArgs: 0,
+        flags: {
+          workspace: { type: "string", short: "w", value: "<id>", description: "which one" },
+          json: { type: "boolean", description: "machine-readable output" },
+        },
+        summary: "Show the branch",
+      },
+      {
+        group: "git",
+        name: "show",
+        usage: "<ref>",
+        minArgs: 1,
+        maxArgs: 1,
+        flags: {},
+        summary: "Show a commit",
+      },
+    ]);
+    const lines = text.split("\n");
+    const at = lines.indexOf("  git [status]                  Show the branch");
+    expect(at).toBeGreaterThan(lines.findIndex((line) => line.startsWith("  activity")));
+    expect(lines.slice(at, at + 5)).toEqual([
+      "  git [status]                  Show the branch",
+      "                                  -w, --workspace <id>  which one",
+      "                                  --json             machine-readable output",
+      "  git show <ref>                Show a commit",
+      "",
+    ]);
+    expect(lines[at + 5]).toBe("Options:");
+  });
 });
 
 function view(

@@ -11,8 +11,28 @@ import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import { clockDuration, type Timestamp } from "../domain/shared/time";
 import { wallClock } from "../domain/shared/wall-clock";
 import { elapsed } from "../domain/timesheet/timer";
+import type { PluginCommandSpec } from "./plugin-command";
 
-export function helpText(version: string): string {
+/** Help lines for plugins' commands, laid out like the core's. */
+function pluginHelp(plugins: readonly PluginCommandSpec[]): string {
+  return plugins
+    .flatMap((plugin) => {
+      const name = plugin.isDefault === true ? `[${plugin.name}]` : plugin.name;
+      const command = [plugin.group, name, plugin.usage].filter((part) => part !== "").join(" ");
+      return [
+        `  ${command.padEnd(28)}  ${plugin.summary}`,
+        ...Object.entries(plugin.flags).map(([flag, spec]) => {
+          const short = spec.short === undefined ? "" : `-${spec.short}, `;
+          const value = spec.value === undefined ? "" : ` ${spec.value}`;
+          return `${" ".repeat(34)}${`${short}--${flag}${value}`.padEnd(17)}  ${spec.description}`;
+        }),
+      ];
+    })
+    .map((line) => `${line}\n`)
+    .join("");
+}
+
+export function helpText(version: string, plugins: readonly PluginCommandSpec[] = []): string {
   return `血符 XueFu ${version}: terminal developer cockpit
 
 Usage:
@@ -61,7 +81,7 @@ Commands:
                                   -w, --workspace <id>  only in this workspace
                                   -n, --limit <count>   how many entries (default 20)
                                   --json             machine-readable output
-
+${pluginHelp(plugins)}
 Options:
   -h, --help                    Show this help
   -v, --version                 Print the version

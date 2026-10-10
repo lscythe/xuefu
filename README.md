@@ -12,8 +12,8 @@ A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooli
 around a single **Work Context**.
 
 > Status: **early development.** The cockpit opens, switches workspaces, keeps them in tabs,
-> tracks the issue you are working on and times it; the Jira, Git, PR, Jenkins and Android panels
-> are not built yet.
+> tracks the issue you are working on and times it, and reads git status; the Jira, PR, Jenkins
+> and Android plugins are not built yet.
 
 ## Usage
 
@@ -34,13 +34,15 @@ xuefu note --issue MOB-2841                                    # print the note 
 pbpaste | xuefu note save                                      # replace the note (blank text clears it)
 xuefu note list                                                # every note with its first line
 xuefu activity -w mobile-banking -n 50                         # what happened there, newest first
+xuefu git                                                      # branch and changed files here
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
-Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `74` I/O, `78` configuration.
+Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `69` a tool such as git
+failed or is missing, `74` I/O, `78` configuration.
 `workspace which` exits `1` outside every workspace, and `work` and `timer` exit `1` when nothing
 is in progress, which makes them usable in shell prompts. `activity` and `note` exit `1` when
-there is nothing to show.
+there is nothing to show, and `git` exits `1` when the workspace is not a git repository.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -80,6 +82,25 @@ the header, the Work section and Activity update within a second, without reopen
 
 On macOS, Alt shortcuts need the terminal to send Option as Meta (Terminal: Settings, Profiles,
 Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc+").
+
+## Plugins
+
+Integrations are built-in plugins, each on unless turned off in `config.yml`. Settings for a
+plugin XueFu does not have are an error, so a typo does not go unnoticed.
+
+```yaml
+version: 1
+plugins:
+  git:
+    enabled: false   # no `xuefu git`
+```
+
+| Plugin | Adds |
+|--------|------|
+| `git`  | `xuefu git status`: the branch, how it compares with its upstream, and changed files |
+
+Git runs as the installed `git`, with your own config, hooks and credential helpers. XueFu reads
+status without taking git's index lock, so it never blocks your own git commands.
 
 ## Development
 

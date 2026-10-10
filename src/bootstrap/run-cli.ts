@@ -25,8 +25,9 @@ import {
   workSubject,
 } from "../cli/format";
 import { type CliCommand, parseArgs } from "../cli/parse-args";
+import type { PluginInvocation } from "../cli/plugin-command";
 import { assertNever } from "../domain/shared/assert-never";
-import { validationError } from "../domain/shared/errors";
+import { configurationError, validationError } from "../domain/shared/errors";
 import { workspaceId } from "../domain/shared/ids";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
@@ -36,6 +37,7 @@ import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
+import { PLUGIN_COMMANDS, PLUGINS } from "./plugins";
 import { runTui, type TuiHost } from "./run-tui";
 import { type App, startApp } from "./start-app";
 
@@ -627,6 +629,36 @@ function showActivity(
   return entries.length === 0 ? EXIT.none : EXIT.ok;
 }
 
+async function runPluginCommand(
+  app: App,
+  out: Output,
+  invocation: PluginInvocation,
+): Promise<number> {
+  const started = app.plugins.find(({ plugin }) => plugin.id === invocation.group);
+  const commands = started?.parts.commands;
+  if (commands === undefined) {
+    const label =
+      PLUGINS.find((plugin) => plugin.id === invocation.group)?.label ?? invocation.group;
+    return fail(
+      out,
+      configurationError(`The ${label} plugin is turned off`, app.paths.configFile, [
+        { path: `plugins.${invocation.group}.enabled`, message: "set it to true to use it" },
+      ]),
+    );
+  }
+  const ran = await commands(invocation, {
+    workspace: async (given) => {
+      const target = await targetWorkspace(app, out, given);
+      if (!target.ok) return target;
+      const id = workspaceId(target.value);
+      return id.ok ? app.workspaces.find(id.value) : id;
+    },
+    stdout: (text) => print(out, text),
+    stderr: (text) => out.runtime.stderr.write(out.redactor.redactString(text)),
+  });
+  return ran.ok ? ran.value : fail(out, ran.error);
+}
+
 async function openCockpit(app: App, out: Output): Promise<number> {
   const closed = await runTui(app, out.runtime.tui, out.runtime.cwd, (text) =>
     out.redactor.redactString(text),
@@ -674,6 +706,8 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return listNotes(app, out, command.json);
     case "work.finish":
       return finishWork(app, out, command);
+    case "plugin":
+      return runPluginCommand(app, out, command.invocation);
     default:
       return assertNever(command);
   }
@@ -684,17 +718,17 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
   registerEnvironmentSecrets(runtime.env, registry);
   const out: Output = { runtime, redactor: createRedactor(registry) };
 
-  const invocation = parseArgs(runtime.argv);
+  const invocation = parseArgs(runtime.argv, PLUGIN_COMMANDS);
   if (!invocation.ok) {
     runtime.stderr.write(
-      `${formatError(invocation.error, out.redactor)}\n\n${helpText(runtime.version)}`,
+      `${formatError(invocation.error, out.redactor)}\n\n${helpText(runtime.version, PLUGIN_COMMANDS)}`,
     );
     return EXIT.usage;
   }
 
   switch (invocation.value.kind) {
     case "help":
-      runtime.stdout.write(helpText(runtime.version));
+      runtime.stdout.write(helpText(runtime.version, PLUGIN_COMMANDS));
       return EXIT.ok;
     case "version":
       runtime.stdout.write(`${runtime.version}\n`);

@@ -64,6 +64,7 @@ import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sql
 import { BunProcessRunner } from "../infrastructure/process/bun-process-runner";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
+import { PLUGINS, type StartedPlugin, startPlugins } from "./plugins";
 
 export type BootError =
   | ConfigurationError
@@ -106,6 +107,8 @@ export interface App {
   readonly changes: SqliteChangeWatcher;
   /** Runs git and other tools; children still running are stopped on close. */
   readonly processes: ProcessRunner;
+  /** The plugins their settings leave on, in order. */
+  readonly plugins: readonly StartedPlugin[];
   close(): void;
 }
 
@@ -226,6 +229,16 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
   }
 
   const processes = new BunProcessRunner(options.env);
+  const plugins = startPlugins(
+    PLUGINS,
+    { processes, logger, clock: systemClock },
+    config.plugins,
+    paths.value.configFile,
+  );
+  if (!plugins.ok) {
+    database.close();
+    return plugins;
+  }
 
   logger.info("XueFu started", {
     version: options.version,
@@ -262,6 +275,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     notes: new NoteQueries(noteRepository, workspaceRepository),
     changes: new SqliteChangeWatcher(database, logger),
     processes,
+    plugins: plugins.value,
     close: () => {
       logger.debug("XueFu stopping");
       processes.terminateAll();

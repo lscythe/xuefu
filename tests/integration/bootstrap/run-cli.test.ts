@@ -13,6 +13,7 @@ import {
 import type { TuiHost } from "../../../src/bootstrap/run-tui";
 import * as errors from "../../../src/domain/shared/errors";
 import { MIGRATIONS } from "../../../src/infrastructure/persistence/migrations/catalog";
+import { GIT_ENV, makeRepo } from "../../support/git-repo";
 import { makeTempDir } from "../../support/temp-dir";
 
 let dir: { path: string; cleanup: () => void };
@@ -895,6 +896,84 @@ describe("runCli: notes", () => {
     expect((await note(["append", "x", "--issue", "nope"])).code).toBe(EXIT.usage);
     expect((await run(["note", "append", "x"])).stderr).toContain("Not inside a workspace");
     expect((await note(["-w", "ghost"])).code).toBe(EXIT.noInput);
+  });
+});
+
+describe("runCli: plugins", () => {
+  const config = (yaml: string) => {
+    mkdirSync(join(dir.path, "config"), { recursive: true });
+    writeFileSync(join(dir.path, "config", "config.yml"), `version: 1\n${yaml}`);
+  };
+
+  test("git status shows the repository of the workspace this folder is in", async () => {
+    const repo = makeRepo();
+    try {
+      await run(["workspace", "add", repo.path, "--name", "Mobile"], GIT_ENV);
+      repo.write("README.md", "changed\n");
+      repo.write("new.txt", "new\n");
+      const shown = await run(["git"], GIT_ENV, repo.path);
+      expect(shown).toEqual({
+        code: EXIT.ok,
+        stdout:
+          "On main, not tracking a remote branch\n" +
+          "Not staged:\n  M  README.md\nUntracked:\n  ?  new.txt\n",
+        stderr: "",
+      });
+
+      repo.git("add", ".");
+      repo.git("commit", "-q", "-m", "second");
+      const clean = await run(["git", "status", "-w", "mobile"], GIT_ENV);
+      expect(clean.stdout).toBe(
+        "On main, not tracking a remote branch\nNothing to commit, working tree clean.\n",
+      );
+
+      const json = JSON.parse((await run(["git", "--json", "-w", "mobile"], GIT_ENV)).stdout);
+      expect(json).toMatchObject({ workspace: "mobile", repository: true, branch: "main" });
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  test("a workspace that is not a repository exits 1 and says so", async () => {
+    const plain = join(dir.path, "plain");
+    mkdirSync(plain);
+    await run(["workspace", "add", plain], GIT_ENV);
+    const shown = await run(["git", "status", "-w", "plain"], GIT_ENV);
+    expect(shown.code).toBe(EXIT.none);
+    expect(shown.stderr).toBe(`plain is not a git repository: ${realpathSync(plain)}\n`);
+    const json = await run(["git", "--json", "-w", "plain"], GIT_ENV);
+    expect(JSON.parse(json.stdout)).toEqual({ workspace: "plain", repository: false });
+  });
+
+  test("outside every workspace it asks for one", async () => {
+    const shown = await run(["git"], GIT_ENV);
+    expect(shown.code).toBe(EXIT.usage);
+    expect(shown.stderr).toContain("Not inside a workspace");
+  });
+
+  test("a plugin turned off in config says how to turn it back on", async () => {
+    config("plugins:\n  git:\n    enabled: false\n");
+    const shown = await run(["git"], GIT_ENV);
+    expect(shown.code).toBe(EXIT.config);
+    expect(shown.stderr).toContain("The Git plugin is turned off");
+    expect(shown.stderr).toContain("plugins.git.enabled");
+  });
+
+  test("settings for an unknown plugin, or invalid ones, stop XueFu from starting", async () => {
+    config("plugins:\n  gti:\n    enabled: true\n");
+    const typo = await run(["diagnostics"]);
+    expect(typo.code).toBe(EXIT.config);
+    expect(typo.stderr).toContain('no plugin named "gti"; plugins: git');
+
+    config("plugins:\n  git:\n    enabled: sometimes\n");
+    const invalid = await run(["diagnostics"]);
+    expect(invalid.code).toBe(EXIT.config);
+    expect(invalid.stderr).toContain("Invalid settings for the Git plugin");
+    expect(invalid.stderr).toContain("plugins.git.enabled");
+  });
+
+  test("help lists plugins' commands", async () => {
+    expect((await run(["--help"])).stdout).toContain("git [status]");
   });
 });
 

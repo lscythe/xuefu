@@ -1,8 +1,12 @@
-import type { FileSystemError, StorageError } from "../../domain/shared/errors";
+import type { FileSystemError, NotFoundError, StorageError } from "../../domain/shared/errors";
 import type { WorkspaceId } from "../../domain/shared/ids";
 import type { AbsolutePath } from "../../domain/shared/path";
 import { ok, type Result } from "../../domain/shared/result";
-import { type WorkspaceRegistry, workspaceAt } from "../../domain/workspace/registry";
+import {
+  findWorkspace,
+  type WorkspaceRegistry,
+  workspaceAt,
+} from "../../domain/workspace/registry";
 import type { NavigationKey } from "../../domain/workspace/session";
 import { currentTabs, type WorkspaceTabs } from "../../domain/workspace/tabs";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -42,6 +46,12 @@ export class WorkspaceQueries {
     private readonly tabRepository: WorkspaceTabsRepository,
     private readonly sessions: WorkspaceSessionRepository,
   ) {}
+
+  /** The registered workspace with this id. */
+  find(id: WorkspaceId): Result<Workspace, NotFoundError | StorageError> {
+    const registry = this.repository.load();
+    return registry.ok ? findWorkspace(registry.value, id) : registry;
+  }
 
   /** Where each workspace was left in the cockpit, keyed by workspace. */
   navigation(): Result<ReadonlyMap<WorkspaceId, NavigationKey>, StorageError> {
