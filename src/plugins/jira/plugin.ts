@@ -1,6 +1,7 @@
 import { lazy } from "solid-js";
 import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
+import { serviceUrlSchema } from "../../application/security/service-url";
 import { definePlugin } from "../plugin";
 import { jiraActions } from "./application/actions";
 import type { JiraChanges } from "./application/start-work";
@@ -8,18 +9,7 @@ import { JIRA_COMMANDS, jiraCommands } from "./cli/commands";
 import { MY_OPEN_ISSUES } from "./domain/issue";
 import { jiraRest } from "./integrations/jira-rest";
 
-const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
-
-/** Jira's address: HTTPS, but for a server on this machine; no trailing slash. */
-const JiraUrl = z
-  .url({ error: "must be Jira's address, such as https://jira.example.com" })
-  .refine((raw) => {
-    // Not an address at all is said by the check above.
-    if (!URL.canParse(raw)) return true;
-    const url = new URL(raw);
-    return url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
-  }, "must use https, so the token is never sent in the clear")
-  .transform((raw) => raw.replace(/\/+$/, ""));
+const JiraUrl = serviceUrlSchema("Jira", "https://jira.example.com");
 
 const JiraSettings = z
   .strictObject({
