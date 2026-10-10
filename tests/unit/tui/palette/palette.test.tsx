@@ -7,6 +7,7 @@ import { issueKey } from "../../../../src/domain/work/issue-key";
 import { issueTitle } from "../../../../src/domain/work/work-context";
 import { Palette, type PaletteProps } from "../../../../src/tui/palette/palette";
 import type { PaletteEntry } from "../../../../src/tui/palette/palette-model";
+import { dialogBounds } from "../../../support/dialog-bounds";
 
 let setup: TestRendererSetup | undefined;
 afterEach(() => {
@@ -64,6 +65,25 @@ describe("Palette", () => {
     expect(rowWith(frame, "Start work…")).toContain("▸ Start work…");
     expect(rowWith(frame, "Pause timer")).toMatch(/Pause timer +t {2}│/);
     expect(frame).toContain("↑↓ move  enter run  esc close");
+  });
+
+  test("sits centred, keeps its size while filtering and fits the fields when asking", async () => {
+    const palette = await renderPalette();
+    const before = dialogBounds(palette.captureCharFrame(), " Commands ");
+    expect(before.vertical).toBeLessThanOrEqual(1);
+    expect(before.horizontal).toBeLessThanOrEqual(1);
+    expect(before.bottom - before.top + 1).toBe(4 + 4);
+
+    await palette.mockInput.typeText("quit");
+    await palette.waitForFrame((f) => f.includes(": quit") && !f.includes("Pause timer"));
+    expect(dialogBounds(palette.captureCharFrame(), " Commands ")).toEqual(before);
+
+    await palette.mockInput.typeText("\b\b\b\b");
+    palette.mockInput.pressEnter();
+    await palette.waitForFrame((f) => f.includes(" Start work "));
+    const asking = dialogBounds(palette.captureCharFrame(), " Start work ");
+    expect(asking.vertical).toBeLessThanOrEqual(1);
+    expect(asking.bottom - asking.top + 1).toBe(3 + 2);
   });
 
   test("typing filters; enter runs the entry and closes", async () => {

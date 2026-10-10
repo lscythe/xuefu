@@ -2,6 +2,7 @@ import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createMemo, createSignal, For, Index, Match, Show, Switch } from "solid-js";
 import type { AppError } from "../../application/errors";
 import { assertNever } from "../../domain/shared/assert-never";
+import { Dialog, dialogListRows, dialogWidth } from "../dialog";
 import { ErrorLine } from "../error-line";
 import { Highlighted } from "../highlighted";
 import { cycle, scrollOffset } from "../list-navigation";
@@ -28,8 +29,6 @@ type Stage =
       readonly values: readonly (string | null)[];
     };
 
-const MAX_WIDTH = 64;
-const MAX_LIST_ROWS = 12;
 /** Border and padding on both sides, plus a column so keys stand clear of the border. */
 const CHROME = 5;
 /** "▸ " before each title. */
@@ -144,8 +143,8 @@ export function Palette(props: PaletteProps) {
   });
 
   const ascii = () => props.icons === "ascii";
-  const width = () => Math.min(MAX_WIDTH, dimensions().width - 4);
-  const listHeight = () => Math.max(3, Math.min(MAX_LIST_ROWS, dimensions().height - 10));
+  const width = () => dialogWidth(dimensions().width);
+  const listHeight = () => dialogListRows(dimensions().height, props.entries.length);
   const offset = () => scrollOffset(selected(), rows().length, listHeight());
   const cursor = () => (ascii() ? "_" : "▏");
   const gap = (entry: PaletteEntry) =>
@@ -161,88 +160,77 @@ export function Palette(props: PaletteProps) {
     );
 
   return (
-    <box
-      position="absolute"
-      zIndex={10}
-      top={2}
-      left={Math.max(0, Math.floor((dimensions().width - width()) / 2))}
-      width={width()}
-      flexDirection="column"
-      border
-      borderColor={PALETTE.borderFocused}
-      // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
-      backgroundColor={PALETTE.panelBg}
-      title={` ${asking()?.entry.title ?? "Commands"} `}
-      titleColor={PALETTE.accentSecondary}
-      paddingX={1}
-    >
-      <Switch>
-        <Match when={asking()}>
-          {(current: Accessor<Extract<Stage, { kind: "ask" }>>) => (
-            <>
-              <Index each={current().values}>
-                {(value, index) => (
-                  <text>
-                    <span style={{ fg: PALETTE.textMuted }}>
-                      {`${current().entry.fields[index]?.label ?? ""}  `}
-                    </span>
-                    <span style={{ fg: PALETTE.text }}>{value() ?? "-"}</span>
-                  </text>
-                )}
-              </Index>
-              <text fg={PALETTE.textMuted}>
-                {field()?.label ?? ""}
-                {field()?.optional === true ? " (optional)" : ""}
-              </text>
-              <text>
-                <span style={{ fg: PALETTE.accentPrimary }}>{"> "}</span>
-                <span style={{ fg: PALETTE.text }}>{input()}</span>
-                <span style={{ fg: PALETTE.cursor }}>{cursor()}</span>
-                <span style={{ fg: PALETTE.textDim }}>
-                  {input() === "" ? `e.g. ${field()?.example ?? ""}` : ""}
-                </span>
-              </text>
-            </>
-          )}
-        </Match>
-        <Match when={true}>
-          <text>
-            <span style={{ fg: PALETTE.accentPrimary }}>{": "}</span>
-            <span style={{ fg: PALETTE.text }}>{query()}</span>
-            <span style={{ fg: PALETTE.cursor }}>{cursor()}</span>
-          </text>
-          <Show
-            when={rows().length > 0}
-            fallback={
-              <text fg={PALETTE.textMuted}>{`No command matches "${query().trim()}"`}</text>
-            }
-          >
-            <For each={rows().slice(offset(), offset() + listHeight())}>
-              {(row) => {
-                const active = () => rows()[selected()] === row;
-                return (
-                  <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
+    <Dialog title={` ${asking()?.entry.title ?? "Commands"} `} width={width()}>
+      {/* While choosing, the query row and the list hold one height; asking fits its fields. */}
+      <box flexDirection="column" height={asking() === null ? listHeight() + 1 : "auto"}>
+        <Switch>
+          <Match when={asking()}>
+            {(current: Accessor<Extract<Stage, { kind: "ask" }>>) => (
+              <>
+                <Index each={current().values}>
+                  {(value, index) => (
                     <text>
-                      <span style={{ fg: PALETTE.borderFocused }}>
-                        {active() ? (ascii() ? "> " : "▸ ") : "  "}
-                      </span>
-                      <Highlighted
-                        text={titleOf(row.entry)}
-                        hits={row.hits}
-                        fg={active() ? PALETTE.selectionFg : PALETTE.text}
-                        bold={active()}
-                      />
                       <span style={{ fg: PALETTE.textMuted }}>
-                        {`${gap(row.entry)}${row.entry.keys ?? ""}`}
+                        {`${current().entry.fields[index]?.label ?? ""}  `}
                       </span>
+                      <span style={{ fg: PALETTE.text }}>{value() ?? "-"}</span>
                     </text>
-                  </box>
-                );
-              }}
-            </For>
-          </Show>
-        </Match>
-      </Switch>
+                  )}
+                </Index>
+                <text fg={PALETTE.textMuted}>
+                  {field()?.label ?? ""}
+                  {field()?.optional === true ? " (optional)" : ""}
+                </text>
+                <text>
+                  <span style={{ fg: PALETTE.accentPrimary }}>{"> "}</span>
+                  <span style={{ fg: PALETTE.text }}>{input()}</span>
+                  <span style={{ fg: PALETTE.cursor }}>{cursor()}</span>
+                  <span style={{ fg: PALETTE.textDim }}>
+                    {input() === "" ? `e.g. ${field()?.example ?? ""}` : ""}
+                  </span>
+                </text>
+              </>
+            )}
+          </Match>
+          <Match when={true}>
+            <text>
+              <span style={{ fg: PALETTE.accentPrimary }}>{": "}</span>
+              <span style={{ fg: PALETTE.text }}>{query()}</span>
+              <span style={{ fg: PALETTE.cursor }}>{cursor()}</span>
+            </text>
+            <Show
+              when={rows().length > 0}
+              fallback={
+                <text fg={PALETTE.textMuted}>{`No command matches "${query().trim()}"`}</text>
+              }
+            >
+              <For each={rows().slice(offset(), offset() + listHeight())}>
+                {(row) => {
+                  const active = () => rows()[selected()] === row;
+                  return (
+                    <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
+                      <text>
+                        <span style={{ fg: PALETTE.borderFocused }}>
+                          {active() ? (ascii() ? "> " : "▸ ") : "  "}
+                        </span>
+                        <Highlighted
+                          text={titleOf(row.entry)}
+                          hits={row.hits}
+                          fg={active() ? PALETTE.selectionFg : PALETTE.text}
+                          bold={active()}
+                        />
+                        <span style={{ fg: PALETTE.textMuted }}>
+                          {`${gap(row.entry)}${row.entry.keys ?? ""}`}
+                        </span>
+                      </text>
+                    </box>
+                  );
+                }}
+              </For>
+            </Show>
+          </Match>
+        </Switch>
+      </box>
       <Show when={error()}>
         {(shown: Accessor<AppError>) => <ErrorLine error={shown()} ascii={ascii()} />}
       </Show>
@@ -251,6 +239,6 @@ export function Palette(props: PaletteProps) {
           ? `${ascii() ? "up/down" : "↑↓"} move  enter run  esc close`
           : "enter next  esc back"}
       </text>
-    </box>
+    </Dialog>
   );
 }

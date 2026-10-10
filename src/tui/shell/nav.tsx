@@ -11,33 +11,44 @@ export interface NavProps {
   readonly width: number;
 }
 
-/** Below this many terminal columns the sections fold to their icons, when there are icons. */
+/** Below this many terminal columns the sections fold to their icons. */
 const FOLD_BELOW = 100;
-const FULL_WIDTH = 17;
-const FOLDED_WIDTH = 7;
+/** Border and padding on both sides. */
+const CHROME = 4;
+const LONGEST_LABEL = Math.max(...SECTIONS.map((section) => section.label.length));
+
+/**
+ * The marker block: terminals draw a Nerd Font glyph two cells wide, spilling right, so it gets
+ * one trailing cell; a letter sits centred in three.
+ */
+function block(icon: string, icons: IconSet): string {
+  return icons === "nerd" ? `${icon} ` : ` ${icon} `;
+}
+
+const foldedWidth = (icons: IconSet) => CHROME + (icons === "nerd" ? 2 : 3);
 
 export function navWidth(columns: number, icons: IconSet): number {
-  return columns < FOLD_BELOW && icons !== "ascii" ? FOLDED_WIDTH : FULL_WIDTH;
+  return columns < FOLD_BELOW ? foldedWidth(icons) : foldedWidth(icons) + 1 + LONGEST_LABEL;
 }
 
 /** The sections, the one in front marked with a lavender block; ↑↓ move between them. */
 export function Nav(props: NavProps) {
-  const folded = () => props.width === FOLDED_WIDTH;
+  const folded = () => props.width === foldedWidth(props.icons);
   return (
     <Panel title="Go" focused={false} width={props.width}>
       <For each={SECTIONS}>
         {(section, index) => {
           const active = () => index() === props.selected;
-          const icon = () => sectionIcon(section, props.icons);
           return (
-            <text>
+            // A blank row between sections; ten of them still fit a 24-row terminal.
+            <text marginTop={index() === 0 ? 0 : 1}>
               <span
                 style={{
                   fg: active() ? PALETTE.textInverse : PALETTE.textDim,
                   bg: active() ? PALETTE.accentSecondary : PALETTE.bg,
                 }}
               >
-                {icon() === null ? (active() ? ">" : " ") : ` ${icon()} `}
+                {block(sectionIcon(section, props.icons), props.icons)}
               </span>
               <span style={{ fg: active() ? PALETTE.text : PALETTE.textMuted }}>
                 {folded() ? "" : active() ? <b>{` ${section.label}`}</b> : ` ${section.label}`}

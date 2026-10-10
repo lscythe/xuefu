@@ -10,6 +10,7 @@ import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Workspace } from "../../../../src/domain/workspace/workspace";
 import { Switcher, type SwitcherProps } from "../../../../src/tui/switcher/switcher";
 import { PALETTE } from "../../../../src/tui/theme/palette";
+import { dialogBounds } from "../../../support/dialog-bounds";
 import { view } from "../../../support/workspace-views";
 
 const VIEWS = [
@@ -76,6 +77,20 @@ describe("Switcher", () => {
     expect(line(frame, "Mobile Banking")).toContain("▸ Mobile Banking");
     expect(line(frame, "Mobile Banking")).toContain("mobile-banking");
     expect(frame).toContain("5 of 5");
+  });
+
+  test("sits centred, and keeps its size while the list filters", async () => {
+    const switcher = await renderSwitcher();
+    const before = dialogBounds(switcher.frame(), "Switch workspace");
+    expect(before.top).toBeGreaterThan(2);
+    expect(before.vertical).toBeLessThanOrEqual(1);
+    expect(before.horizontal).toBeLessThanOrEqual(1);
+    // Two groups and five workspaces, then the query, the count and the border.
+    expect(before.bottom - before.top + 1).toBe(7 + 4);
+
+    await switcher.type("mob");
+    await switcher.waitForFrame((f) => f.includes("2 of 5"));
+    expect(dialogBounds(switcher.frame(), "Switch workspace")).toEqual(before);
   });
 
   test("shows a loading line until workspaces arrive", async () => {

@@ -6,6 +6,7 @@ import { assertNever } from "../../domain/shared/assert-never";
 import type { WorkspaceId } from "../../domain/shared/ids";
 import type { Result } from "../../domain/shared/result";
 import type { Workspace } from "../../domain/workspace/workspace";
+import { Dialog, dialogListRows, dialogWidth } from "../dialog";
 import { ErrorLine } from "../error-line";
 import { Highlighted } from "../highlighted";
 import { cycle, scrollOffset } from "../list-navigation";
@@ -27,9 +28,6 @@ export interface SwitcherProps {
 
 type WorkspaceRow = Extract<SwitcherRow, { kind: "workspace" }>;
 const isWorkspaceRow = (row: SwitcherRow): row is WorkspaceRow => row.kind === "workspace";
-
-const MAX_WIDTH = 64;
-const MAX_LIST_ROWS = 12;
 
 export function Switcher(props: SwitcherProps) {
   const dimensions = useTerminalDimensions();
@@ -107,8 +105,8 @@ export function Switcher(props: SwitcherProps) {
     editQuery(query() + pastedText(new TextDecoder().decode(event.bytes)));
   });
 
-  const width = () => Math.min(MAX_WIDTH, dimensions().width - 4);
-  const listHeight = () => Math.max(3, Math.min(MAX_LIST_ROWS, dimensions().height - 10));
+  const everything = createMemo(() => switcherRows(views(), "").length);
+  const listHeight = () => dialogListRows(dimensions().height, everything());
   const selectedRow = () => {
     const choice = choices()[selected()];
     return choice === undefined ? 0 : rows().indexOf(choice);
@@ -121,83 +119,71 @@ export function Switcher(props: SwitcherProps) {
   const ascii = () => props.icons === "ascii";
 
   return (
-    <box
-      position="absolute"
-      zIndex={10}
-      top={2}
-      left={Math.max(0, Math.floor((dimensions().width - width()) / 2))}
-      width={width()}
-      flexDirection="column"
-      border
-      borderColor={PALETTE.borderFocused}
-      // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
-      backgroundColor={PALETTE.panelBg}
-      title=" Switch workspace "
-      titleColor={PALETTE.accentSecondary}
-      paddingX={1}
-    >
+    <Dialog title=" Switch workspace " width={dialogWidth(dimensions().width)}>
       <text>
         <span style={{ fg: PALETTE.accentPrimary }}>{"> "}</span>
         <span style={{ fg: PALETTE.text }}>{query()}</span>
         <span style={{ fg: PALETTE.cursor }}>{ascii() ? "_" : "▏"}</span>
       </text>
-      <Switch>
-        <Match when={loaded() === null}>
-          <text fg={PALETTE.textMuted}>Loading workspaces...</text>
-        </Match>
-        <Match when={failure()}>
-          {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
-        </Match>
-        <Match when={views().length === 0}>
-          <text fg={PALETTE.textMuted}>No workspaces yet. Add one with:</text>
-          <text fg={PALETTE.text}>{"  xuefu workspace add [path]"}</text>
-        </Match>
-        <Match when={rows().length === 0}>
-          <text fg={PALETTE.textMuted}>{`No workspace matches "${query().trim()}"`}</text>
-        </Match>
-        <Match when={true}>
-          <For each={visibleRows()}>
-            {(row) => {
-              if (row.kind === "group") {
+      <box height={listHeight()} flexDirection="column">
+        <Switch>
+          <Match when={loaded() === null}>
+            <text fg={PALETTE.textMuted}>Loading workspaces...</text>
+          </Match>
+          <Match when={failure()}>
+            {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
+          </Match>
+          <Match when={views().length === 0}>
+            <text fg={PALETTE.textMuted}>No workspaces yet. Add one with:</text>
+            <text fg={PALETTE.text}>{"  xuefu workspace add [path]"}</text>
+          </Match>
+          <Match when={rows().length === 0}>
+            <text fg={PALETTE.textMuted}>{`No workspace matches "${query().trim()}"`}</text>
+          </Match>
+          <Match when={true}>
+            <For each={visibleRows()}>
+              {(row) => {
+                if (row.kind === "group") {
+                  return (
+                    <text fg={PALETTE.accentTertiary}>
+                      <b>{row.label}</b>
+                    </text>
+                  );
+                }
+                const active = () => choices()[selected()] === row;
+                const workspace = row.view.workspace;
                 return (
-                  <text fg={PALETTE.accentTertiary}>
-                    <b>{row.label}</b>
-                  </text>
+                  <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
+                    <text>
+                      <span style={{ fg: PALETTE.borderFocused }}>
+                        {active() ? (ascii() ? "> " : "▸ ") : "  "}
+                      </span>
+                      <Highlighted
+                        text={workspace.name}
+                        hits={row.nameHits}
+                        fg={active() ? PALETTE.selectionFg : PALETTE.text}
+                        bold={active()}
+                      />
+                      <span>{"  "}</span>
+                      <Highlighted text={workspace.id} hits={row.idHits} fg={PALETTE.textMuted} />
+                      <Show when={workspace.id === props.currentId}>
+                        <span style={{ fg: PALETTE.success }}>
+                          {ascii() ? "  * current" : "  ● current"}
+                        </span>
+                      </Show>
+                      <Show when={row.view.status === "missing"}>
+                        <span style={{ fg: PALETTE.warning }}>
+                          {ascii() ? "  ! missing" : "  ⚠ missing"}
+                        </span>
+                      </Show>
+                    </text>
+                  </box>
                 );
-              }
-              const active = () => choices()[selected()] === row;
-              const workspace = row.view.workspace;
-              return (
-                <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
-                  <text>
-                    <span style={{ fg: PALETTE.borderFocused }}>
-                      {active() ? (ascii() ? "> " : "▸ ") : "  "}
-                    </span>
-                    <Highlighted
-                      text={workspace.name}
-                      hits={row.nameHits}
-                      fg={active() ? PALETTE.selectionFg : PALETTE.text}
-                      bold={active()}
-                    />
-                    <span>{"  "}</span>
-                    <Highlighted text={workspace.id} hits={row.idHits} fg={PALETTE.textMuted} />
-                    <Show when={workspace.id === props.currentId}>
-                      <span style={{ fg: PALETTE.success }}>
-                        {ascii() ? "  * current" : "  ● current"}
-                      </span>
-                    </Show>
-                    <Show when={row.view.status === "missing"}>
-                      <span style={{ fg: PALETTE.warning }}>
-                        {ascii() ? "  ! missing" : "  ⚠ missing"}
-                      </span>
-                    </Show>
-                  </text>
-                </box>
-              );
-            }}
-          </For>
-        </Match>
-      </Switch>
+              }}
+            </For>
+          </Match>
+        </Switch>
+      </box>
       <Show when={chooseError()}>
         {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
       </Show>
@@ -206,6 +192,6 @@ export function Switcher(props: SwitcherProps) {
         {ascii() ? "up/down move" : "↑↓ move"}
         {"  enter switch  esc close"}
       </text>
-    </box>
+    </Dialog>
   );
 }
