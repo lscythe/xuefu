@@ -753,6 +753,7 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
     version: runtime.version,
     overrides: invocation.value.overrides,
     redactor: out.redactor,
+    secrets: registry,
     reportSinkFailure: (message) => runtime.stderr.write(`${out.redactor.redactString(message)}\n`),
   });
   if (!started.ok) return fail(out, started.error);

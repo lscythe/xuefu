@@ -5,6 +5,7 @@ import type { CommandBus } from "../application/commands/command-bus";
 import type { Clock } from "../application/ports/clock";
 import type { Logger } from "../application/ports/logger";
 import type { ProcessRunner } from "../application/ports/process-runner";
+import type { SecretProvider } from "../application/ports/secret-provider";
 import type { PluginCommandRunner, PluginCommandSpec } from "../cli/plugin-command";
 import { type ConfigurationError, configurationError } from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
@@ -15,6 +16,8 @@ export interface PluginContext {
   /** Runs the plugin's own commands, once XueFu has registered them, as it runs every command. */
   readonly bus: Pick<CommandBus, "invoke">;
   readonly processes: ProcessRunner;
+  /** Credentials from where config says they are kept; each is masked in every output. */
+  readonly secrets: SecretProvider;
   readonly logger: Logger;
   readonly clock: Clock;
 }
