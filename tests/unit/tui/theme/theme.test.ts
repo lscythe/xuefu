@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { contrastRatio } from "../../../../src/tui/theme/contrast";
-import { PALETTE, type PaletteToken } from "../../../../src/tui/theme/palette";
+import { PALETTE, type PaletteToken, SERIES } from "../../../../src/tui/theme/palette";
 import { STATUS_PRESENTATION, statusGlyph } from "../../../../src/tui/theme/status";
 
 describe("contrastRatio", () => {
@@ -65,6 +65,13 @@ describe("palette", () => {
   test("the focus border stands out from idle borders", () => {
     check("borderFocused", "bg", 3);
     expect(contrastRatio(PALETTE.borderIdle, PALETTE.bg)).toBeLessThan(3);
+  });
+
+  test("series colours are distinct and readable on the background", () => {
+    expect(new Set(SERIES).size).toBe(SERIES.length);
+    for (const colour of SERIES) {
+      expect(contrastRatio(colour, PALETTE.bg)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   test("list stripes stay close to the background", () => {

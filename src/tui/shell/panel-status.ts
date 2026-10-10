@@ -28,6 +28,8 @@ export function sectionStatus(
     readonly work: WorkContext | null;
     readonly timer: TimerView | null;
     readonly workspace: Workspace | null;
+    /** The day's tracked total, already written out. */
+    readonly today: string | null;
   },
 ): string | null {
   switch (id) {
@@ -44,6 +46,8 @@ export function sectionStatus(
       return state.work?.issueKey ?? null;
     case "activity":
       return state.workspace === null ? "everywhere" : null;
+    case "timesheet":
+      return state.today;
     default:
       return null;
   }

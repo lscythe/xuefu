@@ -1,6 +1,7 @@
 import { afterEach, describe, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import type { TrackedTime } from "../../../src/application/timesheet/queries";
 import type { Note, NoteBody } from "../../../src/domain/notes/note";
 import { storageError } from "../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
@@ -58,6 +59,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
         loadNote={() => ok(null)}
+        loadTracked={() => ok({ spans: [], workspaces: new Map() })}
         onExternalChange={() => () => undefined}
         onQuit={() => undefined}
         {...props}
@@ -136,6 +138,48 @@ function dayOfActivity() {
   ].map((entry, i, all) => ({ ...entry, seq: all.length - i }));
 }
 
+/** Notes on Mobile Banking and on MOB-2841, one holding a masked credential. */
+const OWN_NOTE: Note = {
+  id: "n1" as NoteId,
+  workspaceId: "mobile-banking" as WorkspaceId,
+  issueKey: null,
+  body: [
+    "Staging needs the VPN; ask Dana in #platform for access.",
+    "Release train leaves Thursdays at 15:00.",
+    "Login API on staging: token=[REDACTED]",
+  ].join("\n") as NoteBody,
+  updatedAt: NOW as Timestamp,
+};
+const ISSUE_NOTE: Note = {
+  ...OWN_NOTE,
+  id: "n2" as NoteId,
+  issueKey: "MOB-2841" as IssueKey,
+  body: [
+    "Face ID fallback goes to the PIN screen, not the password one.",
+    "Ask QA about the flaky BiometricPromptTest on API 28.",
+    "Design review on Wednesday.",
+  ].join("\n") as NoteBody,
+};
+
+/** A day's tracked time: MOB-2841 still running, then other work here and elsewhere. */
+function trackedToday(): TrackedTime {
+  const span = (workspace: string, issue: string | null, start: number, end: number | null) => ({
+    workspaceId: workspace as WorkspaceId,
+    issueKey: issue as IssueKey | null,
+    start: (NOW - start * 60_000) as Timestamp,
+    end: end === null ? null : ((NOW - end * 60_000) as Timestamp),
+  });
+  return {
+    spans: [
+      span("mobile-banking", "MOB-2799", 300, 265),
+      span("auth-service", null, 240, 220),
+      span("mobile-banking", "MOB-2841", 194, 93),
+      span("mobile-banking", "MOB-2841", 1, null),
+    ],
+    workspaces: new Map(VIEWS.map((v) => [v.workspace.id as string, v.workspace])),
+  };
+}
+
 describe("screenshots", () => {
   test("cockpit", async () => {
     expectScreenshot("cockpit", (await shell()).captureSpans());
@@ -208,6 +252,55 @@ describe("screenshots", () => {
     expectScreenshot("work-narrow", screen.captureSpans());
   });
 
+  test("dashboard, a working day", async () => {
+    const screen = await shell(
+      {
+        work: workIn(
+          "mobile-banking",
+          "MOB-2841",
+          "Add biometric authentication",
+          NOW - 13_260_000,
+        ),
+        ...(await trackedTimer("mobile-banking", 6_138_000, undefined, "MOB-2841")),
+        loadActivity: fakeActivity(dayOfActivity()).load,
+        loadNote: (_workspace, issue) => ok(issue === null ? OWN_NOTE : ISSUE_NOTE),
+        loadTracked: () => ok(trackedToday()),
+      },
+      { width: 120, height: 34 },
+    );
+    expectScreenshot("dashboard", screen.captureSpans());
+  });
+
+  test("dashboard at 80 columns, Today in focus", async () => {
+    const screen = await shell(
+      {
+        work: workIn(
+          "mobile-banking",
+          "MOB-2841",
+          "Add biometric authentication",
+          NOW - 13_260_000,
+        ),
+        ...(await trackedTimer("mobile-banking", 6_138_000, undefined, "MOB-2841")),
+        loadActivity: fakeActivity(dayOfActivity()).load,
+        loadNote: (_workspace, issue) => ok(issue === null ? OWN_NOTE : ISSUE_NOTE),
+        loadTracked: () => ok(trackedToday()),
+      },
+      { width: 80, height: 24 },
+    );
+    screen.mockInput.pressTab();
+    await screen.waitForFrame((f) => f.includes("─ ⏎ open ─"));
+    expectScreenshot("dashboard-narrow", screen.captureSpans());
+  });
+
+  test("today in the Timesheet section", async () => {
+    const screen = await shell({
+      navigation: new Map([["mobile-banking", "timesheet"]]),
+      loadTracked: () => ok(trackedToday()),
+    });
+    await screen.waitForFrame((f) => f.includes("─ Timesheet ─"));
+    expectScreenshot("today", screen.captureSpans());
+  });
+
   test("nothing in progress", async () => {
     const screen = await shell();
     screen.mockInput.pressKey("j");
@@ -244,32 +337,10 @@ describe("screenshots", () => {
   });
 
   test("notes for the workspace and its work in progress", async () => {
-    const at = NOW as Timestamp;
-    const own: Note = {
-      id: "n1" as NoteId,
-      workspaceId: "mobile-banking" as WorkspaceId,
-      issueKey: null,
-      body: [
-        "Staging needs the VPN; ask Dana in #platform for access.",
-        "Release train leaves Thursdays at 15:00.",
-        "Login API on staging: token=[REDACTED]",
-      ].join("\n") as NoteBody,
-      updatedAt: at,
-    };
-    const onIssue: Note = {
-      ...own,
-      id: "n2" as NoteId,
-      issueKey: "MOB-2841" as IssueKey,
-      body: [
-        "Face ID fallback goes to the PIN screen, not the password one.",
-        "Ask QA about the flaky BiometricPromptTest on API 28.",
-        "Design review on Wednesday.",
-      ].join("\n") as NoteBody,
-    };
     const screen = await shell({
       work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 600_000),
       navigation: new Map([["mobile-banking", "notes"]]),
-      loadNote: (_workspace, issue) => ok(issue === null ? own : onIssue),
+      loadNote: (_workspace, issue) => ok(issue === null ? OWN_NOTE : ISSUE_NOTE),
     });
     await screen.waitForFrame((f) => f.includes("─ Notes ─"));
     expectScreenshot("notes", screen.captureSpans());

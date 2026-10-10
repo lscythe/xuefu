@@ -56,6 +56,7 @@ async function renderShell(
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
         loadNote={() => ok(null)}
+        loadTracked={() => ok({ spans: [], workspaces: new Map() })}
         onExternalChange={() => () => undefined}
         onQuit={() => {
           quits += 1;
@@ -605,7 +606,7 @@ describe("Shell dashboard", () => {
       .lines.flatMap((line) => line.spans)
       .some((span) => span.fg.equals(peach) && span.text.includes(` ${title} `));
 
-  test("shows Work, Notes and Activity, numbered, with Work in focus", async () => {
+  test("shows Work, Today, Notes and Activity, numbered, with Work in focus", async () => {
     const shell = await renderShell({
       work: WORK,
       loadNote: (_, issue) =>
@@ -613,7 +614,7 @@ describe("Shell dashboard", () => {
       loadActivity: () => ok([activityEntry(NOW - 60_000, MOBILE.workspace, "Opened")]),
     });
     const frame = shell.captureCharFrame();
-    for (const title of ["─ 1 Work ─", "─ 2 Notes ─", "─ 3 Activity ─"]) {
+    for (const title of ["─ 1 Work ─", "─ 2 Today ─", "─ 3 Notes ─", "─ 4 Activity ─"]) {
       expect(frame).toContain(title);
     }
     expect(frame).toContain("MOB-2841  Add biometric login");
@@ -621,31 +622,32 @@ describe("Shell dashboard", () => {
     expect(frame).toContain("13:58  Opened");
     expect(rowContaining(frame, "⏎ open")).toContain("─ t start timer · ⏎ open ─");
     expect(rowContaining(frame, "navigate")).toContain("tab focus");
+    expect(frame).toContain("Nothing tracked today.");
     expect(lit(shell, "1 Work")).toBe(true);
-    expect(lit(shell, "2 Notes")).toBe(false);
+    expect(lit(shell, "3 Notes")).toBe(false);
   });
 
   test("tab and shift+tab move the focus round; a digit jumps to a panel", async () => {
     const shell = await renderShell();
     shell.mockInput.pressTab();
-    await shell.waitForFrame(() => lit(shell, "2 Notes"));
+    await shell.waitForFrame(() => lit(shell, "2 Today"));
     expect(lit(shell, "1 Work")).toBe(false);
     expect(rowContaining(shell.captureCharFrame(), "⏎ open")).toContain("─ ⏎ open ─");
-    shell.mockInput.pressKey("3");
-    await shell.waitForFrame(() => lit(shell, "3 Activity"));
+    shell.mockInput.pressKey("4");
+    await shell.waitForFrame(() => lit(shell, "4 Activity"));
     shell.mockInput.pressTab();
     await shell.waitForFrame(() => lit(shell, "1 Work"));
     shell.mockInput.pressTab({ shift: true });
-    await shell.waitForFrame(() => lit(shell, "3 Activity"));
+    await shell.waitForFrame(() => lit(shell, "4 Activity"));
     shell.mockInput.pressKey("9");
     await shell.renderOnce();
-    expect(lit(shell, "3 Activity")).toBe(true);
+    expect(lit(shell, "4 Activity")).toBe(true);
   });
 
   test("enter opens the focused panel's section, and the focus waits for the way back", async () => {
     const shell = await renderShell();
-    shell.mockInput.pressKey("2");
-    await shell.waitForFrame(() => lit(shell, "2 Notes"));
+    shell.mockInput.pressKey("3");
+    await shell.waitForFrame(() => lit(shell, "3 Notes"));
     shell.mockInput.pressEnter();
     await shell.waitForFrame(showing("Notes"));
     shell.mockInput.pressTab();
@@ -656,7 +658,82 @@ describe("Shell dashboard", () => {
     expect(rowContaining(shell.captureCharFrame(), "navigate")).not.toContain("tab focus");
     shell.mockInput.pressKey("HOME");
     await shell.waitForFrame(showing("Dashboard"));
-    expect(lit(shell, "2 Notes")).toBe(true);
+    expect(lit(shell, "3 Notes")).toBe(true);
+  });
+
+  test("Today adds up the day's time, counting the running timer as it goes", async () => {
+    const clock = new ManualClock(NOW);
+    const midnight = Date.UTC(2026, 9, 6) as Timestamp;
+    const asked: Timestamp[] = [];
+    const span = (issue: string | null, workspace: string, start: number, end: number | null) => ({
+      workspaceId: workspace as WorkspaceId,
+      issueKey: issue as IssueKey | null,
+      start: start as Timestamp,
+      end: end as Timestamp | null,
+    });
+    const shell = await renderShell(
+      {
+        clock,
+        tickMs: 5,
+        loadTracked: (since) => {
+          asked.push(since);
+          return ok({
+            spans: [
+              span("MOB-2799", "mobile-banking", midnight - 600_000, midnight + 1_200_000),
+              span(null, "ghost", NOW - 3_600_000, NOW - 1_800_000),
+              span("MOB-2841", "mobile-banking", NOW - 60_000, null),
+            ],
+            workspaces: new Map(VIEWS.map((v) => [v.workspace.id as string, v.workspace])),
+          });
+        },
+      },
+      { width: 120, height: 30 },
+    );
+    const frame = shell.captureCharFrame();
+    expect(asked).toEqual([midnight]);
+    expect(rowContaining(frame, "ghost")).toContain("● ghost");
+    expect(rowContaining(frame, "ghost")).toContain("30m");
+    expect(rowContaining(frame, "MOB-2799")).toContain("MOB-2799  Mobile Banking");
+    expect(rowContaining(frame, "MOB-2799")).toContain("20m");
+    expect(rowContaining(frame, "MOB-2841")).toContain(" 1m");
+    expect(frame).toContain("─ 51m ─");
+    clock.advance(60_000);
+    await Bun.sleep(25);
+    await shell.waitForFrame(
+      (f) => f.includes("─ 52m ─") && rowContaining(f, "MOB-2841").includes(" 2m"),
+    );
+    expect(asked).toHaveLength(1);
+  });
+
+  test("Today is read again when something is recorded and when the day turns", async () => {
+    const clock = new ManualClock(NOW);
+    const activity = fakeActivity();
+    const asked: Timestamp[] = [];
+    const shell = await renderShell({
+      clock,
+      tickMs: 5,
+      onRecorded: activity.onRecorded,
+      loadTracked: (since) => {
+        asked.push(since);
+        return asked.length > 1
+          ? err(storageError("Unable to read tracked time", "timers.read"))
+          : ok({ spans: [], workspaces: new Map() });
+      },
+    });
+    activity.record(activityEntry(NOW, MOBILE.workspace, "Opened"));
+    await shell.waitForFrame((f) => f.includes("✗ Unable to read tracked time"));
+    clock.set(Date.UTC(2026, 9, 7, 0, 0, 1));
+    await Bun.sleep(25);
+    await shell.waitForFrame(() => asked.length === 3);
+    expect(asked[2]).toBe(Date.UTC(2026, 9, 7) as Timestamp);
+  });
+
+  test("enter on Today opens the Timesheet section, which shows the same", async () => {
+    const shell = await renderShell();
+    shell.mockInput.pressKey("2");
+    shell.mockInput.pressEnter();
+    const frame = await shell.waitForFrame(showing("Timesheet"));
+    expect(frame).toContain("Nothing tracked today.");
   });
 
   test("at 80×24 the clock is drawn small and the key bar keeps what matters", async () => {
@@ -1048,7 +1125,7 @@ describe("Shell", () => {
     const peach = RGBA.fromHex(PALETTE.borderFocused);
     expect(brand?.fg.equals(RGBA.fromHex(PALETTE.accentPrimary))).toBe(true);
     expect(spans.find((span) => span.text.includes(" 1 Work "))?.fg.equals(peach)).toBe(true);
-    expect(spans.find((span) => span.text.includes(" 2 Notes "))?.fg.equals(peach)).toBe(false);
+    expect(spans.find((span) => span.text.includes(" 3 Notes "))?.fg.equals(peach)).toBe(false);
     expect(spans.find((span) => span.text.includes(" Go "))?.fg.equals(peach)).toBe(false);
   });
 });

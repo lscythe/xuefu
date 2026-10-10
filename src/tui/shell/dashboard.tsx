@@ -2,19 +2,27 @@ import { type Accessor, Show } from "solid-js";
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
-import type { TimerView } from "../../application/timesheet/queries";
+import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { Result } from "../../domain/shared/result";
+import type { Timestamp } from "../../domain/shared/time";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { Panel } from "../panel";
+import { useNow } from "../use-now";
 import { ActivityPanel } from "./activity-panel";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { panelKeys, sectionStatus } from "./panel-status";
 import type { Section } from "./sections";
+import { TodayPanel, todayTotal } from "./today-panel";
 import { WorkPanel } from "./work-panel";
 
 /** The dashboard's panels in focus order; each opens its own section. */
-export const DASHBOARD_PANELS: readonly Section["id"][] = ["work", "notes", "activity"];
+export const DASHBOARD_PANELS: readonly Section["id"][] = [
+  "work",
+  "timesheet",
+  "notes",
+  "activity",
+];
 
 export interface DashboardProps {
   readonly clock: Clock;
@@ -26,6 +34,9 @@ export interface DashboardProps {
   readonly timer: TimerView | null;
   readonly notes: Result<LoadedNotes, AppError> | null;
   readonly activity: Result<readonly ActivityEntry[], AppError> | null;
+  readonly tracked: Result<TrackedTime, AppError> | null;
+  /** Midnight, where today's tracked time starts. */
+  readonly since: Timestamp;
   /** Columns and rows the dashboard may fill. */
   readonly width: number;
   readonly rows: number;
@@ -49,15 +60,21 @@ function sideWidth(width: number): number {
   return Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(width * 0.4)));
 }
 
-/** Work across the top, then Notes beside Activity, each numbered for its digit key. */
+/** Work beside Today across the top, then Notes beside Activity, each numbered for its digit key. */
 export function Dashboard(props: DashboardProps) {
+  const now = useNow(props.clock, props.tickMs);
   const top = () => (props.rows >= TALL_BELOW ? TALL_WORK : SHORT_WORK);
   const side = () => sideWidth(props.width);
   const focused = (id: Section["id"]) => DASHBOARD_PANELS[props.focused] === id;
   const number = (id: Section["id"]) => DASHBOARD_PANELS.indexOf(id) + 1;
   const open = () => (props.ascii ? "enter open" : "⏎ open");
   const status = (id: Section["id"]) =>
-    sectionStatus(id, { work: props.work, timer: props.timer, workspace: props.workspace });
+    sectionStatus(id, {
+      work: props.work,
+      timer: props.timer,
+      workspace: props.workspace,
+      today: todayTotal(props.tracked, props.since, now()),
+    });
 
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -77,10 +94,32 @@ export function Dashboard(props: DashboardProps) {
             workspace={props.workspace}
             work={props.work}
             timer={props.timer}
-            width={props.width - CHROME}
+            width={props.width - side() - CHROME}
             rows={top() - 2}
             ascii={props.ascii}
           />
+        </Panel>
+        <Panel
+          number={number("timesheet")}
+          title="Today"
+          focused={focused("timesheet")}
+          width={side()}
+          status={status("timesheet")}
+          keys={open()}
+        >
+          <Show when={props.tracked}>
+            {(tracked: Accessor<Result<TrackedTime, AppError>>) => (
+              <TodayPanel
+                clock={props.clock}
+                tickMs={props.tickMs}
+                tracked={tracked()}
+                since={props.since}
+                width={side() - CHROME}
+                rows={top() - 2}
+                ascii={props.ascii}
+              />
+            )}
+          </Show>
         </Panel>
       </box>
       <box flexDirection="row" flexGrow={1}>

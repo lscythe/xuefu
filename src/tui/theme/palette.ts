@@ -42,3 +42,13 @@ export const PALETTE = {
 } as const satisfies Record<string, HexColor>;
 
 export type PaletteToken = keyof typeof PALETTE;
+
+/** Colours for things told apart only by colour, such as the issues in a breakdown, in order. */
+export const SERIES: readonly HexColor[] = [
+  PALETTE.accentTertiary,
+  PALETTE.info,
+  PALETTE.accentSoul,
+  PALETTE.success,
+  PALETTE.accentSecondary,
+  PALETTE.warning,
+];

@@ -35,3 +35,34 @@ export function wallClock(at: Timestamp, timeZone?: string): WallClock {
     time: `${parts.hour}:${parts.minute}`,
   };
 }
+
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function dayFormatterFor(timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = timeZone ?? "";
+  let formatter = dayFormatters.get(key);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+      ...(timeZone === undefined ? {} : { timeZone }),
+    });
+    dayFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * Midnight on the clock in `timeZone` before `at`. On a day the clocks change, it is off by the
+ * change for moments after it, which only shifts where "today" begins by that much.
+ */
+export function startOfDay(at: Timestamp, timeZone?: string): Timestamp {
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const part of dayFormatterFor(timeZone).formatToParts(at)) parts[part.type] = part.value;
+  const sinceMidnight =
+    ((Number(parts.hour) * 60 + Number(parts.minute)) * 60 + Number(parts.second)) * 1000 +
+    (at % 1000);
+  return (at - sinceMidnight) as Timestamp;
+}

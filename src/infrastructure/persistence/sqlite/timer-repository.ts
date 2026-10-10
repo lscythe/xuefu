@@ -6,6 +6,7 @@ import { timerId, workspaceId } from "../../../domain/shared/ids";
 import { err, ok, type Result } from "../../../domain/shared/result";
 import { type Timestamp, timestamp } from "../../../domain/shared/time";
 import { restoreTimer, type Timer, type TimerSegment } from "../../../domain/timesheet/timer";
+import type { TrackedSpan } from "../../../domain/timesheet/tracked";
 import { issueKey } from "../../../domain/work/issue-key";
 
 const TimerRowSchema = z.object({
@@ -18,6 +19,11 @@ const TimerRowSchema = z.object({
 });
 
 const SegmentRowSchema = z.object({ start_at: z.number(), end_at: z.number().nullable() });
+
+const TrackedRowSchema = SegmentRowSchema.extend({
+  workspace_id: z.string(),
+  issue_key: z.string().nullable(),
+});
 
 type TimerRow = z.infer<typeof TimerRowSchema>;
 
@@ -113,6 +119,40 @@ export class SqliteTimerRepository implements TimerRepository {
       return ok(undefined);
     } catch (thrown) {
       return err(storageError("Unable to save the timer", "timers.save", { cause: thrown }));
+    }
+  }
+
+  trackedSince(since: Timestamp): Result<TrackedSpan[], StorageError> {
+    try {
+      const rows = this.db
+        .query(
+          `SELECT t.workspace_id, t.issue_key, s.start_at, s.end_at
+           FROM timer_segments s JOIN timers t ON t.id = s.timer_id
+           WHERE s.end_at IS NULL OR s.end_at > ?
+           ORDER BY s.start_at`,
+        )
+        .all(since);
+      const spans: TrackedSpan[] = [];
+      for (const raw of rows) {
+        const row = TrackedRowSchema.safeParse(raw);
+        if (!row.success) return err(corrupt());
+        const workspace = workspaceId(row.data.workspace_id);
+        const issue = row.data.issue_key === null ? ok(null) : issueKey(row.data.issue_key);
+        const start = toTimestamp(row.data.start_at);
+        const end = row.data.end_at === null ? null : toTimestamp(row.data.end_at);
+        if (
+          !workspace.ok ||
+          !issue.ok ||
+          start === null ||
+          (row.data.end_at !== null && end === null)
+        ) {
+          return err(corrupt());
+        }
+        spans.push({ workspaceId: workspace.value, issueKey: issue.value, start, end });
+      }
+      return ok(spans);
+    } catch (thrown) {
+      return err(storageError("Unable to read tracked time", "timers.read", { cause: thrown }));
     }
   }
 }

@@ -12,12 +12,14 @@ import {
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
-import type { TimerView } from "../../application/timesheet/queries";
+import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
 import type { OpenTabs, WorkspaceView } from "../../application/workspace/queries";
 import type { Note } from "../../domain/notes/note";
 import { assertNever } from "../../domain/shared/assert-never";
 import { ok, type Result } from "../../domain/shared/result";
+import type { Timestamp } from "../../domain/shared/time";
+import { startOfDay } from "../../domain/shared/wall-clock";
 import { timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
@@ -29,6 +31,7 @@ import { Panel } from "../panel";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { useNow } from "../use-now";
 import { ActivityPanel } from "./activity-panel";
 import { DASHBOARD_PANELS, Dashboard } from "./dashboard";
 import { Header } from "./header";
@@ -40,6 +43,7 @@ import { paletteEntries } from "./palette-entries";
 import { sectionStatus, timerKeys } from "./panel-status";
 import { SECTIONS } from "./sections";
 import { fitsTerminal } from "./terminal-size";
+import { TodayPanel, todayTotal } from "./today-panel";
 import { TooSmall } from "./too-small";
 import { WorkPanel } from "./work-panel";
 
@@ -98,6 +102,8 @@ export interface ShellProps {
     workspace: Workspace,
     issue: IssueKey | null,
   ) => Result<Note | null, AppError>;
+  /** Time tracked since `since`, in every workspace. */
+  readonly loadTracked: (since: Timestamp) => Result<TrackedTime, AppError>;
   /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
   readonly onExternalChange: (listener: () => void) => () => void;
   readonly onQuit: () => void;
@@ -183,6 +189,14 @@ export function Shell(props: ShellProps) {
     return onIssue.ok ? ok({ own: own.value, issue: onIssue.value }) : onIssue;
   });
   /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
+  const now = useNow(props.clock, props.tickMs ?? 1000);
+  // A new day starts a new total; the memo holds still until midnight.
+  const since = createMemo(() => startOfDay(now(), props.timeZone));
+  const tracked = createMemo(() => {
+    if (!showing("timesheet", "dashboard")) return null;
+    recorded();
+    return props.loadTracked(since());
+  });
   const panelRows = () => dimensions().height - PANEL_CHROME_ROWS - (notice() ? 1 : 0);
   /** Columns right of the sections, where a section or the dashboard is drawn. */
   const areaWidth = () => dimensions().width - nav();
@@ -350,6 +364,8 @@ export function Shell(props: ShellProps) {
                 timer={timer()}
                 notes={notes()}
                 activity={activity()}
+                tracked={tracked()}
+                since={since()}
                 width={areaWidth()}
                 rows={panelRows() + 2}
                 focused={panel()}
@@ -365,6 +381,7 @@ export function Shell(props: ShellProps) {
                 work: work(),
                 timer: timer(),
                 workspace: workspace(),
+                today: todayTotal(tracked(), since(), now()),
               })}
               keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
             >
@@ -381,6 +398,19 @@ export function Shell(props: ShellProps) {
                     rows={panelRows()}
                     ascii={props.icons === "ascii"}
                   />
+                </Match>
+                <Match when={tracked()}>
+                  {(loaded: Accessor<Result<TrackedTime, AppError>>) => (
+                    <TodayPanel
+                      clock={props.clock}
+                      tickMs={props.tickMs ?? 1000}
+                      tracked={loaded()}
+                      since={since()}
+                      width={areaWidth() - PANEL_CHROME_COLUMNS}
+                      rows={panelRows()}
+                      ascii={props.icons === "ascii"}
+                    />
+                  )}
                 </Match>
                 <Match when={section()?.id === "notes"}>
                   <NotesPanel
