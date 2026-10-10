@@ -916,6 +916,7 @@ describe("exitCodeFor", () => {
     [errors.storageError("s", "op"), EXIT.io],
     [errors.migrationError("m", 1, "failed"), EXIT.io],
     [errors.timeout("t", 10), EXIT.tempFail],
+    [errors.processError("p", "git", 128), EXIT.unavailable],
     [errors.cancelled("c"), EXIT.cancelled],
     [errors.commandNotFound("x.y"), EXIT.software],
     [errors.duplicateCommand("x.y"), EXIT.software],

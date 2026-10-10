@@ -92,6 +92,14 @@ export interface TimeoutError extends ErrorShape<"timeout"> {
   readonly afterMs: number;
 }
 
+/** An external program could not be run, or ran and failed. */
+export interface ProcessError extends ErrorShape<"process"> {
+  /** The program, never its arguments: those may hold paths or secrets. */
+  readonly command: string;
+  /** Null when it never started or was killed by a signal. */
+  readonly exitCode: number | null;
+}
+
 export type UnexpectedError = ErrorShape<"unexpected">;
 
 export type CoreError =
@@ -107,6 +115,7 @@ export type CoreError =
   | ConfirmationRequiredError
   | CancelledError
   | TimeoutError
+  | ProcessError
   | UnexpectedError;
 
 export interface ErrorOptions {
@@ -241,6 +250,22 @@ export function timeout(
   options: ErrorOptions = {},
 ): TimeoutError {
   return Object.freeze({ ...base("timeout", message, options), afterMs });
+}
+
+export function processError(
+  message: string,
+  command: string,
+  exitCode: number | null,
+  options: Omit<ErrorOptions, "context"> & { readonly context?: ErrorContext } = {},
+): ProcessError {
+  return Object.freeze({
+    ...base("process", message, {
+      ...options,
+      context: { command, exitCode, ...options.context },
+    }),
+    command,
+    exitCode,
+  });
 }
 
 export function unexpected(

@@ -49,6 +49,7 @@ export const EXIT = {
   usage: 64,
   data: 65,
   noInput: 66,
+  unavailable: 69,
   software: 70,
   io: 74,
   tempFail: 75,
@@ -108,6 +109,8 @@ export function exitCodeFor(error: AppError): number {
       return EXIT.io;
     case "timeout":
       return EXIT.tempFail;
+    case "process":
+      return EXIT.unavailable;
     case "cancelled":
       return EXIT.cancelled;
     case "command-not-found":

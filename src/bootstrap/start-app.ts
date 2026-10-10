@@ -12,6 +12,7 @@ import {
 } from "../application/notes/commands";
 import { NoteQueries } from "../application/notes/queries";
 import type { Logger } from "../application/ports/logger";
+import type { ProcessRunner } from "../application/ports/process-runner";
 import type { Redactor } from "../application/security/redaction";
 import {
   registerTimerCommands,
@@ -60,6 +61,7 @@ import { SqliteWorkContextRepository } from "../infrastructure/persistence/sqlit
 import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
 import { SqliteWorkspaceSessionRepository } from "../infrastructure/persistence/sqlite/workspace-session-repository";
 import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sqlite/workspace-tabs-repository";
+import { BunProcessRunner } from "../infrastructure/process/bun-process-runner";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
 
@@ -102,6 +104,8 @@ export interface App {
   readonly notes: NoteQueries;
   /** Data committed by other XueFu processes. */
   readonly changes: SqliteChangeWatcher;
+  /** Runs git and other tools; children still running are stopped on close. */
+  readonly processes: ProcessRunner;
   close(): void;
 }
 
@@ -221,6 +225,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     return err(unexpected("XueFu is wired incorrectly", new Error(catalog.error.message)));
   }
 
+  const processes = new BunProcessRunner(options.env);
+
   logger.info("XueFu started", {
     version: options.version,
     pid: process.pid,
@@ -255,8 +261,10 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     noteCommands: notes,
     notes: new NoteQueries(noteRepository, workspaceRepository),
     changes: new SqliteChangeWatcher(database, logger),
+    processes,
     close: () => {
       logger.debug("XueFu stopping");
+      processes.terminateAll();
       database.close();
     },
   });
