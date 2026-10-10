@@ -242,6 +242,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
       secrets: new SystemSecrets(options.env, processes, process.platform, options.secrets),
       logger,
       clock: systemClock,
+      core: { startWork: work.start },
     },
     config.plugins,
     paths.value.configFile,

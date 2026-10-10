@@ -5,6 +5,7 @@ import type { NoteView } from "../application/notes/queries";
 import type { Redactor } from "../application/security/redaction";
 import type { TimerView } from "../application/timesheet/queries";
 import type { StartedTimer } from "../application/timesheet/timer-operations";
+import type { StartedWork } from "../application/work/commands";
 import type { WorkView } from "../application/work/queries";
 import type { WorkspaceView } from "../application/workspace/queries";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
@@ -252,6 +253,17 @@ export function formatStartedTimer(started: StartedTimer): string[] {
 }
 
 /** "MOB-2841 (Add biometric login)", or just the key when the work has no title. */
+/** What starting work did: the work it finished, the work now in progress, and its timer. */
+export function formatStartedWork(started: StartedWork): string[] {
+  const { work, finished, timer } = started;
+  const where = work.workspace?.name ?? work.work.workspaceId;
+  return [
+    ...(finished === null ? [] : [`✓ Finished ${finished.issueKey} in ${where}`]),
+    `✓ Working on ${workSubject(work)} in ${where}`,
+    ...(timer === null ? [] : formatStartedTimer(timer)),
+  ];
+}
+
 export function workSubject(view: WorkView): string {
   const { issueKey, title } = view.work;
   return title === null ? issueKey : `${issueKey} (${title})`;

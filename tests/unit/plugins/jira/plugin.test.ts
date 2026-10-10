@@ -1,27 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { CommandBus } from "../../../../src/application/commands/command-bus";
 import type { HttpRequest } from "../../../../src/application/ports/http-client";
 import { ok } from "../../../../src/domain/shared/result";
 import { jiraPlugin } from "../../../../src/plugins/jira/plugin";
 import type { PluginContext } from "../../../../src/plugins/plugin";
 import { fakeSecrets } from "../../../support/fake-secrets";
-import { ManualClock } from "../../../support/manual-clock";
-import { SequentialIds } from "../../../support/sequential-ids";
-import { testLogger } from "../../../support/test-logger";
+import { pluginContext } from "../../../support/plugin-context";
 
-function context(overrides: Partial<PluginContext> = {}): PluginContext {
-  const logger = testLogger().logger;
-  const clock = new ManualClock();
-  return {
-    bus: new CommandBus({ logger, clock, ids: new SequentialIds() }),
-    processes: { run: () => Promise.reject(new Error("jira runs no programs")) },
-    http: { request: () => Promise.reject(new Error("not in these tests")) },
-    secrets: fakeSecrets(),
-    logger,
-    clock,
-    ...overrides,
-  };
-}
+const context = (overrides: Partial<PluginContext> = {}) => pluginContext(overrides);
 
 const start = (settings: unknown) => jiraPlugin.start(context(), settings, "config.yml");
 

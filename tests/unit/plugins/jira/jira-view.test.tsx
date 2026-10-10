@@ -15,6 +15,7 @@ import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeJira, jiraIssue } from "../../../support/fake-jira";
 import { fakeSecrets } from "../../../support/fake-secrets";
 import { ManualClock } from "../../../support/manual-clock";
+import { fakeCore } from "../../../support/plugin-context";
 import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
 
@@ -301,6 +302,7 @@ describe("the Jira plugin's section", () => {
         secrets: fakeSecrets({ JIRA_TOKEN: "pat" }),
         logger,
         clock,
+        core: fakeCore().core,
       },
       { url: "https://jira.example.com", token: { env: "JIRA_TOKEN" } },
       "config.yml",

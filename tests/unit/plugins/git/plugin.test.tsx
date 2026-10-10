@@ -14,6 +14,7 @@ import { gitPlugin } from "../../../../src/plugins/git/plugin";
 import type { PluginParts } from "../../../../src/plugins/plugin";
 import { fakeSecrets } from "../../../support/fake-secrets";
 import { ManualClock } from "../../../support/manual-clock";
+import { fakeCore } from "../../../support/plugin-context";
 import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
 
@@ -68,6 +69,7 @@ function start(settings: unknown, specs: ProcessSpec[] = [], repository = false)
     secrets: fakeSecrets(),
     logger,
     clock,
+    core: fakeCore().core,
   };
   const started = gitPlugin.start(context, settings, "config.yml");
   if (started.ok && started.value !== null) {
