@@ -37,7 +37,13 @@ function cover(container: BoxRenderable) {
  * A framed box over the cockpit, centred both ways. It is drawn at the root wherever it is
  * declared, so a section's dialog centres on the screen rather than on the section.
  */
-export function Dialog(props: { title: string; width: number; children: JSX.Element }) {
+export function Dialog(props: {
+  title: string;
+  width: number;
+  /** Framed in vermilion, for what cannot be undone. */
+  danger?: boolean;
+  children: JSX.Element;
+}) {
   return (
     <Portal ref={(container) => cover(container as BoxRenderable)}>
       <box
@@ -54,11 +60,11 @@ export function Dialog(props: { title: string; width: number; children: JSX.Elem
           width={props.width}
           flexDirection="column"
           border
-          borderColor={PALETTE.borderFocused}
+          borderColor={props.danger ? PALETTE.error : PALETTE.borderFocused}
           // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
           backgroundColor={PALETTE.panelBg}
           title={props.title}
-          titleColor={PALETTE.accentSecondary}
+          titleColor={props.danger ? PALETTE.error : PALETTE.accentSecondary}
           paddingX={1}
         >
           {props.children}

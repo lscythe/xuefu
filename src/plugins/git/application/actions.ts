@@ -244,3 +244,5 @@ export function gitActions(client: GitClient) {
     push,
   } as const;
 }
+
+export type GitActions = ReturnType<typeof gitActions>;

@@ -99,3 +99,25 @@ export function parseBranches(output: string): Result<Branch[], ValidationError>
   }
   return ok(branches);
 }
+
+/** The local name a remote branch would get when switched to: "origin/feat/x" is "feat/x". */
+export function localName(branch: Branch): string {
+  return branch.remote === null ? branch.name : branch.name.slice(branch.remote.length + 1);
+}
+
+/**
+ * The branches worth offering: every local one, then each remote one that no local branch
+ * tracks or shares a name with, since switching to it would only find that local branch.
+ */
+export function branchChoices(branches: readonly Branch[]): Branch[] {
+  const local = branches.filter((branch) => branch.remote === null);
+  const covered = new Set([
+    ...local.map((branch) => branch.upstream).filter((name) => name !== null),
+    ...local.map((branch) => branch.name),
+  ]);
+  const remote = branches.filter(
+    (branch) =>
+      branch.remote !== null && !covered.has(branch.name) && !covered.has(localName(branch)),
+  );
+  return [...local, ...remote];
+}

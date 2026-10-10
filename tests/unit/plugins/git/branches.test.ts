@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ok } from "../../../../src/domain/shared/result";
-import { branchName, parseBranches } from "../../../../src/plugins/git/domain/branches";
+import {
+  type Branch,
+  branchChoices,
+  branchName,
+  localName,
+  parseBranches,
+} from "../../../../src/plugins/git/domain/branches";
+import { branchRows } from "../../../../src/plugins/git/tui/branch-picker";
 
 describe("branchName", () => {
   test.each(["main", "feature/MOB-2841-login", "release-1.2", "a.b", "user@host"])(
@@ -102,4 +109,73 @@ describe("parseBranches", () => {
       expect(parsed.ok ? null : parsed.error.message).toBe("Unexpected git for-each-ref output");
     },
   );
+});
+
+const branch = (name: string, extra: Partial<Branch> = {}): Branch => ({
+  name,
+  remote: null,
+  current: false,
+  upstream: null,
+  ahead: 0,
+  behind: 0,
+  gone: false,
+  committedAt: 0,
+  subject: "",
+  ...extra,
+});
+
+describe("branchChoices", () => {
+  test("local branches, then remote ones nothing here tracks or shares a name with", () => {
+    const remote = (name: string) => branch(name, { remote: name.split("/")[0] ?? null });
+    const choices = branchChoices([
+      branch("main", { upstream: "origin/main" }),
+      remote("origin/main"),
+      branch("renamed", { upstream: "origin/old-name" }),
+      remote("origin/old-name"),
+      branch("feat"),
+      remote("origin/feat"),
+      remote("origin/new/thing"),
+    ]);
+    expect(choices.map((choice) => choice.name)).toEqual([
+      "main",
+      "renamed",
+      "feat",
+      "origin/new/thing",
+    ]);
+    expect(localName(choices[3] as Branch)).toBe("new/thing");
+    expect(localName(choices[0] as Branch)).toBe("main");
+  });
+});
+
+describe("branchRows", () => {
+  const rows = (query: string) =>
+    branchRows(
+      [
+        branch("main", { current: true, upstream: "origin/main" }),
+        branch("feat/login"),
+        branch("origin/main", { remote: "origin" }),
+        branch("origin/release", { remote: "origin" }),
+      ],
+      query,
+    ).map((row) =>
+      row.kind === "heading"
+        ? `# ${row.label}`
+        : row.kind === "create"
+          ? `+ ${row.name}`
+          : row.branch.name,
+    );
+
+  test("blank: local branches, then remote ones, under headings", () => {
+    expect(rows("")).toEqual(["# Local", "main", "feat/login", "# Remote", "origin/release"]);
+  });
+
+  test("a query keeps the matches, best first, then offers to create it", () => {
+    expect(rows("login")).toEqual(["feat/login", "+ login"]);
+    expect(rows("rel")).toEqual(["origin/release", "+ rel"]);
+  });
+
+  test("no create row for a name taken here, or one git refuses", () => {
+    expect(rows("main")).toEqual(["main"]);
+    expect(rows("bad name")).toEqual([]);
+  });
 });
