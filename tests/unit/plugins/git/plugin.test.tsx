@@ -14,6 +14,7 @@ import { gitPlugin } from "../../../../src/plugins/git/plugin";
 import type { PluginParts } from "../../../../src/plugins/plugin";
 import { fakeSecrets } from "../../../support/fake-secrets";
 import { ManualClock } from "../../../support/manual-clock";
+import { fakeCore } from "../../../support/plugin-context";
 import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
 
@@ -68,6 +69,7 @@ function start(settings: unknown, specs: ProcessSpec[] = [], repository = false)
     secrets: fakeSecrets(),
     logger,
     clock,
+    core: fakeCore().core,
   };
   const started = gitPlugin.start(context, settings, "config.yml");
   if (started.ok && started.value !== null) {
@@ -114,6 +116,20 @@ describe("gitPlugin", () => {
     }
   });
 
+  test("a branch prefix git would not take is refused", () => {
+    const started = start({ branchPrefix: "my work/" });
+    expect(started.ok ? null : started.error).toMatchObject({
+      kind: "configuration",
+      issues: [
+        {
+          path: "plugins.git.branchPrefix",
+          message: "must start a name git takes, such as feature/",
+        },
+      ],
+    });
+    expect(start({ branchPrefix: "" }).ok).toBe(true);
+  });
+
   /** Draws the plugin's own section, waiting out the dynamic import that brings its code. */
   async function section(specs: ProcessSpec[], repository: boolean, focused: boolean) {
     const started = start({}, specs, repository);
@@ -124,6 +140,7 @@ describe("gitPlugin", () => {
           <Suspense>
             <View
               workspace={MOBILE}
+              work={null}
               width={60}
               rows={10}
               icons="unicode"

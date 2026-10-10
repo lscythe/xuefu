@@ -1,27 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { CommandBus } from "../../../../src/application/commands/command-bus";
 import type { HttpRequest } from "../../../../src/application/ports/http-client";
+import { registerPluginActions } from "../../../../src/bootstrap/plugins";
+import type { WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { ok } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import { jiraPlugin } from "../../../../src/plugins/jira/plugin";
 import type { PluginContext } from "../../../../src/plugins/plugin";
 import { fakeSecrets } from "../../../support/fake-secrets";
-import { ManualClock } from "../../../support/manual-clock";
-import { SequentialIds } from "../../../support/sequential-ids";
-import { testLogger } from "../../../support/test-logger";
+import { pluginContext } from "../../../support/plugin-context";
 
-function context(overrides: Partial<PluginContext> = {}): PluginContext {
-  const logger = testLogger().logger;
-  const clock = new ManualClock();
-  return {
-    bus: new CommandBus({ logger, clock, ids: new SequentialIds() }),
-    processes: { run: () => Promise.reject(new Error("jira runs no programs")) },
-    http: { request: () => Promise.reject(new Error("not in these tests")) },
-    secrets: fakeSecrets(),
-    logger,
-    clock,
-    ...overrides,
-  };
-}
+const context = (overrides: Partial<PluginContext> = {}) => pluginContext(overrides);
 
 const start = (settings: unknown) => jiraPlugin.start(context(), settings, "config.yml");
 
@@ -34,6 +24,15 @@ const issues = (settings: unknown) => {
 };
 
 const URL = "https://jira.example.com";
+
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/work/mobile" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
 const TOKEN = { env: "JIRA_TOKEN" };
 
 describe("jiraPlugin settings", () => {
@@ -150,5 +149,61 @@ describe("jiraPlugin commands", () => {
     const commands = started.ok ? started.value?.commands : undefined;
     const shown = await commands?.({ group: "jira", name: "issues", args: [], flags: {} }, io().io);
     expect(shown?.ok ? null : shown?.error.kind).toBe("configuration");
+  });
+
+  test("start works on the issue through the core's command, and moves it on the bus", async () => {
+    const answers: Record<string, unknown> = {
+      "/rest/api/2/issue/MOB-2802": {
+        key: "MOB-2802",
+        fields: {
+          summary: "Show pending card transactions",
+          status: { name: "To Do", statusCategory: { key: "new" } },
+          issuetype: { name: "Story" },
+          created: "2026-10-01T09:12:00.000+0000",
+          updated: "2026-10-06T13:59:00.000+0000",
+        },
+      },
+      "/rest/api/2/issue/MOB-2802/transitions": {
+        transitions: [
+          {
+            id: "11",
+            name: "Start Progress",
+            to: { name: "In Progress", statusCategory: { key: "indeterminate" } },
+          },
+        ],
+      },
+    };
+    const posted: unknown[] = [];
+    const ctx = context({
+      secrets: fakeSecrets({ JIRA_TOKEN: "pat-value" }),
+      http: {
+        request: (request) => {
+          if (request.method === "POST") {
+            posted.push(request.body);
+            return Promise.resolve(ok({ status: 204, headers: {}, body: "" }));
+          }
+          const body = answers[new globalThis.URL(request.url).pathname];
+          return Promise.resolve(ok({ status: 200, headers: {}, body: JSON.stringify(body) }));
+        },
+      },
+    });
+    const started = jiraPlugin.start(ctx, settings, "config.yml");
+    const parts = started.ok ? started.value : null;
+    if (parts === null) throw new Error("the plugin did not start");
+    expect(registerPluginActions(ctx.bus, [{ plugin: jiraPlugin, parts }]).ok).toBe(true);
+    const { out, io: streams } = io();
+    const shown = await parts.commands?.(
+      { group: "jira", name: "start", args: ["MOB-2802"], flags: { yes: true } },
+      { ...streams, workspace: () => Promise.resolve(ok(MOBILE)) },
+    );
+    expect(shown).toEqual(ok(0));
+    expect(out.stdout).toBe(
+      [
+        "✓ Working on MOB-2802 (Show pending card transactions) in mobile",
+        "✓ Moved MOB-2802 to In Progress in Jira",
+        "",
+      ].join("\n"),
+    );
+    expect(posted).toEqual([{ transition: { id: "11" } }]);
   });
 });

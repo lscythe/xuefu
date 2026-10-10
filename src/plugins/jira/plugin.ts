@@ -2,6 +2,8 @@ import { lazy } from "solid-js";
 import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
 import { definePlugin } from "../plugin";
+import { jiraActions } from "./application/actions";
+import type { JiraChanges } from "./application/start-work";
 import { JIRA_COMMANDS, jiraCommands } from "./cli/commands";
 import { MY_OPEN_ISSUES } from "./domain/issue";
 import { jiraRest } from "./integrations/jira-rest";
@@ -71,13 +73,21 @@ export const jiraPlugin = definePlugin({
       token: () => context.secrets.resolve(settings.token),
       source,
     });
+    const actions = jiraActions(client);
+    const changes: JiraChanges = {
+      client,
+      startWork: context.core.startWork,
+      invoke: (command, input, options) => context.bus.invoke(command, input, options),
+      actions,
+    };
     return {
-      commands: jiraCommands(client, settings),
+      commands: jiraCommands(settings, changes),
+      actions: [actions.move],
       view: lazy(async () => {
         const { jiraView } = await import("./tui/jira-view");
         return {
           default: jiraView({
-            client,
+            changes,
             jql: settings.jql,
             maxResults: settings.maxResults,
             refreshMs: settings.refreshSeconds * 1000,

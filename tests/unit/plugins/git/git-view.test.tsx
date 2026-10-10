@@ -9,6 +9,7 @@ import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { WorkContext } from "../../../../src/domain/work/work-context";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import type { GitClient } from "../../../../src/plugins/git/application/git-client";
 import type { Branch } from "../../../../src/plugins/git/domain/branches";
@@ -25,6 +26,7 @@ import { errorText } from "../../../../src/tui/error-line";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeGit } from "../../../support/fake-git";
 import { gitSectionFor } from "../../../support/git-section";
+import { workIn } from "../../../support/work";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -149,6 +151,7 @@ async function render(
   client: GitClient,
   options: {
     workspace?: Workspace | null;
+    work?: WorkContext | null;
     focused?: boolean;
     rows?: number;
   } = {},
@@ -166,6 +169,7 @@ async function render(
         <Show when={shown()}>
           <View
             workspace={options.workspace === undefined ? MOBILE : options.workspace}
+            work={options.work ?? null}
             width={60}
             rows={options.rows ?? 12}
             icons="unicode"
@@ -651,9 +655,12 @@ describe("gitView remotes", () => {
 describe("gitView branches", () => {
   const pickerOpen = (f: string) => f.includes(" Branches ");
 
-  async function picking(branches = BRANCHES) {
+  async function picking(branches = BRANCHES, work: WorkContext | null = null) {
     const changes = fakeActions({ branches });
-    const view = await render(fakeClient(ok(WORKING), changes.client).client, { focused: true });
+    const view = await render(fakeClient(ok(WORKING), changes.client).client, {
+      focused: true,
+      work,
+    });
     await until(view, (f) => f.includes("Untracked (1)"));
     view.mockInput.pressKey("b");
     await until(view, (f) => pickerOpen(f) && f.includes("feat/login"));
@@ -669,6 +676,23 @@ describe("gitView branches", () => {
     expect(frame).toContain("origin/release");
     expect(frame).not.toContain("origin/main  Work");
     expect(view.modal).toEqual([true]);
+  });
+
+  test("with work in progress, a branch named for its issue is offered first", async () => {
+    const work = workIn("mobile", "MOB-2802", "Show pending card transactions", 0).get("mobile");
+    const view = await picking(BRANCHES, work ?? null);
+    const frame = view.captureCharFrame();
+    expect(frame).toContain("For MOB-2802");
+    expect(frame).toContain("▸ + Create feature/MOB-2802-show-pending-card-tran… here");
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Created feature/MOB-2802-show-pending-card"));
+    expect(view.changes.calls).toEqual([
+      {
+        op: "create",
+        folder: MOBILE.path,
+        arg: "feature/MOB-2802-show-pending-card-transactions",
+      },
+    ]);
   });
 
   test("typing finds a branch, and enter switches to it", async () => {

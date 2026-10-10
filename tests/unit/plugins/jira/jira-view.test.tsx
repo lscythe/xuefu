@@ -4,19 +4,38 @@ import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show, Suspense } from "solid-js";
 import { CommandBus } from "../../../../src/application/commands/command-bus";
-import { configurationError, remoteError } from "../../../../src/domain/shared/errors";
+import type { AppError } from "../../../../src/application/errors";
+import {
+  configurationError,
+  remoteError,
+  storageError,
+} from "../../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { err, ok } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import type { JiraClient } from "../../../../src/plugins/jira/application/jira-client";
 import type { JiraIssue } from "../../../../src/plugins/jira/domain/issue";
 import { jiraPlugin } from "../../../../src/plugins/jira/plugin";
 import { jiraView } from "../../../../src/plugins/jira/tui/jira-view";
 import type { PluginParts } from "../../../../src/plugins/plugin";
 import { PALETTE } from "../../../../src/tui/theme/palette";
-import { fakeJira, jiraIssue } from "../../../support/fake-jira";
+import { fakeJira, jiraChangesFor, jiraIssue } from "../../../support/fake-jira";
 import { fakeSecrets } from "../../../support/fake-secrets";
 import { ManualClock } from "../../../support/manual-clock";
+import { fakeCore } from "../../../support/plugin-context";
 import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
+
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/work/mobile" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
 
 const ISSUES = [
   jiraIssue("MOB-2841", { summary: "Add biometric login" }),
@@ -57,14 +76,22 @@ afterEach(() => {
 
 async function render(
   client: JiraClient,
-  options: { focused?: boolean; rows?: number; refreshMs?: number } = {},
+  options: {
+    focused?: boolean;
+    rows?: number;
+    refreshMs?: number;
+    workspace?: Workspace | null;
+    answer?: Parameters<typeof jiraChangesFor>[1];
+  } = {},
 ) {
   const statuses: (string | null)[] = [];
   const keys: (string | null)[] = [];
   const modal: boolean[] = [];
+  const reports: AppError[] = [];
   const [shown, setShown] = createSignal(true);
+  const { changes, started } = jiraChangesFor(client, options.answer);
   const View = jiraView({
-    client,
+    changes,
     jql: "assignee = currentUser()",
     maxResults: 50,
     refreshMs: options.refreshMs ?? 60_000,
@@ -75,7 +102,8 @@ async function render(
       <box width="100%" height="100%" flexDirection="column">
         <Show when={shown()}>
           <View
-            workspace={null}
+            workspace={options.workspace === undefined ? MOBILE : options.workspace}
+            work={null}
             width={60}
             rows={options.rows ?? 12}
             icons="unicode"
@@ -83,7 +111,7 @@ async function render(
             setStatus={(status) => statuses.push(status)}
             setKeys={(next) => keys.push(next)}
             setModal={(open) => modal.push(open)}
-            report={() => undefined}
+            report={(error) => reports.push(error)}
           />
         </Show>
       </box>
@@ -91,7 +119,14 @@ async function render(
     { width: 70, height: 30 },
   );
   await setup.renderOnce();
-  return Object.assign(setup, { statuses, keys, modal, close: () => setShown(false) });
+  return Object.assign(setup, {
+    statuses,
+    keys,
+    modal,
+    reports,
+    started,
+    close: () => setShown(false),
+  });
 }
 
 /** The frame once it satisfies `ready`, given real time for the client's promises. */
@@ -185,7 +220,7 @@ describe("jiraView", () => {
   test("with the keyboard, the arrows move the cursor, wrapping at the ends", async () => {
     const view = await render(fakeJira(ISSUES), { focused: true });
     await until(view, (f) => f.includes("MOB-2802"));
-    expect(view.keys.at(-1)).toBe("enter details · r refresh");
+    expect(view.keys.at(-1)).toBe("enter details · s start work · r refresh");
     const chosen = () =>
       view
         .captureSpans()
@@ -203,6 +238,101 @@ describe("jiraView", () => {
     await until(view, () => chosen().startsWith("MOB-2841"));
     view.mockInput.pressKey("END");
     await until(view, () => chosen().startsWith("MOB-2802"));
+  });
+});
+
+describe("starting work from the section", () => {
+  const TODO = jiraIssue("MOB-2802", {
+    summary: "Pending transactions",
+    status: { name: "To Do", category: "todo" },
+  });
+
+  test("s works on the issue here, then asks before moving it in Jira", async () => {
+    const jira = fakeJira([TODO, ...ISSUES]);
+    const view = await render(jira, { focused: true });
+    await until(view, (f) => f.includes("MOB-2790"));
+    view.mockInput.pressKey("s");
+    let frame = await until(view, (f) => f.includes(" Move MOB-2802? "));
+    expect(view.started).toEqual([
+      { workspace: "mobile", issue: "MOB-2802", title: "Pending transactions" },
+    ]);
+    expect(frame).toContain("✓ Working on MOB-2802 in Mobile.");
+    expect(frame).toContain("To Do");
+    expect(frame).toContain("In Progress");
+    expect(view.modal).toEqual([true]);
+    view.mockInput.pressEnter();
+    frame = await until(view, (f) => f.includes("Moved it to In Progress."));
+    expect(jira.moved).toEqual([{ key: "MOB-2802", id: "11" }]);
+    expect(view.modal).toEqual([true, false]);
+  });
+
+  test("declining keeps the work and leaves Jira alone", async () => {
+    const jira = fakeJira([TODO]);
+    const view = await render(jira, { focused: true });
+    await until(view, (f) => f.includes("MOB-2802"));
+    view.mockInput.pressKey("s");
+    await until(view, (f) => f.includes(" Move MOB-2802? "));
+    await pressEsc(view);
+    const frame = await until(view, (f) => !f.includes(" Move MOB-2802? "));
+    expect(frame).toContain("✓ Working on MOB-2802 in Mobile.");
+    expect(jira.moved).toEqual([]);
+  });
+
+  test("an issue under way is only worked on; a move Jira refuses is reported", async () => {
+    const under = await render(fakeJira(ISSUES), { focused: true });
+    await until(under, (f) => f.includes("MOB-2802"));
+    under.mockInput.pressKey("s");
+    await until(under, (f) => f.includes("✓ Working on MOB-2841 in Mobile."));
+    expect(under.modal).toEqual([]);
+    under.renderer.destroy();
+
+    const refused = await render(
+      fakeJira([TODO], 1, {
+        transition: () =>
+          Promise.resolve(err(remoteError("Jira did not move MOB-2802", "jira.example.com", 400))),
+      }),
+      { focused: true },
+    );
+    await until(refused, (f) => f.includes("MOB-2802"));
+    refused.mockInput.pressKey("s");
+    await until(refused, (f) => f.includes(" Move MOB-2802? "));
+    refused.mockInput.pressEnter();
+    await until(refused, () => refused.reports.length > 0);
+    expect(refused.reports[0]?.message).toBe("Jira did not move MOB-2802");
+  });
+
+  test("moves that cannot be read are said beside the work started", async () => {
+    const view = await render(
+      fakeJira([TODO], 1, {
+        transitions: () =>
+          Promise.resolve(err(remoteError("Jira answered 500", "jira.example.com", 500))),
+      }),
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("MOB-2802"));
+    view.mockInput.pressKey("s");
+    const frame = await until(view, (f) => f.includes("Could not read"));
+    expect(frame).toContain("⚠ Working on MOB-2802 in Mobile. Could not read its moves:");
+  });
+
+  test("without a workspace, or when work cannot start, it says why", async () => {
+    const none = await render(fakeJira([TODO]), { focused: true, workspace: null });
+    await until(none, (f) => f.includes("MOB-2802"));
+    none.mockInput.pressKey("s");
+    await until(none, () => none.reports.length > 0);
+    expect(none.reports[0]?.message).toBe("No workspace is open");
+    expect(none.started).toEqual([]);
+    none.renderer.destroy();
+
+    const failing = await render(fakeJira([TODO]), {
+      focused: true,
+      answer: () => err(storageError("Unable to save work", "work.save")),
+    });
+    await until(failing, (f) => f.includes("MOB-2802"));
+    failing.mockInput.pressKey("s");
+    await until(failing, () => failing.reports.length > 0);
+    expect(failing.reports[0]?.message).toBe("Unable to save work");
+    expect(failing.captureCharFrame()).not.toContain("Working on");
   });
 });
 
@@ -301,6 +431,7 @@ describe("the Jira plugin's section", () => {
         secrets: fakeSecrets({ JIRA_TOKEN: "pat" }),
         logger,
         clock,
+        core: fakeCore().core,
       },
       { url: "https://jira.example.com", token: { env: "JIRA_TOKEN" } },
       "config.yml",
@@ -312,6 +443,7 @@ describe("the Jira plugin's section", () => {
           <Suspense>
             <View
               workspace={null}
+              work={null}
               width={60}
               rows={10}
               icons="unicode"

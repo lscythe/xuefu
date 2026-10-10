@@ -17,6 +17,7 @@ import {
   formatError,
   formatNoteList,
   formatStartedTimer,
+  formatStartedWork,
   formatTimerStatus,
   formatWorkList,
   formatWorkspaceList,
@@ -427,17 +428,7 @@ async function startWork(
     ...(command.title === null ? {} : { title: command.title }),
   });
   if (!started.ok) return fail(out, started.error);
-  const { work, finished, timer } = started.value;
-  const where = work.workspace?.name ?? work.work.workspaceId;
-  return print(
-    out,
-    [
-      ...(finished === null ? [] : [`✓ Finished ${finished.issueKey} in ${where}`]),
-      `✓ Working on ${workSubject(work)} in ${where}`,
-      ...(timer === null ? [] : formatStartedTimer(timer)),
-      "",
-    ].join("\n"),
-  );
+  return print(out, `${formatStartedWork(started.value).join("\n")}\n`);
 }
 
 async function finishWork(

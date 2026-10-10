@@ -37,6 +37,7 @@ xuefu activity -w mobile-banking -n 50                         # what happened t
 xuefu git                                                      # branch and changed files here
 xuefu jira                                                     # your open Jira issues
 xuefu jira show MOB-2841                                       # one issue, with its description
+xuefu jira start MOB-2841 --yes                                # work on it here, and move it to in progress
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
@@ -103,8 +104,9 @@ go unnoticed.
 version: 1
 plugins:
   git:
-    enabled: false     # no `xuefu git` and no Git section
-    refreshSeconds: 3  # how often the Git section reads status while open (1 to 300)
+    enabled: false          # no `xuefu git` and no Git section
+    refreshSeconds: 3       # how often the Git section reads status while open (1 to 300)
+    branchPrefix: feature/  # starts the branch offered for the work in progress; "" for none
   jira:
     url: https://jira.example.com
     token: { env: JIRA_TOKEN }  # or { keychain: { service: jira, account: you } }
@@ -116,7 +118,7 @@ plugins:
 | Plugin | Adds |
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
-| `jira` | `xuefu jira issues` and `xuefu jira show <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
+| `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -128,7 +130,8 @@ message for next time, or stops a commit still running.
 
 `b` lists the branches here, then those on remotes that nothing here tracks; typing narrows the
 list, `Enter` switches (a remote's branch gets a local branch tracking it), and a new name is offered
-to create. Pulling, pushing and deleting a branch ask first, naming the branch, where it goes and
+to create. With work in progress and no branch here named for its issue, the picker first offers
+one, such as `feature/MOB-2802-show-pending-card-transactions`. Pulling, pushing and deleting a branch ask first, naming the branch, where it goes and
 what follows; `Enter` or `y` approves. Git keeps a branch whose commits are not merged, and a second
 `Ctrl+D` offers to force it: that is destructive, so only `y` approves it. An approval is bound to
 the branch it named, so nothing is pushed or pulled if another branch is in front by then.
@@ -142,7 +145,12 @@ status without taking git's index lock, so it never blocks your own git commands
 The Jira section lists what the query finds, with how many in the panel's frame, and reads it again
 every couple of minutes while it stays open; if a read fails, the list last read stays, with why
 above it. With the keyboard, `Enter` shows the issue under the cursor with its description, which
-the arrows scroll, and `r` reads the list again.
+the arrows scroll, `s` starts work on it in the workspace in front, asking before it moves a to-do
+issue to in progress in Jira, and `r` reads the list again.
+
+`xuefu jira start` works on the issue in this workspace, titled with its summary, and times it, as
+`xuefu work start` does. When the issue is still to do, `--yes` also moves it to in progress in
+Jira; without it, the command says how.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret

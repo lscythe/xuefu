@@ -7,6 +7,7 @@ import type { HttpClient } from "../application/ports/http-client";
 import type { Logger } from "../application/ports/logger";
 import type { ProcessRunner } from "../application/ports/process-runner";
 import type { SecretProvider } from "../application/ports/secret-provider";
+import type { WorkCommands } from "../application/work/commands";
 import type { PluginCommandRunner, PluginCommandSpec } from "../cli/plugin-command";
 import { type ConfigurationError, configurationError } from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
@@ -22,6 +23,14 @@ export interface PluginContext {
   readonly secrets: SecretProvider;
   readonly logger: Logger;
   readonly clock: Clock;
+  /** The core's commands a plugin may run on the bus. */
+  readonly core: CoreCommands;
+}
+
+/** Commands of the core that plugins build on. */
+export interface CoreCommands {
+  /** Works on an issue in a workspace and times it, finishing other work there. */
+  readonly startWork: WorkCommands["start"];
 }
 
 /** What a started plugin adds to XueFu; each part is optional. */

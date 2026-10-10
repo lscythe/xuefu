@@ -1,10 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import type { AppError } from "../../../../src/application/errors";
 import type { PluginInvocation } from "../../../../src/cli/plugin-command";
-import { ok, type Result } from "../../../../src/domain/shared/result";
+import { remoteError } from "../../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../../src/domain/shared/path";
+import { err, ok, type Result } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import type { JiraClient } from "../../../../src/plugins/jira/application/jira-client";
 import { jiraCommands } from "../../../../src/plugins/jira/cli/commands";
-import { fakeJira, jiraIssue as issue } from "../../../support/fake-jira";
+import { fakeJira, jiraIssue as issue, jiraChangesFor, WORKFLOW } from "../../../support/fake-jira";
+
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/work/mobile" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
 
 async function run(
   client: JiraClient,
@@ -14,13 +28,18 @@ async function run(
 ) {
   let stdout = "";
   let stderr = "";
-  const code: Result<number, AppError> = await jiraCommands(client, {
-    jql: "assignee = currentUser()",
-    maxResults: 50,
-  })(
+  const asked: (string | null)[] = [];
+  const { changes, started } = jiraChangesFor(client);
+  const code: Result<number, AppError> = await jiraCommands(
+    { jql: "assignee = currentUser()", maxResults: 50 },
+    changes,
+  )(
     { group: "jira", name, args, flags },
     {
-      workspace: () => Promise.reject(new Error("jira needs no workspace")),
+      workspace: (id) => {
+        asked.push(id);
+        return Promise.resolve(ok(MOBILE));
+      },
       stdout: (text) => {
         stdout += text;
       },
@@ -29,7 +48,7 @@ async function run(
       },
     },
   );
-  return { code, stdout, stderr };
+  return { code, stdout, stderr, started, asked };
 }
 
 describe("xuefu jira issues", () => {
@@ -105,5 +124,85 @@ describe("xuefu jira show", () => {
     expect(bad.code.ok ? null : bad.code.error.kind).toBe("validation");
     const missing = await run(client, "show", ["MOB-9"]);
     expect(missing.code.ok ? null : missing.code.error.kind).toBe("not-found");
+  });
+});
+
+describe("xuefu jira start", () => {
+  const TODO = issue("MOB-2802", {
+    summary: "Show pending card transactions",
+    status: { name: "To Do", category: "todo" },
+  });
+
+  test("works on the issue here, titled with its summary, and says how to move it", async () => {
+    const client = fakeJira([TODO]);
+    const shown = await run(client, "start", ["mob-2802"]);
+    expect(shown.code).toEqual(ok(0));
+    expect(shown.asked).toEqual([null]);
+    expect(shown.started).toEqual([
+      { workspace: "mobile", issue: "MOB-2802", title: "Show pending card transactions" },
+    ]);
+    expect(shown.stdout).toBe("✓ Working on MOB-2802 (Show pending card transactions) in mobile\n");
+    expect(shown.stderr).toBe("MOB-2802 is To Do in Jira; add --yes to move it to In Progress.\n");
+    expect(client.moved).toEqual([]);
+  });
+
+  test("--yes moves it to in progress in Jira too; -w picks the workspace", async () => {
+    const client = fakeJira([TODO]);
+    const shown = await run(client, "start", ["MOB-2802"], { yes: true, workspace: "mobile" });
+    expect(shown.asked).toEqual(["mobile"]);
+    expect(client.moved).toEqual([{ key: "MOB-2802", id: "11" }]);
+    expect(shown.stdout).toEndWith("✓ Moved MOB-2802 to In Progress in Jira\n");
+    expect(shown.stderr).toBe("");
+  });
+
+  test("an issue already under way is only worked on", async () => {
+    const client = fakeJira([issue("MOB-2841")]);
+    const shown = await run(client, "start", ["MOB-2841"], { yes: true });
+    expect(shown.code).toEqual(ok(0));
+    expect(client.moved).toEqual([]);
+    expect(shown.stderr).toBe("");
+  });
+
+  test("says when the workflow has no move to start it, or its moves cannot be read", async () => {
+    const done = WORKFLOW.filter((move) => move.to.category === "done");
+    const none = await run(
+      fakeJira([TODO], 1, { transitions: () => Promise.resolve(ok(done)) }),
+      "start",
+      ["MOB-2802"],
+    );
+    expect(none.stderr).toBe("MOB-2802 has no move to in progress in Jira; it stays To Do.\n");
+    const unread = await run(
+      fakeJira([TODO], 1, {
+        transitions: () =>
+          Promise.resolve(err(remoteError("Jira answered 500", "jira.example.com", 500))),
+      }),
+      "start",
+      ["MOB-2802"],
+      { yes: true },
+    );
+    expect(unread.code).toEqual(ok(0));
+    expect(unread.stderr).toBe("Could not read how MOB-2802 moves in Jira: Jira answered 500\n");
+  });
+
+  test("a move Jira refuses fails the command, after the work has started", async () => {
+    const shown = await run(
+      fakeJira([TODO], 1, {
+        transition: () =>
+          Promise.resolve(err(remoteError("Jira did not move MOB-2802", "jira.example.com", 400))),
+      }),
+      "start",
+      ["MOB-2802"],
+      { yes: true },
+    );
+    expect(shown.stdout).toContain("✓ Working on MOB-2802");
+    expect(shown.code.ok ? null : shown.code.error.message).toBe("Jira did not move MOB-2802");
+  });
+
+  test("not a key, or not an issue, starts nothing", async () => {
+    const bad = await run(fakeJira([TODO]), "start", ["not a key"]);
+    expect(bad.code.ok ? null : bad.code.error.kind).toBe("validation");
+    const missing = await run(fakeJira([TODO]), "start", ["MOB-1"]);
+    expect(missing.code.ok ? null : missing.code.error.kind).toBe("not-found");
+    expect([...bad.started, ...missing.started]).toEqual([]);
   });
 });

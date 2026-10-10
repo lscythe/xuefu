@@ -25,5 +25,6 @@ export function gitSectionFor(client: GitClient, refreshMs = 30): GitSection {
     actions,
     invoke: (command, input, options) => bus.invoke(command, input, options),
     refreshMs,
+    branchPrefix: "feature/",
   };
 }

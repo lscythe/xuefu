@@ -167,7 +167,6 @@ export function Shell(props: ShellProps) {
 
   // Bumped whenever stored activity may have changed, here or in another process.
   const [recorded, setRecorded] = createSignal(0);
-  onCleanup(props.onRecorded(() => setRecorded((n) => n + 1)));
 
   const workspace = () => tabs().active;
   const work = () => allWork().get(workspace()?.id ?? "") ?? null;
@@ -188,21 +187,23 @@ export function Shell(props: ShellProps) {
     });
   };
 
-  onCleanup(
-    props.onExternalChange(() => {
-      const loaded = props.reload();
-      if (!loaded.ok) {
-        setNotice(loaded.error);
-        return;
-      }
-      batch(() => {
-        setTabs(loaded.value.tabs);
-        setTimer(loaded.value.timer);
-        setAllWork(loaded.value.work);
-        setRecorded((n) => n + 1);
-      });
-    }),
-  );
+  /** Reads tabs, the timer and work again, as something recorded may have changed them. */
+  const reload = () => {
+    const loaded = props.reload();
+    if (!loaded.ok) {
+      setNotice(loaded.error);
+      return;
+    }
+    batch(() => {
+      setTabs(loaded.value.tabs);
+      setTimer(loaded.value.timer);
+      setAllWork(loaded.value.work);
+      setRecorded((n) => n + 1);
+    });
+  };
+  // Changes made here, a plugin's included, and those made by another process.
+  onCleanup(props.onRecorded(reload));
+  onCleanup(props.onExternalChange(reload));
 
   // Read only while the section is in front, and again whenever something is recorded.
   const showing = (...ids: string[]) => ids.includes(section()?.id ?? "");
@@ -477,6 +478,7 @@ export function Shell(props: ShellProps) {
                   {(View: Component<SectionProps>) => (
                     <View
                       workspace={workspace()}
+                      work={work()}
                       width={areaWidth() - PANEL_CHROME_COLUMNS}
                       rows={panelRows()}
                       icons={props.icons}

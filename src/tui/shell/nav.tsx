@@ -34,11 +34,14 @@ export function navWidth(columns: number, icons: IconSet, sections: readonly Sec
   return foldedWidth(icons) + 1 + Math.max(...sections.map((section) => section.label.length));
 }
 
-/** The sections, the one in front marked with a lavender block; ↑↓ move between them. */
+/**
+ * The sections, the one in front marked with a lavender block; ↑↓ move between them. Titled 导航,
+ * navigation, beside the 血符 mark; folded, there is no room for a title.
+ */
 export function Nav(props: NavProps) {
   const folded = () => props.width === foldedWidth(props.icons);
   return (
-    <Panel title="Go" focused={false} width={props.width}>
+    <Panel title={folded() ? "" : "导航"} focused={false} width={props.width}>
       <For each={props.sections}>
         {(section, index) => {
           const active = () => index() === props.selected;
