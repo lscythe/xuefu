@@ -15,6 +15,10 @@ const BASELINE = 14;
 const FONT_FAMILY =
   "Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace";
 
+/** Nerd Font icons live in the Private Use Area, which no ordinary font draws. */
+const PRIVATE_USE = /[\u{e000}-\u{f8ff}]/u;
+const NERD_FONT_FAMILY = `'Symbols Nerd Font Mono', ${FONT_FAMILY}`;
+
 const BOLD = 1 << 0;
 const DIM = 1 << 1;
 const UNDERLINE = 1 << 3;
@@ -80,6 +84,7 @@ function frameToSvg(frame: CapturedFrame, title: string): string {
           span.attributes & BOLD ? ' font-weight="bold"' : "",
           span.attributes & DIM ? ' opacity="0.6"' : "",
           span.attributes & UNDERLINE ? ' text-decoration="underline"' : "",
+          PRIVATE_USE.test(glyphs) ? ` font-family="${NERD_FONT_FAMILY}"` : "",
         ].join("");
         out.push(
           `<text x="${xs.join(" ")}" y="${y + BASELINE}" fill="${hex(span.fg)}"${style}>${escapeXml(glyphs)}</text>`,

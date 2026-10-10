@@ -994,11 +994,29 @@ describe("Shell", () => {
     const spans = shell.captureSpans().lines.flatMap((line) => line.spans);
     const lavender = RGBA.fromHex(PALETTE.accentSecondary);
     const marked = spans.filter((span) => span.bg.equals(lavender) && span.text.trim() !== "");
-    expect(marked.map((span) => span.text.trim())).toEqual(["1 Mobile Banking", "⌂"]);
+    expect(marked.map((span) => span.text.trim())).toEqual(["1 Mobile Banking", "D"]);
     const bold = spans.filter((span) => span.attributes & 1).map((span) => span.text.trim());
     expect(bold).toContain("Dashboard");
     expect(bold).not.toContain("Work");
-    expect(shell.captureCharFrame()).toContain("│  ⌂  Dashboard");
+    expect(shell.captureCharFrame()).toContain("│  D  Dashboard");
+  });
+
+  test("sections stand a row apart, and all ten still fit a 24-row terminal", async () => {
+    const lines = (await renderShell({}, { width: 100, height: 24 }))
+      .captureCharFrame()
+      .split("\n");
+    const rows = ["Dashboard", "Work", "Jira", "Notes"].map((label) =>
+      lines.findIndex((line) => new RegExp(`│  .  ${label}\\b`).test(line)),
+    );
+    expect(rows).toEqual([3, 5, 7, 21]);
+    expect(lines[22]).toMatch(/^╰/);
+  });
+
+  test("the nerd icon set marks sections with Nerd Font glyphs", async () => {
+    const frame = (await renderShell({ icons: "nerd" })).captureCharFrame();
+    expect(frame).toContain("│ \u{f009}  Dashboard");
+    expect(frame).toContain("│ \u{e725}  Git");
+    expect(frame).not.toContain("│  D  Dashboard");
   });
 
   test("arrow keys and j/k move through sections and wrap at the ends", async () => {
@@ -1110,8 +1128,7 @@ describe("Shell", () => {
 
   test("ascii icons drop glyphs and arrows but keep every label", async () => {
     const frame = (await renderShell({ icons: "ascii" })).captureCharFrame();
-    expect(frame).toContain("│ > Dashboard");
-    expect(frame).not.toContain("⌂");
+    expect(frame).toContain("│  D  Dashboard");
     expect(frame).not.toContain("▔");
     expect(frame.split("\n")[1]).toContain(`       ${"-".repeat(18)}`);
     expect(rowContaining(frame, "navigate")).toContain("j/k navigate");

@@ -190,6 +190,15 @@ describe("screenshots", () => {
     expectScreenshot("cockpit-ascii", screen.captureSpans());
   });
 
+  test("cockpit, nerd icons", async () => {
+    expectScreenshot("cockpit-nerd", (await shell({ icons: "nerd" })).captureSpans());
+  });
+
+  test("cockpit, nerd icons, folded at 80 columns", async () => {
+    const screen = await shell({ icons: "nerd" }, { width: 80, height: 24 });
+    expectScreenshot("cockpit-nerd-narrow", screen.captureSpans());
+  });
+
   test("several tabs, the third in front", async () => {
     const tabs = fakeTabs(VIEWS, "mobile-banking", "deployd", "auth-service");
     const screen = await shell({
