@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { Suspense } from "solid-js";
+import { CommandBus } from "../../../../src/application/commands/command-bus";
 import type { ProcessRunner, ProcessSpec } from "../../../../src/application/ports/process-runner";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
@@ -11,6 +12,7 @@ import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/
 import { gitPlugin } from "../../../../src/plugins/git/plugin";
 import type { PluginParts } from "../../../../src/plugins/plugin";
 import { ManualClock } from "../../../support/manual-clock";
+import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
 
 const MOBILE: Workspace = {
@@ -41,10 +43,13 @@ function notARepository(specs: ProcessSpec[]): ProcessRunner {
 }
 
 function start(settings: unknown, specs: ProcessSpec[] = []) {
+  const logger = testLogger().logger;
+  const clock = new ManualClock();
   const context = {
+    bus: new CommandBus({ logger, clock, ids: new SequentialIds() }),
     processes: notARepository(specs),
-    logger: testLogger().logger,
-    clock: new ManualClock(),
+    logger,
+    clock,
   };
   return gitPlugin.start(context, settings, "config.yml");
 }

@@ -64,7 +64,7 @@ import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sql
 import { BunProcessRunner } from "../infrastructure/process/bun-process-runner";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
-import { PLUGINS, type StartedPlugin, startPlugins } from "./plugins";
+import { PLUGINS, registerPluginActions, type StartedPlugin, startPlugins } from "./plugins";
 
 export type BootError =
   | ConfigurationError
@@ -231,13 +231,23 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
   const processes = new BunProcessRunner(options.env);
   const plugins = startPlugins(
     PLUGINS,
-    { processes, logger, clock: systemClock },
+    {
+      bus: { invoke: (command, input, options) => commandBus.invoke(command, input, options) },
+      processes,
+      logger,
+      clock: systemClock,
+    },
     config.plugins,
     paths.value.configFile,
   );
   if (!plugins.ok) {
     database.close();
     return plugins;
+  }
+  const actions = registerPluginActions(commandBus, plugins.value);
+  if (!actions.ok) {
+    database.close();
+    return err(unexpected("XueFu is wired incorrectly", new Error(actions.error.message)));
   }
 
   logger.info("XueFu started", {
