@@ -18,7 +18,7 @@ import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
-import { fakeJira, jiraIssue } from "../../support/fake-jira";
+import { fakeJira, jiraChangesFor, jiraIssue } from "../../support/fake-jira";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { gitSectionFor } from "../../support/git-section";
@@ -176,7 +176,7 @@ const jiraSection: Section = {
   label: jiraPlugin.label,
   icons: jiraPlugin.icons,
   view: jiraView({
-    client: fakeJira(MY_ISSUES, 9),
+    changes: jiraChangesFor(fakeJira(MY_ISSUES, 9)).changes,
     jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
     maxResults: 6,
     refreshMs: 60_000,
@@ -629,6 +629,28 @@ describe("screenshots", () => {
     screen.mockInput.pressEnter();
     await screen.waitForFrame((f) => f.includes("Acceptance criteria"));
     expectScreenshot("jira-issue", screen.captureSpans());
+  });
+
+  test("jira, asking before moving an issue", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection]),
+      navigation: new Map([["mobile-banking", "jira"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("MOB-2611"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    await screen.waitForFrame((f) => f.includes("s start work"));
+    screen.mockInput.pressKey("s");
+    for (
+      let tries = 0;
+      tries < 50 && !screen.captureCharFrame().includes(" Move MOB-2802? ");
+      tries++
+    ) {
+      await Bun.sleep(5);
+      await screen.renderOnce();
+    }
+    expectScreenshot("jira-move", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

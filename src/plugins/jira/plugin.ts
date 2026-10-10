@@ -3,7 +3,8 @@ import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
 import { definePlugin } from "../plugin";
 import { jiraActions } from "./application/actions";
-import { JIRA_COMMANDS, type JiraChanges, jiraCommands } from "./cli/commands";
+import type { JiraChanges } from "./application/start-work";
+import { JIRA_COMMANDS, jiraCommands } from "./cli/commands";
 import { MY_OPEN_ISSUES } from "./domain/issue";
 import { jiraRest } from "./integrations/jira-rest";
 
@@ -86,7 +87,7 @@ export const jiraPlugin = definePlugin({
         const { jiraView } = await import("./tui/jira-view");
         return {
           default: jiraView({
-            client,
+            changes,
             jql: settings.jql,
             maxResults: settings.maxResults,
             refreshMs: settings.refreshSeconds * 1000,

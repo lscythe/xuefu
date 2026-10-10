@@ -11,25 +11,43 @@ import {
   Show,
   Switch,
 } from "solid-js";
+import { confirmationTokenFor } from "../../../application/commands/command";
 import type { AppError } from "../../../application/errors";
+import type { ConfirmationPrompt } from "../../../domain/shared/confirmation";
+import { validationError } from "../../../domain/shared/errors";
+import { ConfirmDialog } from "../../../tui/confirm-dialog";
 import { ErrorLine } from "../../../tui/error-line";
 import { cycle, scrollOffset } from "../../../tui/list-navigation";
 import { fitHints } from "../../../tui/shell/panel-status";
 import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
-import type { JiraClient } from "../application/jira-client";
+import { statusGlyph } from "../../../tui/theme/status";
+import { type JiraChanges, startWorkOnIssue } from "../application/start-work";
 import { IssueDialog } from "./issue-dialog";
 import { categoryTone, type FoundIssues, issueColumns, issueCount } from "./issue-rows";
 
 /** Everything the section needs from the Jira plugin. */
 export interface JiraSection {
-  readonly client: JiraClient;
+  /** Reads issues, starts work on them, and moves them in Jira. */
+  readonly changes: JiraChanges;
   readonly jql: string;
   readonly maxResults: number;
   readonly refreshMs: number;
   /** The time zone dates are shown in; the host's unless given. */
   readonly timeZone?: string;
+}
+
+/** A line above the list: what is running, how it went, or what did not. */
+interface Banner {
+  readonly kind: "running" | "success" | "warning";
+  readonly text: string;
+}
+
+/** A confirmation on screen, and how to answer it. */
+interface Asking {
+  readonly prompt: ConfirmationPrompt;
+  readonly answer: (approved: boolean) => void;
 }
 
 const padded = (text: string, width: number) =>
@@ -39,10 +57,12 @@ const padded = (text: string, width: number) =>
  * The Jira section: the issues the configured query finds, read when it opens and every
  * `refreshMs` while it stays open. Reads never overlap, and one still running when the section
  * closes is stopped. A failed refresh keeps the issues last read and says why above them. With the
- * keyboard, Enter shows the issue under the cursor and `r` reads the list again.
+ * keyboard, Enter shows the issue under the cursor, `s` starts work on it in the front workspace,
+ * offering to move it to in progress in Jira, and `r` reads the list again.
  */
 export function jiraView(section: JiraSection): Component<SectionProps> {
-  const { client, jql, maxResults, refreshMs, timeZone } = section;
+  const { changes, jql, maxResults, refreshMs, timeZone } = section;
+  const { client, actions } = changes;
   // The last list read, so the section opens on it while it reads again.
   let last: FoundIssues | null = null;
 
@@ -51,6 +71,9 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
     const [failure, setFailure] = createSignal<AppError | null>(null);
     const [cursor, setCursor] = createSignal(0);
     const [opened, setOpened] = createSignal<string | null>(null);
+    const [busy, setBusy] = createSignal(false);
+    const [banner, setBanner] = createSignal<Banner | null>(null);
+    const [asking, setAsking] = createSignal<Asking | null>(null);
     const ascii = () => props.icons === "ascii";
 
     let running: AbortController | null = null;
@@ -77,8 +100,8 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
       running?.abort();
     });
 
-    // The issue dialog has every key while it is open.
-    const modal = () => opened() !== null;
+    // A dialog of the section's has every key while it is open.
+    const modal = () => opened() !== null || asking() !== null;
     createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
       if (modal()) props.setModal(false);
@@ -101,8 +124,13 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
       props.setKeys(
         fitHints(
           [
-            ...(issues().length > 0 ? [{ text: "enter details", rank: 0 }] : []),
-            { text: "r refresh", rank: 1 },
+            ...(issues().length > 0
+              ? [
+                  { text: "enter details", rank: 0 },
+                  { text: "s start work", rank: 1 },
+                ]
+              : []),
+            { text: "r refresh", rank: 2 },
           ],
           props.width - 2,
           ascii(),
@@ -110,8 +138,69 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
       );
     });
 
+    /** Shows a confirmation and resolves to the answer. */
+    const ask = (prompt: ConfirmationPrompt) =>
+      new Promise<boolean>((resolve) =>
+        setAsking({
+          prompt,
+          answer: (approved) => {
+            setAsking(null);
+            resolve(approved);
+          },
+        }),
+      );
+
+    /**
+     * Starts work on the issue in the front workspace, then offers to move it to in progress,
+     * asking first, as the move changes Jira for the whole team.
+     */
+    const startWork = async (key: string) => {
+      const workspace = props.workspace;
+      if (workspace === null) {
+        props.report(
+          validationError("No workspace is open", [
+            { path: "workspace", message: "open one with Ctrl+W to work there" },
+          ]),
+        );
+        return;
+      }
+      setBusy(true);
+      setBanner({ kind: "running", text: `Starting work on ${key}...` });
+      const started = await startWorkOnIssue(changes, workspace.id, key);
+      if (!started.ok) {
+        setBusy(false);
+        setBanner(null);
+        props.report(started.error);
+        return;
+      }
+      const { move, unread } = started.value;
+      const working = `Working on ${key} in ${workspace.name}.`;
+      setBanner(
+        unread === null
+          ? { kind: "success", text: working }
+          : { kind: "warning", text: `${working} Could not read its moves: ${unread.message}` },
+      );
+      if (move !== null) {
+        const asked = await changes.invoke(actions.move, move);
+        const moved =
+          !asked.ok && asked.error.kind === "confirmation-required"
+            ? (await ask(asked.error.prompt))
+              ? await changes.invoke(actions.move, move, {
+                  confirmation: confirmationTokenFor(asked.error),
+                })
+              : null
+            : asked;
+        if (moved !== null && !moved.ok) props.report(moved.error);
+        if (moved?.ok === true) {
+          setBanner({ kind: "success", text: `${working} Moved it to ${move.to}.` });
+          void load();
+        }
+      }
+      setBusy(false);
+    };
+
     useKeyboard((key) => {
-      if (!props.focused || modal()) return;
+      if (!props.focused || modal() || busy()) return;
       const count = issues().length;
       switch (key.name) {
         case "up":
@@ -133,6 +222,11 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
           if (issue !== undefined) setOpened(issue.key);
           return;
         }
+        case "s": {
+          const issue = issues()[at()];
+          if (issue !== undefined) void startWork(issue.key);
+          return;
+        }
         case "r":
           void load();
           return;
@@ -141,8 +235,13 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
       }
     });
 
-    /** Rows for the list: one less when a failed refresh is said above it. */
-    const listRows = () => Math.max(1, props.rows - (failure() === null ? 0 : 1));
+    /** Rows for the list: fewer for each line said above it. */
+    const listRows = () =>
+      Math.max(1, props.rows - (failure() === null ? 0 : 1) - (banner() === null ? 0 : 1));
+    const bannerTone = (kind: Banner["kind"]) =>
+      kind === "running" ? PALETTE.busy : kind === "success" ? PALETTE.success : PALETTE.warning;
+    const bannerGlyph = (kind: Banner["kind"]) =>
+      kind === "warning" ? (ascii() ? "[!]" : "⚠") : statusGlyph(kind, props.icons);
     const drawn = () => {
       const all = issues();
       const top = scrollOffset(props.focused ? at() : 0, all.length, listRows());
@@ -175,6 +274,18 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
             <text fg={PALETTE.textMuted}>{truncateToWidth(jql, props.width)}</text>
           </Match>
           <Match when={true}>
+            <Show when={banner()}>
+              {(line: Accessor<Banner>) => (
+                <text>
+                  <span
+                    style={{ fg: bannerTone(line().kind) }}
+                  >{`${bannerGlyph(line().kind)} `}</span>
+                  <span style={{ fg: PALETTE.text }}>
+                    {truncateToWidth(line().text, props.width - 2)}
+                  </span>
+                </text>
+              )}
+            </Show>
             <Show when={failure()}>
               {(error: Accessor<AppError>) => (
                 <text>
@@ -223,6 +334,11 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
               timeZone={timeZone}
               onClose={() => setOpened(null)}
             />
+          )}
+        </Show>
+        <Show when={asking()}>
+          {(shown: Accessor<Asking>) => (
+            <ConfirmDialog prompt={shown().prompt} icons={props.icons} onAnswer={shown().answer} />
           )}
         </Show>
       </>

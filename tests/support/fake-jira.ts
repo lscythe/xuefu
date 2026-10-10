@@ -4,7 +4,7 @@ import { notFound } from "../../src/domain/shared/errors";
 import { err, ok } from "../../src/domain/shared/result";
 import { jiraActions } from "../../src/plugins/jira/application/actions";
 import type { JiraClient } from "../../src/plugins/jira/application/jira-client";
-import type { JiraChanges } from "../../src/plugins/jira/cli/commands";
+import type { JiraChanges } from "../../src/plugins/jira/application/start-work";
 import type { JiraIssue, JiraTransition } from "../../src/plugins/jira/domain/issue";
 import { jiraPlugin } from "../../src/plugins/jira/plugin";
 import { fakeCore, pluginContext, type StartWorkCall } from "./plugin-context";

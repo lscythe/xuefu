@@ -3,6 +3,7 @@ import type { AppError } from "../../../application/errors";
 import type { StartedWork, WorkCommands } from "../../../application/work/commands";
 import { ok, type Result } from "../../../domain/shared/result";
 import { type JiraIssue, startTransition, workTitle } from "../domain/issue";
+import type { JiraActions } from "./actions";
 import type { JiraClient } from "./jira-client";
 
 /** A move to offer once work has started, as jira.issue.move takes it. */
@@ -22,11 +23,16 @@ export interface WorkOnIssue {
   readonly unread: AppError | null;
 }
 
-export interface StartWorkDependencies {
+interface StartWorkDependencies {
   readonly client: JiraClient;
   /** The core's work.start. */
   readonly startWork: WorkCommands["start"];
   readonly invoke: CommandBus["invoke"];
+}
+
+/** What the plugin changes: work in XueFu, and issues in Jira. */
+export interface JiraChanges extends StartWorkDependencies {
+  readonly actions: JiraActions;
 }
 
 /**

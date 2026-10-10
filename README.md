@@ -143,7 +143,8 @@ status without taking git's index lock, so it never blocks your own git commands
 The Jira section lists what the query finds, with how many in the panel's frame, and reads it again
 every couple of minutes while it stays open; if a read fails, the list last read stays, with why
 above it. With the keyboard, `Enter` shows the issue under the cursor with its description, which
-the arrows scroll, and `r` reads the list again.
+the arrows scroll, `s` starts work on it in the workspace in front, asking before it moves a to-do
+issue to in progress in Jira, and `r` reads the list again.
 
 `xuefu jira start` works on the issue in this workspace, titled with its summary, and times it, as
 `xuefu work start` does. When the issue is still to do, `--yes` also moves it to in progress in

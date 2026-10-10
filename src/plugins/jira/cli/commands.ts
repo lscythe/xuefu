@@ -5,9 +5,8 @@ import { ok } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
 import { issueKey } from "../../../domain/work/issue-key";
-import type { JiraActions } from "../application/actions";
 import type { JiraClient } from "../application/jira-client";
-import { type StartWorkDependencies, startWorkOnIssue } from "../application/start-work";
+import { type JiraChanges, startWorkOnIssue } from "../application/start-work";
 import type { JiraIssue } from "../domain/issue";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
@@ -92,11 +91,6 @@ function formatIssue(client: JiraClient, issue: JiraIssue): string {
     ...(description === "" ? [] : ["", description]),
     "",
   ].join("\n");
-}
-
-/** What the commands change: work in XueFu, and issues in Jira. */
-export interface JiraChanges extends StartWorkDependencies {
-  readonly actions: JiraActions;
 }
 
 /**
