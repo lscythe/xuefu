@@ -5,6 +5,7 @@ import {
   findBoundaryViolations,
   findCycles,
   layerOf,
+  locate,
   packageNameOf,
 } from "../support/architecture";
 
@@ -71,6 +72,18 @@ describe("layerOf", () => {
 
   test("files outside known layers are unclassified", () => {
     expect(layerOf("src/random/thing.ts")).toBeNull();
+    expect(layerOf("src/plugins/git/random/thing.ts")).toBeNull();
+  });
+
+  test.each([
+    ["src/plugins/plugin.ts", { layer: "plugin-api", plugin: null }],
+    ["src/plugins/git/plugin.ts", { layer: "plugin", plugin: "git" }],
+    ["src/plugins/git/domain/status.ts", { layer: "domain", plugin: "git" }],
+    ["src/plugins/git/integrations/cli-git.ts", { layer: "integrations", plugin: "git" }],
+    ["src/plugins/git/tui/git-section.tsx", { layer: "tui", plugin: "git" }],
+    ["src/tui/panel.tsx", { layer: "tui", plugin: null }],
+  ] as const)("locates %s", (file, location) => {
+    expect(locate(file)).toEqual(location);
   });
 });
 
@@ -143,6 +156,65 @@ describe("findBoundaryViolations", () => {
     expect(violations).toEqual([
       { from: "src/misc/x.ts", target: "src/misc/x.ts", reason: "file is not in a known layer" },
     ]);
+  });
+
+  test("a plugin keeps to the layer rules inside its folder", () => {
+    const violations = findBoundaryViolations(
+      graph({
+        "src/plugins/git/domain/status.ts": ["src/plugins/git/tui/view.tsx"],
+        "src/plugins/git/integrations/cli-git.ts": [
+          "src/plugins/git/application/client.ts",
+          "src/application/ports/process-runner.ts",
+          "src/infrastructure/process/runner.ts",
+        ],
+        "src/plugins/git/tui/view.tsx": ["src/plugins/git/domain/status.ts", "src/tui/panel.tsx"],
+        "src/plugins/git/application/client.ts": [],
+        "src/application/ports/process-runner.ts": [],
+        "src/infrastructure/process/runner.ts": [],
+        "src/tui/panel.tsx": [],
+      }),
+    );
+    expect(violations.map((v) => v.reason)).toEqual([
+      "domain → tui",
+      "integrations → infrastructure",
+    ]);
+  });
+
+  test("the core never reaches into a plugin, and plugins never into each other", () => {
+    const violations = findBoundaryViolations(
+      graph({
+        "src/tui/shell/shell.tsx": ["src/plugins/git/tui/view.tsx", "src/plugins/plugin.ts"],
+        "src/plugins/jira/domain/issue.ts": ["src/plugins/git/domain/status.ts"],
+        "src/plugins/git/tui/view.tsx": [],
+        "src/plugins/git/domain/status.ts": [],
+        "src/plugins/plugin.ts": [],
+      }),
+    );
+    expect(violations.map((v) => v.reason)).toEqual([
+      "core → plugin git",
+      "tui → plugin-api",
+      "plugin jira → plugin git",
+    ]);
+  });
+
+  test("a plugin's wiring may use its own parts and the contract; bootstrap may use any plugin", () => {
+    const violations = findBoundaryViolations(
+      graph({
+        "src/plugins/git/plugin.ts": [
+          "src/plugins/plugin.ts",
+          "src/plugins/git/tui/view.tsx",
+          "src/plugins/git/integrations/cli-git.ts",
+          "zod",
+        ],
+        "src/plugins/plugin.ts": ["src/tui/panel.tsx", "src/cli/plugin-command.ts"],
+        "src/bootstrap/plugins.ts": ["src/plugins/git/plugin.ts", "src/plugins/plugin.ts"],
+        "src/plugins/git/tui/view.tsx": [],
+        "src/plugins/git/integrations/cli-git.ts": [],
+        "src/tui/panel.tsx": [],
+        "src/cli/plugin-command.ts": [],
+      }),
+    );
+    expect(violations).toEqual([]);
   });
 
   test("bootstrap may depend on everything", () => {

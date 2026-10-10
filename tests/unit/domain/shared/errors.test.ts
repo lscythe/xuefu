@@ -6,6 +6,7 @@ import {
   conflict,
   describeCause,
   notFound,
+  processError,
   timeout,
   unexpected,
   validationError,
@@ -73,6 +74,19 @@ describe("errors", () => {
     expect(Object.isFrozen(error)).toBe(true);
   });
 
+  test("a process error names the program and how it ended, never its arguments", () => {
+    const error = processError("git failed", "git", 128, { hint: "Is it a repository?" });
+    expect(error).toMatchObject({
+      kind: "process",
+      message: "git failed",
+      command: "git",
+      exitCode: 128,
+      hint: "Is it a repository?",
+      context: { command: "git", exitCode: 128 },
+    });
+    expect(Object.isFrozen(error)).toBe(true);
+  });
+
   test("CoreError kinds can be handled exhaustively", () => {
     const label = (e: CoreError): string => {
       switch (e.kind) {
@@ -88,6 +102,7 @@ describe("errors", () => {
         case "confirmation-required":
         case "cancelled":
         case "timeout":
+        case "process":
         case "unexpected":
           return e.kind;
         default:

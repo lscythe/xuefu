@@ -7,6 +7,7 @@ import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import type { Workspace } from "../domain/workspace/workspace";
 import { systemClock } from "../infrastructure/system/clock";
+import { cockpitSections } from "../tui/shell/sections";
 import type { CockpitSnapshot } from "../tui/shell/shell";
 import type { App } from "./start-app";
 
@@ -78,6 +79,13 @@ export async function runTui(
   const closed = new Promise<void>((resolve) => renderer.once("destroy", () => resolve()));
   try {
     await openShell(renderer, {
+      sections: cockpitSections(
+        app.plugins.flatMap(({ plugin, parts }) =>
+          parts.view === undefined
+            ? []
+            : [{ id: plugin.id, label: plugin.label, icons: plugin.icons, view: parts.view }],
+        ),
+      ),
       clock: systemClock,
       icons: app.config.ui.icons,
       tabs: tabs.value,

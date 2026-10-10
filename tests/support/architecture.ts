@@ -12,7 +12,22 @@ export type Layer =
   | "integrations"
   | "tui"
   | "cli"
-  | "bootstrap";
+  | "bootstrap"
+  /** `src/plugins/*.ts`: the contract every plugin implements. */
+  | "plugin-api"
+  /** `src/plugins/<id>/*.ts`: one plugin's wiring of its own parts. */
+  | "plugin";
+
+/**
+ * Where a file sits: its layer, and the plugin it belongs to. Inside `src/plugins/<id>/`, the
+ * folders `domain`, `application`, `integrations`, `tui` and `cli` are those layers, scoped to
+ * the plugin.
+ */
+export interface Location {
+  readonly layer: Layer;
+  /** Null for the core. */
+  readonly plugin: string | null;
+}
 
 export type Dependency =
   | { readonly kind: "internal"; readonly target: string }
@@ -51,10 +66,31 @@ const RULES: Readonly<Record<Layer, LayerRule>> = {
   },
   cli: { layers: ["domain", "application", "cli"], packages: ["node:util"] },
   bootstrap: {
-    layers: ["domain", "application", "infrastructure", "integrations", "tui", "cli", "bootstrap"],
+    layers: [
+      "domain",
+      "application",
+      "infrastructure",
+      "integrations",
+      "tui",
+      "cli",
+      "bootstrap",
+      "plugin-api",
+      "plugin",
+    ],
     packages: [ANY_PACKAGE],
   },
+  // solid-js for lazy(), so a plugin's view loads only when the cockpit draws it.
+  "plugin-api": {
+    layers: ["domain", "application", "tui", "cli", "plugin-api"],
+    packages: ["zod", "solid-js"],
+  },
+  plugin: {
+    layers: ["domain", "application", "integrations", "tui", "cli", "plugin-api", "plugin"],
+    packages: ["zod", "solid-js"],
+  },
 };
+
+const PLUGIN_LAYERS: readonly Layer[] = ["domain", "application", "integrations", "tui", "cli"];
 
 const IMPORT_PATTERNS: readonly RegExp[] = [
   // import x from "y" / import type { x } from "y" / export { x } from "y" (may span lines)
@@ -89,9 +125,25 @@ export function packageNameOf(specifier: string): string {
   return parts[0] ?? specifier;
 }
 
+export function locate(file: string): Location | null {
+  if (file === "src/main.ts") return { layer: "bootstrap", plugin: null };
+  const parts = file.split("/");
+  if (parts[1] === "plugins") {
+    if (parts.length === 3) return { layer: "plugin-api", plugin: null };
+    const plugin = parts[2] ?? "";
+    if (parts.length === 4) return { layer: "plugin", plugin };
+    const layer = PLUGIN_LAYERS.find((candidate) => candidate === parts[3]);
+    return layer === undefined ? null : { layer, plugin };
+  }
+  const layer = coreLayer(parts[1]);
+  return layer === null ? null : { layer, plugin: null };
+}
+
 export function layerOf(file: string): Layer | null {
-  if (file === "src/main.ts") return "bootstrap";
-  const segment = file.split("/")[1];
+  return locate(file)?.layer ?? null;
+}
+
+function coreLayer(segment: string | undefined): Layer | null {
   switch (segment) {
     case "domain":
     case "application":
@@ -109,17 +161,23 @@ export function layerOf(file: string): Layer | null {
 export function findBoundaryViolations(graph: DependencyGraph): BoundaryViolation[] {
   const violations: BoundaryViolation[] = [];
   for (const [from, deps] of graph) {
-    const layer = layerOf(from);
-    if (layer === null) {
+    const here = locate(from);
+    if (here === null) {
       violations.push({ from, target: from, reason: "file is not in a known layer" });
       continue;
     }
+    const { layer } = here;
     const rule = RULES[layer];
     for (const dep of deps) {
       if (dep.kind === "internal") {
-        const targetLayer = layerOf(dep.target);
-        if (targetLayer !== null && !rule.layers.includes(targetLayer)) {
-          violations.push({ from, target: dep.target, reason: `${layer} → ${targetLayer}` });
+        const there = locate(dep.target);
+        if (there === null) continue;
+        if (!rule.layers.includes(there.layer)) {
+          violations.push({ from, target: dep.target, reason: `${layer} → ${there.layer}` });
+        } else if (there.plugin !== null && there.plugin !== here.plugin && layer !== "bootstrap") {
+          // Only bootstrap knows the plugins; the core and other plugins never reach into one.
+          const who = here.plugin === null ? "core" : `plugin ${here.plugin}`;
+          violations.push({ from, target: dep.target, reason: `${who} → plugin ${there.plugin}` });
         }
       } else {
         const pkg = packageNameOf(dep.target);

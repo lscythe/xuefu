@@ -1,6 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import { type ValidationError, validationError } from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
+import type { PluginCommandSpec, PluginInvocation } from "./plugin-command";
 
 /** A command that needs the application started. Paths are raw; bootstrap resolves them. */
 export type CliCommand =
@@ -64,7 +65,9 @@ export type CliCommand =
       /** Raw; null means the default page size. */
       readonly limit: string | null;
       readonly json: boolean;
-    };
+    }
+  /** A command a plugin adds, run by that plugin. */
+  | { readonly kind: "plugin"; readonly invocation: PluginInvocation };
 
 export type CliInvocation =
   | { readonly kind: "help" }
@@ -310,11 +313,60 @@ function usage(message: string): ValidationError {
   return validationError(message, [{ path: "argv", message }]);
 }
 
+/** A plugin's command in the shape of the core's, so both are checked the same way. */
+function pluginSpec(plugin: PluginCommandSpec): CommandSpec {
+  const flags = Object.keys(plugin.flags);
+  return {
+    usage: plugin.usage,
+    minArgs: plugin.minArgs,
+    maxArgs: plugin.maxArgs,
+    flags,
+    build: (args, values) => ({
+      kind: "plugin",
+      invocation: {
+        group: plugin.group,
+        name: plugin.name,
+        args,
+        flags: Object.fromEntries(
+          flags.map((name) => {
+            const value = values[name];
+            return [
+              name,
+              typeof value === "string" || typeof value === "boolean" ? value : undefined,
+            ];
+          }),
+        ),
+      },
+    }),
+  };
+}
+
+function resolvePluginCommand(
+  group: string,
+  rest: readonly string[],
+  plugins: readonly PluginCommandSpec[],
+): Result<{ name: string; spec: CommandSpec; args: readonly string[] }, ValidationError> {
+  const own = plugins.filter((plugin) => plugin.group === group);
+  const [sub, ...args] = rest;
+  const named = own.find((plugin) => plugin.name === sub);
+  if (named !== undefined)
+    return ok({ name: `${group} ${named.name}`, spec: pluginSpec(named), args });
+  const fallback = own.find((plugin) => plugin.isDefault === true);
+  if (sub === undefined && fallback !== undefined) {
+    return ok({ name: `${group} ${fallback.name}`, spec: pluginSpec(fallback), args: [] });
+  }
+  return err(usage(`Unknown ${group} command: ${sub ?? ""}`.trimEnd()));
+}
+
 function resolveCommand(
   positionals: readonly string[],
+  plugins: readonly PluginCommandSpec[],
 ): Result<{ name: string; spec: CommandSpec; args: readonly string[] }, ValidationError> {
   const [command, ...rest] = positionals;
   if (command === undefined) return ok({ name: "xuefu", spec: COCKPIT, args: [] });
+  if (plugins.some((plugin) => plugin.group === command)) {
+    return resolvePluginCommand(command, rest, plugins);
+  }
   const fallback = Object.hasOwn(GROUPS, command) ? GROUPS[command] : undefined;
   if (fallback !== undefined) {
     const [sub = fallback, ...args] = rest;
@@ -330,28 +382,50 @@ function resolveCommand(
   return ok({ name: command, spec, args: rest });
 }
 
-export function parseArgs(argv: readonly string[]): Result<CliInvocation, ValidationError> {
+type OptionTable = Record<string, { type: "boolean" | "string"; short?: string }>;
+
+const CORE_OPTIONS: Readonly<OptionTable> = {
+  help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "v" },
+  debug: { type: "boolean" },
+  "log-level": { type: "string" },
+  json: { type: "boolean" },
+  name: { type: "string" },
+  id: { type: "string" },
+  group: { type: "string" },
+  yes: { type: "boolean", short: "y" },
+  workspace: { type: "string", short: "w" },
+  issue: { type: "string" },
+  title: { type: "string" },
+  limit: { type: "string", short: "n" },
+};
+
+/** The core's flags plus every plugin's; a plugin reusing a core flag must use it the same way. */
+function optionTable(plugins: readonly PluginCommandSpec[]): OptionTable {
+  const table: OptionTable = { ...CORE_OPTIONS };
+  for (const plugin of plugins) {
+    for (const [name, flag] of Object.entries(plugin.flags)) {
+      table[name] ??= {
+        type: flag.type,
+        ...(flag.short === undefined ? {} : { short: flag.short }),
+      };
+    }
+  }
+  return table;
+}
+
+/** Plugins' commands are passed in by bootstrap, which knows the plugins; the core does not. */
+export function parseArgs(
+  argv: readonly string[],
+  plugins: readonly PluginCommandSpec[] = [],
+): Result<CliInvocation, ValidationError> {
   let parsed: ReturnType<typeof parseNodeArgs>;
   try {
     parsed = parseNodeArgs({
       args: [...argv],
       strict: true,
       allowPositionals: true,
-      options: {
-        help: { type: "boolean", short: "h" },
-        version: { type: "boolean", short: "v" },
-        debug: { type: "boolean" },
-        "log-level": { type: "string" },
-        json: { type: "boolean" },
-        name: { type: "string" },
-        id: { type: "string" },
-        group: { type: "string" },
-        yes: { type: "boolean", short: "y" },
-        workspace: { type: "string", short: "w" },
-        issue: { type: "string" },
-        title: { type: "string" },
-        limit: { type: "string", short: "n" },
-      },
+      options: optionTable(plugins),
     });
   } catch (thrown) {
     // node:util reports unknown flags and missing values by throwing; that is a usage error.
@@ -362,7 +436,7 @@ export function parseArgs(argv: readonly string[]): Result<CliInvocation, Valida
   if (values["help"] === true) return ok({ kind: "help" });
   if (values["version"] === true) return ok({ kind: "version" });
 
-  const resolved = resolveCommand(positionals);
+  const resolved = resolveCommand(positionals, plugins);
   if (!resolved.ok) return resolved;
   const { name, spec, args } = resolved.value;
 

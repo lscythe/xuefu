@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import { type Component, createEffect } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
@@ -12,6 +13,8 @@ import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
 import type { Workspace } from "../../../../src/domain/workspace/workspace";
 import { bigClockRows } from "../../../../src/tui/big-clock";
+import type { SectionProps } from "../../../../src/tui/shell/section-props";
+import { cockpitSections } from "../../../../src/tui/shell/sections";
 import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { activityEntry, fakeActivity } from "../../../support/fake-activity";
@@ -40,6 +43,7 @@ async function renderShell(
   setup = await testRender(
     () => (
       <Shell
+        sections={cockpitSections([])}
         clock={new ManualClock(Date.UTC(2026, 9, 6, 13, 59, 41))}
         timeZone="UTC"
         icons="unicode"
@@ -140,7 +144,7 @@ describe("Shell tabs", () => {
       tabs: tabs.initial,
       activateWorkspace: tabs.activate,
       navigation: new Map([
-        ["mobile-banking", "pulls"],
+        ["mobile-banking", "activity"],
         ["deployd", "no-longer-a-section"],
       ]),
       saveNavigation: (workspace, section) => {
@@ -148,12 +152,12 @@ describe("Shell tabs", () => {
         return Promise.resolve(ok(undefined));
       },
     });
-    expect(shell.captureCharFrame()).toContain("─ PRs ─");
+    expect(shell.captureCharFrame()).toContain("─ Activity ─");
     shell.mockInput.pressKey("j");
-    await shell.waitForFrame((f) => showing("Timesheet")(f));
+    await shell.waitForFrame((f) => showing("Notes")(f));
     shell.mockInput.pressKey("1", { meta: true });
     await shell.waitForFrame((f) => header(f).includes("deployd") && showing("Dashboard")(f));
-    expect(saved).toEqual(["mobile-banking:timesheet"]);
+    expect(saved).toEqual(["mobile-banking:notes"]);
   });
 
   test("a section change that cannot be saved is reported", async () => {
@@ -462,7 +466,7 @@ describe("Shell activity", () => {
     shell.activity.record(activityEntry(NOW, mobile, "Finished work on"));
     await shell.waitForFrame((f) => f.includes("13:59  Finished work on"));
     shell.mockInput.pressKey("k");
-    await shell.waitForFrame((f) => showing("Jenkins")(f) || showing("Android")(f));
+    await shell.waitForFrame((f) => showing("Timesheet")(f));
     const loads = shell.activity.loads.length;
     shell.activity.record(activityEntry(NOW, mobile, "Opened"));
     await shell.renderOnce();
@@ -769,6 +773,50 @@ describe("Shell note editor", () => {
     await shell.mockInput.typeText("edit note on mob-");
     shell.mockInput.pressEnter();
     await shell.waitForFrame((f) => f.includes(" Note on MOB-2841 ") && editorOpen(f));
+  });
+});
+
+describe("Shell plugin sections", () => {
+  /** A plugin's view that shows what it was given and sets a status for the frame. */
+  const view: Component<SectionProps> = (props) => {
+    createEffect(() => props.setStatus(`on ${props.workspace?.id ?? "nothing"}`));
+    return <text>{`${props.workspace?.name ?? "none"} in ${props.width}x${props.rows}`}</text>;
+  };
+  const GIT = { id: "git", label: "Git", icons: { nerd: "\u{e725}", letter: "G" }, view };
+
+  test("a plugin's section sits after Work, drawn by its view with a status in the frame", async () => {
+    const shell = await renderShell({
+      sections: cockpitSections([GIT]),
+      navigation: new Map([["mobile-banking", "git"]]),
+    });
+    const frame = await shell.waitForFrame(
+      (f) => showing("Git")(f) && f.includes(" on mobile-banking "),
+    );
+    expect(frame).toContain("│ Mobile Banking in 79x25");
+    expect(frame).toContain("│  G  Git ");
+    expect(frame.indexOf("  Git ")).toBeLessThan(frame.indexOf("  Timesheet"));
+
+    shell.mockInput.pressKey("j");
+    const next = await shell.waitForFrame((f) => showing("Timesheet")(f));
+    expect(next).not.toContain(" on mobile-banking ");
+  });
+
+  test("its view follows the workspace in front", async () => {
+    const tabs = fakeTabs(VIEWS, "mobile-banking", "deployd");
+    const shell = await renderShell({
+      sections: cockpitSections([GIT]),
+      tabs: tabs.initial,
+      activateWorkspace: tabs.activate,
+      navigation: new Map([
+        ["mobile-banking", "git"],
+        ["deployd", "git"],
+      ]),
+    });
+    await shell.waitForFrame((f) => f.includes(" on deployd "));
+    shell.mockInput.pressKey("1", { meta: true });
+    await shell.waitForFrame(
+      (f) => f.includes("│ Mobile Banking in") && f.includes(" on mobile-banking "),
+    );
   });
 });
 
@@ -1152,7 +1200,7 @@ describe("Shell", () => {
     const frame = (await renderShell()).captureCharFrame();
     expect(header(frame)).toContain("血符   1 Mobile Banking ");
     expect(header(frame)).toContain("Tue 06 Oct  13:59");
-    for (const label of ["Dashboard", "Work", "Jira", "Git", "PRs", "Timesheet", "Notes"]) {
+    for (const label of ["Dashboard", "Work", "Timesheet", "Activity", "Notes"]) {
       expect(frame).toContain(label);
     }
     expect(frame).toContain("─ 1 Work ─");
@@ -1179,8 +1227,15 @@ describe("Shell", () => {
     expect(shell.captureCharFrame()).toContain("│  D  Dashboard");
   });
 
-  test("sections stand a row apart, and all ten still fit a 24-row terminal", async () => {
-    const lines = (await renderShell({}, { width: 100, height: 24 }))
+  test("sections stand a row apart, and ten of them still fit a 24-row terminal", async () => {
+    const plugins = ["Jira", "Git", "PRs", "Jenkins", "Android"].map((label, i) => ({
+      id: label.toLowerCase(),
+      label,
+      icons: { nerd: "\u{e725}", letter: "JGPCA"[i] ?? "X" },
+    }));
+    const lines = (
+      await renderShell({ sections: cockpitSections(plugins) }, { width: 100, height: 24 })
+    )
       .captureCharFrame()
       .split("\n");
     const rows = ["Dashboard", "Work", "Jira", "Notes"].map((label) =>
@@ -1193,7 +1248,7 @@ describe("Shell", () => {
   test("the nerd icon set marks sections with Nerd Font glyphs", async () => {
     const frame = (await renderShell({ icons: "nerd" })).captureCharFrame();
     expect(frame).toContain("│ \u{f009}  Dashboard");
-    expect(frame).toContain("│ \u{e725}  Git");
+    expect(frame).toContain("│ \u{f0b1}  Work");
     expect(frame).not.toContain("│  D  Dashboard");
   });
 

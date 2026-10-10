@@ -20,6 +20,8 @@ export const GlobalConfigSchema = z.strictObject({
   ui: z.strictObject({
     icons: z.enum(["nerd", "unicode", "ascii"]),
   }),
+  /** Settings per plugin, by id; each plugin checks its own when XueFu starts. */
+  plugins: z.record(z.string(), z.record(z.string(), z.unknown())),
 });
 
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
@@ -29,6 +31,7 @@ export const DEFAULT_CONFIG: GlobalConfig = Object.freeze({
   logging: Object.freeze({ level: "info", maxFileBytes: 5 * 1024 * 1024, maxFiles: 3 }),
   telemetry: Object.freeze({ enabled: false }),
   ui: Object.freeze({ icons: "unicode" }),
+  plugins: Object.freeze({}),
 });
 
 /** Same shape with every key optional at every depth; still strict about unknown keys. */

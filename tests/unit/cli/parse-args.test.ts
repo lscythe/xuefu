@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type CliCommand, type CliInvocation, parseArgs } from "../../../src/cli/parse-args";
+import type { PluginCommandSpec } from "../../../src/cli/plugin-command";
 
 const run = (command: CliCommand, overrides: Record<string, unknown> = {}): CliInvocation => ({
   kind: "run",
@@ -218,5 +219,66 @@ describe("parseArgs: note", () => {
     [["note", "edit"], "Unknown note command: edit"],
   ])("rejects %p", (argv, message) => {
     expect(parseArgs(argv)).toMatchObject({ ok: false, error: { message } });
+  });
+});
+
+describe("parseArgs: plugin commands", () => {
+  const PLUGINS: readonly PluginCommandSpec[] = [
+    {
+      group: "git",
+      name: "status",
+      isDefault: true,
+      usage: "",
+      minArgs: 0,
+      maxArgs: 0,
+      flags: {
+        json: { type: "boolean", description: "json" },
+        workspace: { type: "string", short: "w", description: "workspace" },
+      },
+      summary: "status",
+    },
+    {
+      group: "git",
+      name: "show",
+      usage: "<ref>",
+      minArgs: 1,
+      maxArgs: 1,
+      flags: { stat: { type: "boolean", short: "s", description: "stat" } },
+      summary: "show",
+    },
+  ];
+  const plugin = (
+    name: string,
+    args: string[],
+    flags: Record<string, string | boolean | undefined>,
+  ) => run({ kind: "plugin", invocation: { group: "git", name, args, flags } });
+
+  test.each([
+    [["git"], plugin("status", [], { json: undefined, workspace: undefined })],
+    [["git", "status", "--json"], plugin("status", [], { json: true, workspace: undefined })],
+    [["git", "-w", "mobile"], plugin("status", [], { json: undefined, workspace: "mobile" })],
+    [["git", "show", "HEAD", "-s"], plugin("show", ["HEAD"], { stat: true })],
+  ] as const)("%p", (argv, expected) => {
+    expect(parseArgs([...argv], PLUGINS)).toEqual({ ok: true, value: expected });
+  });
+
+  test.each([
+    [["git", "log"], "Unknown git command: log"],
+    [["git", "show"], "git show expects <ref>"],
+    [["git", "status", "--stat"], "--stat does not apply to git status"],
+    [["git", "status", "extra"], "Unexpected argument: extra"],
+  ])("rejects %p: %s", (argv, message) => {
+    const result = parseArgs(argv, PLUGINS);
+    expect(!result.ok && result.error.message).toBe(message);
+  });
+
+  test("a group with no default command needs one named", () => {
+    const result = parseArgs(["git"], PLUGINS.slice(1));
+    expect(!result.ok && result.error.message).toBe("Unknown git command:");
+  });
+
+  test("without the plugin, its commands are unknown", () => {
+    const result = parseArgs(["git", "status"]);
+    expect(!result.ok && result.error.message).toBe("Unknown command: git");
   });
 });
