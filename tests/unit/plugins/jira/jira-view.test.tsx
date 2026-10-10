@@ -103,6 +103,7 @@ async function render(
         <Show when={shown()}>
           <View
             workspace={options.workspace === undefined ? MOBILE : options.workspace}
+            work={null}
             width={60}
             rows={options.rows ?? 12}
             icons="unicode"
@@ -442,6 +443,7 @@ describe("the Jira plugin's section", () => {
           <Suspense>
             <View
               workspace={null}
+              work={null}
               width={60}
               rows={10}
               icons="unicode"

@@ -595,6 +595,18 @@ describe("screenshots", () => {
     expectScreenshot("git-branches", screen.captureSpans());
   });
 
+  test("git, a branch for the work in progress", async () => {
+    const screen = await shell({
+      navigation: new Map([["mobile-banking", "git"]]),
+      work: workIn("mobile-banking", "MOB-2802", "Show pending card transactions", NOW),
+    });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("b");
+    await screen.waitForFrame((f) => f.includes("For MOB-2802"));
+    expectScreenshot("git-work-branch", screen.captureSpans());
+  });
+
   test("git, asking before a push", async () => {
     const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
     await screen.waitForFrame((f) => f.includes("Untracked (1)"));

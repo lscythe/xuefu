@@ -6,6 +6,7 @@ import {
   branchName,
   localName,
   parseBranches,
+  workBranch,
 } from "../../../../src/plugins/git/domain/branches";
 import { branchRows } from "../../../../src/plugins/git/tui/branch-picker";
 
@@ -147,8 +148,38 @@ describe("branchChoices", () => {
   });
 });
 
+describe("workBranch", () => {
+  test("the prefix, the key, and the title's first words in lower case", () => {
+    expect(workBranch("feature/", "MOB-2841", "Add biometric login")).toBe(
+      "feature/MOB-2841-add-biometric-login",
+    );
+    expect(workBranch("", "MOB-2841", "Crash: rotate (transfer) screen!")).toBe(
+      "MOB-2841-crash-rotate-transfer-screen",
+    );
+  });
+
+  test("accents are dropped, other scripts and a missing title leave the key", () => {
+    expect(workBranch("fix/", "MOB-7", "Résumé café")).toBe("fix/MOB-7-resume-cafe");
+    expect(workBranch("fix/", "MOB-7", "血符")).toBe("fix/MOB-7");
+    expect(workBranch("fix/", "MOB-7", null)).toBe("fix/MOB-7");
+  });
+
+  test("long titles keep whole words up to forty characters", () => {
+    const name = workBranch(
+      "",
+      "MOB-1",
+      "Upgrade the networking stack to the next major OkHttp release",
+    );
+    expect(name).toBe("MOB-1-upgrade-the-networking-stack-to-the-next");
+  });
+
+  test("a prefix git refuses makes no name", () => {
+    expect(workBranch("bad prefix/", "MOB-1", "x")).toBeNull();
+  });
+});
+
 describe("branchRows", () => {
-  const rows = (query: string) =>
+  const rows = (query: string, suggested: Parameters<typeof branchRows>[2] = null) =>
     branchRows(
       [
         branch("main", { current: true, upstream: "origin/main" }),
@@ -157,6 +188,7 @@ describe("branchRows", () => {
         branch("origin/release", { remote: "origin" }),
       ],
       query,
+      suggested,
     ).map((row) =>
       row.kind === "heading"
         ? `# ${row.label}`
@@ -172,6 +204,24 @@ describe("branchRows", () => {
   test("a query keeps the matches, best first, then offers to create it", () => {
     expect(rows("login")).toEqual(["feat/login", "+ login"]);
     expect(rows("rel")).toEqual(["origin/release", "+ rel"]);
+  });
+
+  test("blank, work in progress offers its branch first, unless one here is named for it", () => {
+    expect(rows("", { issue: "MOB-2", name: "feature/MOB-2-x" }).slice(0, 3)).toEqual([
+      "# For MOB-2",
+      "+ feature/MOB-2-x",
+      "# Local",
+    ]);
+    expect(rows("", { issue: "MOB-2", name: null })[0]).toBe("# Local");
+    expect(
+      branchRows([branch("mob-2-earlier")], "", { issue: "MOB-2", name: "feature/MOB-2-x" }).map(
+        (row) => row.kind,
+      ),
+    ).toEqual(["heading", "branch"]);
+    expect(rows("log", { issue: "MOB-2", name: "feature/MOB-2-x" })).toEqual([
+      "feat/login",
+      "+ log",
+    ]);
   });
 
   test("no create row for a name taken here, or one git refuses", () => {

@@ -1,4 +1,5 @@
 import type { AppError } from "../../application/errors";
+import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import type { IconSet } from "../theme/status";
 
@@ -6,6 +7,8 @@ import type { IconSet } from "../theme/status";
 export interface SectionProps {
   /** The workspace in front; null when none is open. */
   readonly workspace: Workspace | null;
+  /** The work in progress in that workspace; null when there is none. */
+  readonly work: WorkContext | null;
   /** Columns and rows inside the panel's frame. */
   readonly width: number;
   readonly rows: number;

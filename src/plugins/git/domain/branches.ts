@@ -33,6 +33,30 @@ export function branchName(raw: string): Result<BranchName, ValidationError> {
   return ok(raw as BranchName);
 }
 
+/** Most characters of the title a work branch keeps, so names stay easy to type. */
+const MAX_SLUG = 40;
+
+/**
+ * A branch for work on an issue: the prefix, the key, then the title's first words in lower case,
+ * as "feature/MOB-2841-add-biometric-login". Null when git would not take it.
+ */
+export function workBranch(prefix: string, key: string, title: string | null): string | null {
+  const words = (title ?? "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== "");
+  let slug = "";
+  for (const word of words) {
+    const longer = slug === "" ? word : `${slug}-${word}`;
+    if (longer.length > MAX_SLUG) break;
+    slug = longer;
+  }
+  const name = `${prefix}${key}${slug === "" ? "" : `-${slug}`}`;
+  return branchName(name).ok ? name : null;
+}
+
 /** A branch of the repository, here or on a remote. */
 export interface Branch {
   /** As git names it in commands: "main", or "origin/main" for a remote's. */

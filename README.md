@@ -104,8 +104,9 @@ go unnoticed.
 version: 1
 plugins:
   git:
-    enabled: false     # no `xuefu git` and no Git section
-    refreshSeconds: 3  # how often the Git section reads status while open (1 to 300)
+    enabled: false          # no `xuefu git` and no Git section
+    refreshSeconds: 3       # how often the Git section reads status while open (1 to 300)
+    branchPrefix: feature/  # starts the branch offered for the work in progress; "" for none
   jira:
     url: https://jira.example.com
     token: { env: JIRA_TOKEN }  # or { keychain: { service: jira, account: you } }
@@ -129,7 +130,8 @@ message for next time, or stops a commit still running.
 
 `b` lists the branches here, then those on remotes that nothing here tracks; typing narrows the
 list, `Enter` switches (a remote's branch gets a local branch tracking it), and a new name is offered
-to create. Pulling, pushing and deleting a branch ask first, naming the branch, where it goes and
+to create. With work in progress and no branch here named for its issue, the picker first offers
+one, such as `feature/MOB-2802-show-pending-card-transactions`. Pulling, pushing and deleting a branch ask first, naming the branch, where it goes and
 what follows; `Enter` or `y` approves. Git keeps a branch whose commits are not merged, and a second
 `Ctrl+D` offers to force it: that is destructive, so only `y` approves it. An approval is bound to
 the branch it named, so nothing is pushed or pulled if another branch is in front by then.

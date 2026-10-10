@@ -33,7 +33,7 @@ import { PALETTE } from "../../../tui/theme/palette";
 import { statusGlyph } from "../../../tui/theme/status";
 import type { Committed, GitActions } from "../application/actions";
 import type { GitClient, GitFiles } from "../application/git-client";
-import { localName } from "../domain/branches";
+import { localName, workBranch } from "../domain/branches";
 import {
   changeLetter,
   describeBranch,
@@ -184,6 +184,8 @@ export interface GitSection {
   readonly actions: GitActions;
   readonly invoke: CommandBus["invoke"];
   readonly refreshMs: number;
+  /** Starts the branch offered for the work in progress. */
+  readonly branchPrefix: string;
 }
 
 type Read = Result<GitStatus | null, AppError>;
@@ -222,7 +224,7 @@ const cannot = (message: string, reason: string) =>
  * says needs confirming is asked in a dialog first.
  */
 export function gitView(section: GitSection): Component<SectionProps> {
-  const { client, actions, invoke, refreshMs } = section;
+  const { client, actions, invoke, refreshMs, branchPrefix } = section;
   // Messages left unfinished, by workspace, kept while XueFu runs.
   const drafts = new Map<string, string>();
 
@@ -685,6 +687,14 @@ export function gitView(section: GitSection): Component<SectionProps> {
           {(workspace: Accessor<Workspace>) => (
             <BranchPicker
               load={() => client.branches(workspace().path)}
+              suggested={
+                props.work === null
+                  ? null
+                  : {
+                      issue: props.work.issueKey,
+                      name: workBranch(branchPrefix, props.work.issueKey, props.work.title),
+                    }
+              }
               icons={props.icons}
               onSwitch={(branch) =>
                 fromPicker(

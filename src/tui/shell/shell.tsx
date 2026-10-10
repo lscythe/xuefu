@@ -478,6 +478,7 @@ export function Shell(props: ShellProps) {
                   {(View: Component<SectionProps>) => (
                     <View
                       workspace={workspace()}
+                      work={work()}
                       width={areaWidth() - PANEL_CHROME_COLUMNS}
                       rows={panelRows()}
                       icons={props.icons}

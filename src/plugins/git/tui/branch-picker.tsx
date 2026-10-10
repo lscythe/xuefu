@@ -24,15 +24,39 @@ export type BranchRow =
 type Choice = Exclude<BranchRow, { kind: "heading" }>;
 const isChoice = (row: BranchRow): row is Choice => row.kind !== "heading";
 
+/** A branch to offer for the work in progress, named for its issue. */
+export interface SuggestedBranch {
+  readonly issue: string;
+  /** Null when no name git takes could be made. */
+  readonly name: string | null;
+}
+
 /**
  * Rows for a query: local branches, then remote ones, under headings when the query is blank;
  * otherwise those matching, best first, with a row to create the branch when the query is a
- * name git accepts and no local branch has it.
+ * name git accepts and no local branch has it. With work in progress and no local branch named
+ * for its issue, a blank query first offers to create `suggested`.
  */
-export function branchRows(branches: readonly Branch[], query: string): BranchRow[] {
+export function branchRows(
+  branches: readonly Branch[],
+  query: string,
+  suggested: SuggestedBranch | null = null,
+): BranchRow[] {
   const choices = branchChoices(branches);
   const trimmed = query.trim();
   if (trimmed === "") {
+    const offer =
+      suggested?.name != null &&
+      !choices.some(
+        (branch) =>
+          branch.remote === null &&
+          branch.name.toUpperCase().includes(suggested.issue.toUpperCase()),
+      )
+        ? [
+            { kind: "heading", label: `For ${suggested.issue}` } as const,
+            { kind: "create", name: suggested.name } as const,
+          ]
+        : [];
     const local = choices.filter((branch) => branch.remote === null);
     const remote = choices.filter((branch) => branch.remote !== null);
     const group = (label: string, list: readonly Branch[]): BranchRow[] =>
@@ -42,7 +66,7 @@ export function branchRows(branches: readonly Branch[], query: string): BranchRo
             { kind: "heading", label },
             ...list.map((branch): BranchRow => ({ kind: "branch", branch, hits: [] })),
           ];
-    return [...group("Local", local), ...group("Remote", remote)];
+    return [...offer, ...group("Local", local), ...group("Remote", remote)];
   }
   const matches = rankFuzzy(choices, trimmed, (branch) => [branch.name]).map(
     ({ item, match }): BranchRow => ({ kind: "branch", branch: item, hits: match.positions }),
@@ -55,6 +79,8 @@ export function branchRows(branches: readonly Branch[], query: string): BranchRo
 export interface BranchPickerProps {
   /** Read fresh on every open. */
   readonly load: () => Promise<Result<Branch[], AppError>>;
+  /** Offered first for the work in progress; null when there is none. */
+  readonly suggested?: SuggestedBranch | null;
   readonly icons: IconSet;
   /** Switches to the branch; on failure the picker stays open and shows why. */
   readonly onSwitch: (branch: Branch) => Promise<Result<unknown, AppError>>;
@@ -99,7 +125,7 @@ export function BranchPicker(props: BranchPickerProps) {
     const result = loaded();
     return result?.ok === false ? result.error : null;
   };
-  const rows = createMemo(() => branchRows(branches(), query()));
+  const rows = createMemo(() => branchRows(branches(), query(), props.suggested ?? null));
   const choices = createMemo(() => rows().filter(isChoice));
   const chosen = () => choices()[Math.min(selected(), choices().length - 1)];
 
@@ -205,7 +231,7 @@ export function BranchPicker(props: BranchPickerProps) {
 
   const ascii = () => props.icons === "ascii";
   const width = () => dialogWidth(dimensions().width);
-  const everything = createMemo(() => branchRows(branches(), "").length);
+  const everything = createMemo(() => branchRows(branches(), "", props.suggested ?? null).length);
   const listHeight = () => dialogListRows(dimensions().height, everything());
   const visibleRows = () => {
     const choice = chosen();
@@ -268,7 +294,8 @@ export function BranchPicker(props: BranchPickerProps) {
                         <>
                           <span style={{ fg: PALETTE.success }}>{"+ Create "}</span>
                           <span style={{ fg: active() ? PALETTE.selectionFg : PALETTE.text }}>
-                            <b>{row.name}</b>
+                            {/* The frame, padding, marker and the words around the name. */}
+                            <b>{truncateToWidth(row.name, Math.max(1, width() - 20))}</b>
                           </span>
                           <span style={{ fg: PALETTE.textMuted }}>{" here"}</span>
                         </>
