@@ -14,6 +14,7 @@ import { gitView } from "../../../src/plugins/git/tui/git-view";
 import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
+import { fakeGit } from "../../support/fake-git";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { ManualClock } from "../../support/manual-clock";
@@ -76,7 +77,7 @@ const gitSection = (status: GitStatus | null): Section => ({
   id: gitPlugin.id,
   label: gitPlugin.label,
   icons: gitPlugin.icons,
-  view: gitView({ status: () => Promise.resolve(ok(status)) }, 60_000),
+  view: gitView(fakeGit({ status: () => Promise.resolve(ok(status)) }), 60_000),
 });
 
 let setup: TestRendererSetup | undefined;

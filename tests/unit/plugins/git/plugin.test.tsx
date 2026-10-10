@@ -61,10 +61,15 @@ afterEach(() => {
 });
 
 describe("gitPlugin", () => {
-  test("starts with commands and a section by default", () => {
+  test("starts with commands, actions and a section by default", () => {
     const started = start({});
     expect(started.ok && started.value?.commands !== undefined).toBe(true);
     expect(started.ok && started.value?.view !== undefined).toBe(true);
+    expect(started.ok && started.value?.actions?.map((action) => action.name)).toEqual([
+      "git.stage",
+      "git.unstage",
+      "git.commit",
+    ]);
   });
 
   test("turned off, it starts nothing", () => {

@@ -16,6 +16,7 @@ import {
   gitView,
   statusRows,
 } from "../../../../src/plugins/git/tui/git-view";
+import { fakeGit } from "../../../support/fake-git";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -58,13 +59,13 @@ function fakeClient(first: Read) {
   const signals: AbortSignal[] = [];
   let pending: ((read: Read) => void) | null = null;
   let hold = false;
-  const client: GitClient = {
+  const client = fakeGit({
     status: (_folder, signal) => {
       if (signal !== undefined) signals.push(signal);
       if (hold) return new Promise((resolve) => (pending = resolve));
       return Promise.resolve(answer);
     },
-  };
+  });
   return {
     client,
     signals,
