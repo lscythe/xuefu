@@ -1,9 +1,32 @@
-import type { BoxRenderable } from "@opentui/core";
-import { Portal } from "@opentui/solid";
-import type { JSX } from "solid-js";
+import { applyGain, type BoxRenderable, type OptimizedBuffer } from "@opentui/core";
+import { Portal, useRenderer } from "@opentui/solid";
+import { type JSX, onCleanup } from "solid-js";
 import { PALETTE } from "./theme/palette";
 
 const MAX_WIDTH = 64;
+
+/** How bright the cockpit stays behind a dialog: dim enough to recede, bright enough to read. */
+const BEHIND = 0.45;
+
+/** The cells of a `width` by `height` screen outside a box, as a mask for OpenTUI's filters. */
+export function outsideMask(
+  width: number,
+  height: number,
+  box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+): Float32Array {
+  const inside = (x: number, y: number) =>
+    x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height;
+  const cells: number[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!inside(x, y)) cells.push(x, y, 1);
+    }
+  }
+  return new Float32Array(cells);
+}
+
+// Dialogs on screen, the newest last; one can open over another, as a confirmation over a picker.
+const open: symbol[] = [];
 const MAX_LIST_ROWS = 12;
 
 /** Up to 64 columns, keeping a margin on narrow terminals. */
@@ -34,8 +57,9 @@ function cover(container: BoxRenderable) {
 }
 
 /**
- * A framed box over the cockpit, centred both ways. It is drawn at the root wherever it is
- * declared, so a section's dialog centres on the screen rather than on the section.
+ * A framed box over the cockpit, centred both ways; the cockpit dims behind it while it is open.
+ * It is drawn at the root wherever it is declared, so a section's dialog centres on the screen
+ * rather than on the section.
  */
 export function Dialog(props: {
   title: string;
@@ -44,6 +68,27 @@ export function Dialog(props: {
   danger?: boolean;
   children: JSX.Element;
 }) {
+  const renderer = useRenderer();
+  const id = Symbol("dialog");
+  let frame: BoxRenderable | undefined;
+  let mask: { readonly key: string; readonly cells: Float32Array } | null = null;
+  // After each frame is drawn, everything but the newest dialog is dimmed, the dialogs under it
+  // included, so the one with the keyboard is plain to see.
+  const dim = (buffer: OptimizedBuffer) => {
+    if (open.at(-1) !== id || frame === undefined) return;
+    const box = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
+    const key = `${buffer.width}x${buffer.height}@${box.x},${box.y},${box.width},${box.height}`;
+    if (mask?.key !== key) {
+      mask = { key, cells: outsideMask(buffer.width, buffer.height, box) };
+    }
+    applyGain(buffer, BEHIND, mask.cells);
+  };
+  open.push(id);
+  renderer.addPostProcessFn(dim);
+  onCleanup(() => {
+    open.splice(open.indexOf(id), 1);
+    renderer.removePostProcessFn(dim);
+  });
   return (
     <Portal ref={(container) => cover(container as BoxRenderable)}>
       <box
@@ -57,6 +102,9 @@ export function Dialog(props: {
         alignItems="center"
       >
         <box
+          ref={(box: BoxRenderable) => {
+            frame = box;
+          }}
           width={props.width}
           flexDirection="column"
           border
