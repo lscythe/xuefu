@@ -84,6 +84,14 @@ describe("jiraPlugin settings", () => {
     );
   });
 
+  test("the section reads Jira every half minute to an hour, every two minutes by default", () => {
+    expect(issues({ url: URL, token: TOKEN, refreshSeconds: 10 })).toEqual([
+      ["plugins.jira.refreshSeconds", "Too small: expected number to be >=30"],
+    ]);
+    const started = start({ url: URL, token: TOKEN, refreshSeconds: 3600 });
+    expect(started.ok && started.value?.view !== undefined).toBe(true);
+  });
+
   test("unknown settings are refused, catching typos", () => {
     expect(issues({ url: URL, token: TOKEN, jqll: "x" })[0]?.[0]).toBe("plugins.jira");
   });

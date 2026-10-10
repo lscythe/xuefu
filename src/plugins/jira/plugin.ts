@@ -1,3 +1,4 @@
+import { lazy } from "solid-js";
 import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
 import { definePlugin } from "../plugin";
@@ -28,6 +29,8 @@ const JiraSettings = z
     /** Which issues to list; your open issues by default. */
     jql: z.string().trim().min(1).max(2000).default(MY_OPEN_ISSUES),
     maxResults: z.int().min(1).max(100).default(50),
+    /** How often the Jira section reads the list again while it is open. */
+    refreshSeconds: z.int().min(30).max(3600).default(120),
   })
   .transform((settings, ctx) => {
     const enabled = settings.enabled ?? settings.url !== undefined;
@@ -68,6 +71,19 @@ export const jiraPlugin = definePlugin({
       token: () => context.secrets.resolve(settings.token),
       source,
     });
-    return { commands: jiraCommands(client, settings) };
+    return {
+      commands: jiraCommands(client, settings),
+      view: lazy(async () => {
+        const { jiraView } = await import("./tui/jira-view");
+        return {
+          default: jiraView({
+            client,
+            jql: settings.jql,
+            maxResults: settings.maxResults,
+            refreshMs: settings.refreshSeconds * 1000,
+          }),
+        };
+      }),
+    };
   },
 });
