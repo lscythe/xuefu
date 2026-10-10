@@ -1,0 +1,73 @@
+{
+  "expand": "schema,names",
+  "startAt": 0,
+  "maxResults": 2,
+  "total": 7,
+  "issues": [
+    {
+      "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+      "id": "10432",
+      "self": "https://jira.example.com/rest/api/2/issue/10432",
+      "key": "MOB-2841",
+      "fields": {
+        "summary": "Add biometric login",
+        "issuetype": {
+          "self": "https://jira.example.com/rest/api/2/issuetype/10001",
+          "id": "10001",
+          "name": "Story",
+          "subtask": false
+        },
+        "created": "2026-10-01T09:12:03.000+0200",
+        "updated": "2026-10-06T13:59:41.000+0200",
+        "priority": {
+          "self": "https://jira.example.com/rest/api/2/priority/2",
+          "name": "High",
+          "id": "2"
+        },
+        "assignee": {
+          "name": "dana",
+          "key": "JIRAUSER10100",
+          "displayName": "Dana Scully",
+          "active": true
+        },
+        "reporter": {
+          "name": "fox",
+          "key": "JIRAUSER10101",
+          "displayName": "Fox Mulder",
+          "active": true
+        },
+        "status": {
+          "self": "https://jira.example.com/rest/api/2/status/3",
+          "name": "In Progress",
+          "id": "3",
+          "statusCategory": {
+            "self": "https://jira.example.com/rest/api/2/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "inprogress",
+            "name": "In Progress"
+          }
+        }
+      }
+    },
+    {
+      "id": "10398",
+      "self": "https://jira.example.com/rest/api/2/issue/10398",
+      "key": "MOB-2790",
+      "fields": {
+        "summary": "Session times out during payment",
+        "issuetype": { "id": "10004", "name": "Bug", "subtask": false },
+        "created": "2026-09-22T16:40:00.000-0400",
+        "updated": "2026-10-05T08:03:12.000-0400",
+        "priority": null,
+        "assignee": null,
+        "reporter": { "name": "walter", "displayName": "Walter Skinner" },
+        "status": {
+          "name": "Selected for Development",
+          "id": "10100",
+          "statusCategory": { "id": 2, "key": "new", "name": "To Do" }
+        }
+      }
+    }
+  ]
+}

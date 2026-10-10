@@ -24,13 +24,13 @@
     "test": "bun test ./tests",
     "test:unit": "bun test ./tests/unit",
     "test:integration": "bun test ./tests/integration",
-    "test:contract": "bun test ./tests/contract --pass-with-no-tests",
+    "test:contract": "bun test ./tests/contract",
     "test:e2e": "bun test ./tests/e2e",
     "test:arch": "bun test ./tests/architecture",
-    "test:coverage": "bun test ./tests/unit ./tests/integration ./tests/architecture --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "test:coverage": "bun test ./tests/unit ./tests/integration ./tests/architecture ./tests/contract --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "build": "bun scripts/build.ts",
     "screenshots": "bun scripts/screenshots.ts",
-    "check": "bun run format:check && bun run lint && bun run lint:workflows && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:contract && bun run test:e2e"
+    "check": "bun run format:check && bun run lint && bun run lint:workflows && bun run typecheck && bun run deadcode && bun run test:arch && bun run test:coverage && bun run test:e2e"
   },
   "dependencies": {
     "@opentui/core": "0.5.14",

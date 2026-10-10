@@ -55,7 +55,7 @@ jobs:
       - name: Architecture boundaries
         run: bun run test:arch
 
-      - name: Unit and integration tests (coverage gate)
+      - name: Unit, integration and contract tests (coverage gate)
         run: bun run test:coverage
 
       - name: Report coverage to Coveralls
@@ -72,9 +72,6 @@ jobs:
           format: lcov
           # The coverage threshold above is the gate; a Coveralls outage must not block merges.
           fail-on-error: false
-
-      - name: Contract tests
-        run: bun run test:contract
 
       - name: End-to-end tests
         run: bun run test:e2e

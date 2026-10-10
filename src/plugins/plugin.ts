@@ -45,6 +45,13 @@ export interface PluginSettings {
   readonly enabled: boolean;
 }
 
+/** What to tell someone who uses a plugin that is off: what is wrong, and which setting fixes it. */
+interface PluginOff {
+  readonly message: string;
+  readonly path: string;
+  readonly fix: string;
+}
+
 interface PluginDefinition<Settings extends PluginSettings> {
   /** Names the plugin everywhere: `plugins.<id>` in config, `xuefu <id>` on the command line. */
   readonly id: string;
@@ -55,7 +62,10 @@ interface PluginDefinition<Settings extends PluginSettings> {
   readonly commands: readonly PluginCommandSpec[];
   /** Parses `plugins.<id>` from config, filling in defaults; `{}` must be valid. */
   readonly settings: z.ZodType<Settings>;
-  start(context: PluginContext, settings: Settings): PluginParts;
+  /** Defaults to saying the plugin is turned off, and to set `enabled`. */
+  readonly whenOff?: PluginOff;
+  /** `source` names where the settings came from, for errors that point at them. */
+  start(context: PluginContext, settings: Settings, source: string): PluginParts;
 }
 
 /** A plugin with its settings' type sealed in, so plugins of every kind fit in one list. */
@@ -64,6 +74,7 @@ export interface Plugin {
   readonly label: string;
   readonly icons: { readonly nerd: string; readonly letter: string };
   readonly commands: readonly PluginCommandSpec[];
+  readonly whenOff: PluginOff;
   /**
    * Checks the plugin's settings, then starts it; null when the settings turn it off. `source`
    * names where the settings came from, for errors.
@@ -84,6 +95,11 @@ export function definePlugin<Settings extends PluginSettings>(
     label,
     icons,
     commands,
+    whenOff: definition.whenOff ?? {
+      message: `The ${label} plugin is turned off`,
+      path: `plugins.${id}.enabled`,
+      fix: "set it to true to use it",
+    },
     start: (context: PluginContext, settings: unknown, source: string) => {
       const parsed = definition.settings.safeParse(settings ?? {});
       if (!parsed.success) {
@@ -98,7 +114,7 @@ export function definePlugin<Settings extends PluginSettings>(
           ),
         );
       }
-      return ok(parsed.data.enabled ? definition.start(context, parsed.data) : null);
+      return ok(parsed.data.enabled ? definition.start(context, parsed.data, source) : null);
     },
   });
 }

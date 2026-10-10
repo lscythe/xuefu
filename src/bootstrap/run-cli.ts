@@ -640,13 +640,14 @@ async function runPluginCommand(
   const started = app.plugins.find(({ plugin }) => plugin.id === invocation.group);
   const commands = started?.parts.commands;
   if (commands === undefined) {
-    const label =
-      PLUGINS.find((plugin) => plugin.id === invocation.group)?.label ?? invocation.group;
+    const off = PLUGINS.find((plugin) => plugin.id === invocation.group)?.whenOff ?? {
+      message: `The ${invocation.group} plugin is turned off`,
+      path: `plugins.${invocation.group}.enabled`,
+      fix: "set it to true to use it",
+    };
     return fail(
       out,
-      configurationError(`The ${label} plugin is turned off`, app.paths.configFile, [
-        { path: `plugins.${invocation.group}.enabled`, message: "set it to true to use it" },
-      ]),
+      configurationError(off.message, app.paths.configFile, [{ path: off.path, message: off.fix }]),
     );
   }
   const ran = await commands(invocation, {

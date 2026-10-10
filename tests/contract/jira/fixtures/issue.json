@@ -1,0 +1,20 @@
+{
+  "id": "10432",
+  "self": "https://jira.example.com/rest/api/2/issue/10432",
+  "key": "MOB-2841",
+  "fields": {
+    "summary": "Add biometric login",
+    "issuetype": { "id": "10001", "name": "Story", "subtask": false },
+    "created": "2026-10-01T09:12:03.000+0200",
+    "updated": "2026-10-06T13:59:41.000+0200",
+    "priority": { "name": "High", "id": "2" },
+    "assignee": { "name": "dana", "displayName": "Dana Scully" },
+    "reporter": { "name": "fox", "displayName": "Fox Mulder" },
+    "description": "h3. Acceptance criteria\n* Face ID and fingerprint unlock the app\n* Falls back to the PIN",
+    "status": {
+      "name": "In Progress",
+      "statusCategory": { "key": "indeterminate", "name": "In Progress" }
+    },
+    "customfield_10100": "ignored"
+  }
+}

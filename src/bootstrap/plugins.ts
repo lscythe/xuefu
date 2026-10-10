@@ -8,10 +8,11 @@ import {
 } from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
 import { gitPlugin } from "../plugins/git/plugin";
+import { jiraPlugin } from "../plugins/jira/plugin";
 import type { Plugin, PluginContext, PluginParts } from "../plugins/plugin";
 
 /** Every built-in plugin, in the order they appear. */
-export const PLUGINS: readonly Plugin[] = [gitPlugin];
+export const PLUGINS: readonly Plugin[] = [gitPlugin, jiraPlugin];
 
 /** Commands every plugin adds, for parsing arguments and writing help before XueFu starts. */
 export const PLUGIN_COMMANDS = PLUGINS.flatMap((plugin) => plugin.commands);
