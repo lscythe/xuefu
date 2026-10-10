@@ -64,3 +64,10 @@ export function clockDuration(elapsed: Duration): string {
   const seconds = Math.floor(elapsed / 1000);
   return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
 }
+
+/** "1h 42m" or "35m": whole minutes, for totals read at a glance. */
+export function shortDuration(elapsed: Duration): string {
+  const minutes = Math.floor(elapsed / 60_000);
+  const hours = Math.floor(minutes / 60);
+  return hours === 0 ? `${minutes}m` : `${hours}h ${pad(minutes % 60)}m`;
+}

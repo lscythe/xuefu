@@ -97,8 +97,61 @@ describe("SqliteTimerRepository", () => {
     expect(repository.active()).toMatchObject({ ok: false, error: { kind: "storage" } });
   });
 
+  test("tracked time is every segment still open or ended after a moment", () => {
+    const first = unwrap(stopTimer(unwrap(pauseTimer(timer("t1", "MOB-1"), at(60))), at(90)));
+    timers.save(first);
+    const later = { ...timer("t2"), startedAt: at(100), segments: [{ start: at(100), end: null }] };
+    timers.save(unwrap(resumeTimer(unwrap(pauseTimer(later, at(200))), at(300))));
+    expect(timers.trackedSince(at(60))).toEqual({
+      ok: true,
+      value: [
+        {
+          workspaceId: "mobile-banking" as WorkspaceId,
+          issueKey: null,
+          start: at(100),
+          end: at(200),
+        },
+        { workspaceId: "mobile-banking" as WorkspaceId, issueKey: null, start: at(300), end: null },
+      ],
+    });
+    expect(timers.trackedSince(at(59))).toMatchObject({
+      ok: true,
+      value: [{ issueKey: "MOB-1", start: at(0), end: at(60) }, {}, {}],
+    });
+  });
+
+  test("tracked time from corrupt rows is a storage error", () => {
+    timers.save(timer("t1", "MOB-1"));
+    db.run("UPDATE timers SET issue_key = 'not a key'");
+    expect(timers.trackedSince(at(0))).toMatchObject({
+      ok: false,
+      error: { message: "A stored timer is corrupt" },
+    });
+    db.run("UPDATE timers SET issue_key = NULL, workspace_id = 'Bad Id'");
+    expect(timers.trackedSince(at(0)).ok).toBe(false);
+  });
+
+  test("tracked time from rows of the wrong type is a storage error", () => {
+    const fresh = migratedMemoryDatabase();
+    fresh.run("DROP TABLE timer_segments");
+    fresh.run("CREATE TABLE timer_segments (timer_id, position, start_at, end_at)");
+    const repository = new SqliteTimerRepository(fresh);
+    repository.save(timer("t1"));
+    fresh.run("UPDATE timer_segments SET start_at = 'soon'");
+    expect(repository.trackedSince(at(0))).toMatchObject({ ok: false, error: { kind: "storage" } });
+    fresh.run("UPDATE timer_segments SET start_at = 0, end_at = -5");
+    expect(repository.trackedSince(-10 as Timestamp)).toMatchObject({
+      ok: false,
+      error: { kind: "storage" },
+    });
+  });
+
   test("a closed database reports read and save failures", () => {
     db.close();
+    expect(timers.trackedSince(at(0))).toMatchObject({
+      ok: false,
+      error: { message: "Unable to read tracked time" },
+    });
     expect(timers.active()).toMatchObject({ ok: false, error: { operation: "timers.read" } });
     expect(timers.save(timer("t1"))).toMatchObject({
       ok: false,

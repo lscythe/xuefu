@@ -31,12 +31,18 @@ function NoteBody(props: {
       when={props.note}
       fallback={
         <>
-          <text fg={PALETTE.textMuted}>{props.empty}</text>
-          <text fg={PALETTE.textMuted}>{`  ${props.command}`}</text>
+          <text flexShrink={0} fg={PALETTE.textMuted}>
+            {props.empty}
+          </text>
+          <text flexShrink={0} fg={PALETTE.textMuted}>{`  ${props.command}`}</text>
         </>
       }
     >
-      {(note: Accessor<Note>) => <text fg={PALETTE.text}>{note().body}</text>}
+      {(note: Accessor<Note>) => (
+        <text flexShrink={0} fg={PALETTE.text}>
+          {note().body}
+        </text>
+      )}
     </Show>
   );
 }
@@ -46,7 +52,9 @@ export function NotesPanel(props: NotesPanelProps) {
   return (
     <Switch>
       <Match when={props.workspace === null}>
-        <text fg={PALETTE.textMuted}>Open a workspace with Ctrl+W to see its notes.</text>
+        <text flexShrink={0} fg={PALETTE.textMuted}>
+          Open a workspace with Ctrl+W to see its notes.
+        </text>
       </Match>
       <Match when={props.notes !== null && !props.notes.ok && props.notes.error}>
         {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={props.ascii} />}
@@ -54,7 +62,7 @@ export function NotesPanel(props: NotesPanelProps) {
       <Match when={props.notes?.ok === true && props.notes.value}>
         {(notes: Accessor<LoadedNotes>) => (
           <box flexDirection="column" overflow="hidden" flexGrow={1}>
-            <text fg={PALETTE.accentTertiary}>
+            <text flexShrink={0} fg={PALETTE.accentTertiary}>
               <b>{props.workspace?.name ?? ""}</b>
             </text>
             <NoteBody
@@ -65,8 +73,8 @@ export function NotesPanel(props: NotesPanelProps) {
             <Show when={props.work}>
               {(work: Accessor<WorkContext>) => (
                 <>
-                  <text> </text>
-                  <text>
+                  <text flexShrink={0}> </text>
+                  <text flexShrink={0}>
                     <span style={{ fg: PALETTE.accentSecondary }}>
                       <b>{work().issueKey}</b>
                     </span>

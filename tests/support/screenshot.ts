@@ -19,6 +19,13 @@ const BOLD = 1 << 0;
 const DIM = 1 << 1;
 const UNDERLINE = 1 << 3;
 
+/** Full, upper and lower half blocks, as the share of the cell's height they fill. */
+const BLOCKS: Readonly<Record<string, readonly [top: number, bottom: number]>> = {
+  "█": [0, 1],
+  "▀": [0, 0.5],
+  "▄": [0.5, 1],
+};
+
 const SCREENSHOT_DIR = join(import.meta.dir, "..", "unit", "tui", "__screenshots__");
 
 function hex(color: RGBA): string {
@@ -52,6 +59,16 @@ function frameToSvg(frame: CapturedFrame, title: string): string {
       let glyphs = "";
       let at = column;
       for (const char of span.text) {
+        // Terminals fill block elements to the cell's edges; a font's glyph would leave gaps.
+        const block = BLOCKS[char];
+        if (block !== undefined) {
+          const [top, bottom] = block;
+          out.push(
+            `<rect x="${at * CELL_WIDTH}" y="${y + top * CELL_HEIGHT}" width="${CELL_WIDTH}" height="${(bottom - top) * CELL_HEIGHT}" fill="${hex(span.fg)}"/>`,
+          );
+          at += 1;
+          continue;
+        }
         if (char !== " ") {
           xs.push(at * CELL_WIDTH);
           glyphs += char;

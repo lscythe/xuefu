@@ -128,6 +128,7 @@ export async function runTui(
         // Masked for display only; the stored note keeps what was written.
         return ok(note === null ? null : { ...note, body: redact(note.body) as NoteBody });
       },
+      loadTracked: (since) => app.timers.trackedSince(since),
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
     });

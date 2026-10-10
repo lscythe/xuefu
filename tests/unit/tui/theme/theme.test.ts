@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { contrastRatio } from "../../../../src/tui/theme/contrast";
-import { PALETTE, type PaletteToken } from "../../../../src/tui/theme/palette";
+import { PALETTE, type PaletteToken, SERIES } from "../../../../src/tui/theme/palette";
 import { STATUS_PRESENTATION, statusGlyph } from "../../../../src/tui/theme/status";
 
 describe("contrastRatio", () => {
@@ -40,25 +40,43 @@ describe("palette", () => {
     }
   });
 
-  test.each(surfaces)("soul flame / busy meets the 3:1 non-text minimum on %s", (surface) => {
+  test.each(surfaces)("orchid / busy meets the 3:1 non-text minimum on %s", (surface) => {
     check("accentSoul", surface, 3);
     check("busy", surface, 3);
   });
 
-  test("blood vermilion is only used where 3:1 suffices: borders and glyphs on bg", () => {
-    check("borderFocused", "bg", 3);
-    check("error", "bg", 3);
-    // Below 4.5:1, so error *messages* render in `text`, marked by a red glyph or badge.
-    expect(contrastRatio(PALETTE.error, PALETTE.bg)).toBeLessThan(4.5);
+  test("vermilion reads on the background and marks errors on every surface", () => {
+    for (const surface of surfaces) check("error", surface, 3);
+    check("error", "bg", 4.5);
   });
 
-  test("badge pairings are readable", () => {
-    check("text", "error", 4.5);
+  test("selections and filled badges are readable", () => {
+    check("selectionFg", "selectionBg", 7);
+    for (const token of ["textMuted", "accentSecondary", "success", "warning", "info"] as const) {
+      check(token, "selectionBg", 4.5);
+    }
+    check("textInverse", "accentSecondary", 7);
+    check("textInverse", "accentTertiary", 7);
     check("textInverse", "success", 4.5);
     check("textInverse", "warning", 4.5);
     check("textInverse", "info", 4.5);
-    check("text", "overlayBg", 7);
-    check("selectionFg", "selectionBg", 7);
+  });
+
+  test("the focus border stands out from idle borders", () => {
+    check("borderFocused", "bg", 3);
+    expect(contrastRatio(PALETTE.borderIdle, PALETTE.bg)).toBeLessThan(3);
+  });
+
+  test("series colours are distinct and readable on the background", () => {
+    expect(new Set(SERIES).size).toBe(SERIES.length);
+    for (const colour of SERIES) {
+      expect(contrastRatio(colour, PALETTE.bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("list stripes stay close to the background", () => {
+    check("text", "stripeBg", 7);
+    check("textMuted", "stripeBg", 4.5);
   });
 });
 

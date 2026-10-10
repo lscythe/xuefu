@@ -280,3 +280,33 @@ test("every recorded event decodes against the catalog", async () => {
   expect(page.value.events).toHaveLength(4);
   for (const event of page.value.events) expect(catalog.value.decode(event).ok).toBe(true);
 });
+
+describe("trackedSince", () => {
+  test("is the time tracked since a moment, in every workspace, named where it still exists", async () => {
+    const since = clock.now();
+    await bus.invoke(commands.start, { workspace: "mobile-banking", issue: "MOB-7" });
+    clock.advance(30 * MINUTE);
+    await bus.invoke(commands.start, { workspace: "auth-service" });
+    clock.advance(5 * MINUTE);
+    const tracked = unwrap(queries.trackedSince(since));
+    expect<unknown>(tracked.spans.map((s) => [s.workspaceId, s.issueKey, s.end === null])).toEqual([
+      ["mobile-banking", "MOB-7", false],
+      ["auth-service", null, true],
+    ]);
+    expect<string | undefined>(tracked.workspaces.get("auth-service")?.name).toBe("Auth Service");
+    expect(unwrap(queries.trackedSince(clock.now())).spans).toHaveLength(1);
+  });
+
+  test("a failure to read timers or workspaces is a storage error", () => {
+    db.run("DROP TABLE workspaces");
+    expect(queries.trackedSince(clock.now())).toMatchObject({
+      ok: false,
+      error: { kind: "storage" },
+    });
+    db.run("DROP TABLE timer_segments");
+    expect(queries.trackedSince(clock.now())).toMatchObject({
+      ok: false,
+      error: { kind: "storage" },
+    });
+  });
+});

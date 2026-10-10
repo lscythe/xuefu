@@ -1,5 +1,5 @@
 /** Columns a tab takes besides its name: " 1 " before and " " after. */
-const TAB_CHROME = 4;
+export const TAB_CHROME = 4;
 const ELLIPSIS = "…";
 
 /** Cuts `text` to at most `width` display columns, ending in an ellipsis when shortened. */

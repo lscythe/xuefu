@@ -95,7 +95,7 @@ describe("runCli", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, dir.path, terminal.host);
     const screen = await terminal.screen;
-    const frame = await screen.waitForFrame((f) => f.includes("XUEFU"));
+    const frame = await screen.waitForFrame((f) => f.includes("血符"));
     expect(frame).toContain("No workspace");
     expect(frame).toContain("Dashboard");
     screen.mockInput.pressKey("q");
@@ -328,7 +328,7 @@ describe("runCli: workspaces", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, nested, terminal.host);
     const screen = await terminal.screen;
-    expect(await screen.waitForFrame((f) => f.includes("XUEFU"))).toContain("Mobile Banking");
+    expect(await screen.waitForFrame((f) => f.includes("血符"))).toContain("Mobile Banking");
     screen.mockInput.pressKey("w", { ctrl: true });
     const switcher = await screen.waitForFrame((f) => f.includes("1 of 1"));
     expect(switcher).toContain("● current");
@@ -343,17 +343,18 @@ describe("runCli: workspaces", () => {
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
     await run(["workspace", "add", join(projects, "api"), "--name", "Payments API"]);
 
-    /** Opens the cockpit in `cwd`, returns its header and tab rows, then runs `steps` and quits. */
+    /** Opens the cockpit in `cwd`, returns its header with the tabs, then runs `steps` and quits. */
     const session = async (cwd: string, steps: (screen: TestRendererSetup) => Promise<void>) => {
       const terminal = headlessTerminal();
       const running = run([], {}, cwd, terminal.host);
       const screen = await terminal.screen;
-      const frame = await screen.waitForFrame((f) => f.includes("XUEFU"));
+      const frame = await screen.waitForFrame((f) => f.includes("血符"));
       await steps(screen);
       screen.mockInput.pressKey("q");
       expect((await running).code).toBe(EXIT.ok);
-      const [header = "", tabs = ""] = frame.split("\n");
-      return { header, tabs, frame };
+      // The tabs sit in the header, beside the mark.
+      const [header = ""] = frame.split("\n");
+      return { header, tabs: header, frame };
     };
     const open = async (screen: TestRendererSetup, query: string) => {
       screen.mockInput.pressKey("w", { ctrl: true });
@@ -383,12 +384,12 @@ describe("runCli: workspaces", () => {
     // Opening inside a workspace brings its tab back, on the section it was left on.
     await session(mobile, async (screen) => {
       screen.mockInput.pressKey("j");
-      await screen.waitForFrame((f) => f.includes("▍WORK"));
+      await screen.waitForFrame((f) => f.includes("─ Work ─"));
     });
     const back = await session(projects, idle);
     expect(back.header).toContain("Mobile Banking");
     expect(back.tabs).toContain(" 1 Payments API  2 Mobile Banking ");
-    expect(back.frame).toContain("▍WORK");
+    expect(back.frame).toContain("─ Work ─");
 
     const listed = JSON.parse((await run(["workspace", "list", "--json"])).stdout);
     expect(listed.map((w: { lastActiveAt: string | null }) => typeof w.lastActiveAt)).toEqual([
@@ -530,11 +531,11 @@ describe("runCli: timer", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, mobile, terminal.host);
     const screen = await terminal.screen;
-    await screen.waitForFrame((f) => /Timer \d\d:\d\d:\d\d/.test(f));
+    await screen.waitForFrame((f) => /● \d\d:\d\d:\d\d {2}│/.test(f));
     screen.mockInput.pressKey("t");
-    await screen.waitForFrame((f) => /Paused \d\d:\d\d:\d\d/.test(f));
+    await screen.waitForFrame((f) => /● \d\d:\d\d:\d\d paused/.test(f));
     await screen.mockInput.typeText("T");
-    await screen.waitForFrame((f) => !f.includes("Paused"));
+    await screen.waitForFrame((f) => !/● \d\d:\d\d:\d\d/.test(f));
     screen.mockInput.pressKey("q");
     expect((await running).code).toBe(EXIT.ok);
     expect((await run(["timer"])).code).toBe(EXIT.none);
@@ -634,7 +635,7 @@ describe("runCli: work", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, mobile, terminal.host);
     const screen = await terminal.screen;
-    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    await screen.waitForFrame((f) => f.includes("血符"));
     await screen.mockInput.typeText(":");
     await screen.waitForFrame((f) => f.includes(" Commands "));
     screen.mockInput.pressEnter();
@@ -643,14 +644,16 @@ describe("runCli: work", () => {
     screen.mockInput.pressEnter();
     await screen.waitForFrame((f) => f.includes("Title (optional)"));
     screen.mockInput.pressEnter();
-    await screen.waitForFrame((f) => f.includes("│  MOB-77") && /Timer \d\d:\d\d:\d\d/.test(f));
+    // Starting work times it, so the timer shows in the header.
+    await screen.waitForFrame((f) => /● \d\d:\d\d:\d\d/.test(f.split("\n")[0] ?? ""));
     expect((await run(["work"])).stdout).toContain("MOB-77");
 
     await screen.mockInput.typeText(":");
     await screen.waitForFrame((f) => f.includes("Finish work on MOB-77"));
     await screen.mockInput.typeText("finish");
     screen.mockInput.pressEnter();
-    await screen.waitForFrame((f) => !f.includes("MOB-77"));
+    // Finishing stops its timer.
+    await screen.waitForFrame((f) => !(f.split("\n")[0] ?? "").includes("●"));
     screen.mockInput.pressKey("q");
     expect((await running).code).toBe(EXIT.ok);
     expect((await run(["work"])).code).toBe(EXIT.none);
@@ -669,17 +672,19 @@ describe("runCli: work", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, mobile, terminal.host);
     const screen = await terminal.screen;
-    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    await screen.waitForFrame((f) => f.includes("血符"));
     const header = () => screen.captureCharFrame().split("\n")[0] ?? "";
-    expect(header()).not.toContain("MOB-5");
+    expect(header()).not.toContain("●");
 
     await run(["work", "start", "MOB-5", "--title", "From the CLI"], {}, mobile);
     const deadline = Date.now() + 5_000;
-    while (!/MOB-5 From the CLI.*Timer \d\d:\d\d:\d\d/.test(header()) && Date.now() < deadline) {
+    // Work started there is timed, so its timer shows up here.
+    const caughtUp = () => /● \d\d:\d\d:\d\d/.test(header());
+    while (!caughtUp() && Date.now() < deadline) {
       await Bun.sleep(50);
       await screen.renderOnce();
     }
-    expect(header()).toMatch(/MOB-5 From the CLI.*Timer \d\d:\d\d:\d\d/);
+    expect(caughtUp()).toBe(true);
     screen.mockInput.pressKey("q");
     expect((await running).code).toBe(EXIT.ok);
   });
@@ -769,10 +774,10 @@ describe("runCli: activity", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, mobile, terminal.host);
     const screen = await terminal.screen;
-    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    await screen.waitForFrame((f) => f.includes("血符"));
     screen.mockInput.pressKey("k");
     screen.mockInput.pressKey("k");
-    await screen.waitForFrame((f) => f.includes("▍ACTIVITY") && f.includes("Opened"));
+    await screen.waitForFrame((f) => f.includes("─ Activity ─") && f.includes("Opened"));
     screen.mockInput.pressKey("t");
     await screen.waitForFrame((f) => f.includes("Started the timer"));
     screen.mockInput.pressKey("q");
@@ -867,9 +872,9 @@ describe("runCli: notes", () => {
     const terminal = headlessTerminal();
     const running = run([], {}, mobile, terminal.host);
     const screen = await terminal.screen;
-    await screen.waitForFrame((f) => f.includes("XUEFU"));
+    await screen.waitForFrame((f) => f.includes("血符"));
     screen.mockInput.pressKey("k");
-    await screen.waitForFrame((f) => f.includes("▍NOTES") && f.includes("password=[REDACTED]"));
+    await screen.waitForFrame((f) => f.includes("─ Notes ─") && f.includes("password=[REDACTED]"));
     expect(screen.captureCharFrame()).not.toContain("hunter2");
 
     await note(["append", "Ask Dana for VPN access"]);

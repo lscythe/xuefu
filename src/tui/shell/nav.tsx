@@ -1,4 +1,5 @@
 import { For } from "solid-js";
+import { Panel } from "../panel";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { SECTIONS, sectionIcon } from "./sections";
@@ -6,36 +7,45 @@ import { SECTIONS, sectionIcon } from "./sections";
 export interface NavProps {
   readonly selected: number;
   readonly icons: IconSet;
+  /** Columns the panel takes; see navWidth. */
+  readonly width: number;
 }
 
-export const NAV_WIDTH = 16;
+/** Below this many terminal columns the sections fold to their icons, when there are icons. */
+const FOLD_BELOW = 100;
+const FULL_WIDTH = 17;
+const FOLDED_WIDTH = 7;
 
+export function navWidth(columns: number, icons: IconSet): number {
+  return columns < FOLD_BELOW && icons !== "ascii" ? FOLDED_WIDTH : FULL_WIDTH;
+}
+
+/** The sections, the one in front marked with a lavender block; ↑↓ move between them. */
 export function Nav(props: NavProps) {
-  const marker = () => (props.icons === "ascii" ? ">" : "▌");
+  const folded = () => props.width === FOLDED_WIDTH;
   return (
-    <box
-      flexDirection="column"
-      width={NAV_WIDTH}
-      border
-      borderColor={PALETTE.borderIdle}
-      backgroundColor={PALETTE.panelBg}
-    >
+    <Panel title="Go" focused={false} width={props.width}>
       <For each={SECTIONS}>
         {(section, index) => {
           const active = () => index() === props.selected;
           const icon = () => sectionIcon(section, props.icons);
           return (
-            <box backgroundColor={active() ? PALETTE.selectionBg : PALETTE.panelBg}>
-              <text>
-                <span style={{ fg: PALETTE.borderFocused }}>{active() ? marker() : " "}</span>
-                <span style={{ fg: active() ? PALETTE.selectionFg : PALETTE.textMuted }}>
-                  {`${icon() ?? ""} ${section.label}`}
-                </span>
-              </text>
-            </box>
+            <text>
+              <span
+                style={{
+                  fg: active() ? PALETTE.textInverse : PALETTE.textDim,
+                  bg: active() ? PALETTE.accentSecondary : PALETTE.bg,
+                }}
+              >
+                {icon() === null ? (active() ? ">" : " ") : ` ${icon()} `}
+              </span>
+              <span style={{ fg: active() ? PALETTE.text : PALETTE.textMuted }}>
+                {folded() ? "" : active() ? <b>{` ${section.label}`}</b> : ` ${section.label}`}
+              </span>
+            </text>
           );
         }}
       </For>
-    </box>
+    </Panel>
   );
 }

@@ -12,12 +12,14 @@ import {
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { Clock } from "../../application/ports/clock";
-import type { TimerView } from "../../application/timesheet/queries";
+import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
 import type { OpenTabs, WorkspaceView } from "../../application/workspace/queries";
 import type { Note } from "../../domain/notes/note";
 import { assertNever } from "../../domain/shared/assert-never";
 import { ok, type Result } from "../../domain/shared/result";
+import type { Timestamp } from "../../domain/shared/time";
+import { startOfDay } from "../../domain/shared/wall-clock";
 import { timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
@@ -25,19 +27,23 @@ import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
 import { Palette } from "../palette/palette";
+import { Panel } from "../panel";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { useNow } from "../use-now";
 import { ActivityPanel } from "./activity-panel";
+import { DASHBOARD_PANELS, Dashboard } from "./dashboard";
 import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
-import { NAV_WIDTH, Nav } from "./nav";
+import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
+import { sectionStatus, timerKeys } from "./panel-status";
 import { SECTIONS } from "./sections";
-import { TabBar } from "./tab-bar";
 import { fitsTerminal } from "./terminal-size";
+import { TodayPanel, todayTotal } from "./today-panel";
 import { TooSmall } from "./too-small";
 import { WorkPanel } from "./work-panel";
 
@@ -96,6 +102,8 @@ export interface ShellProps {
     workspace: Workspace,
     issue: IssueKey | null,
   ) => Result<Note | null, AppError>;
+  /** Time tracked since `since`, in every workspace. */
+  readonly loadTracked: (since: Timestamp) => Result<TrackedTime, AppError>;
   /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
   readonly onExternalChange: (listener: () => void) => () => void;
   readonly onQuit: () => void;
@@ -104,7 +112,7 @@ export interface ShellProps {
   readonly tickMs?: number;
 }
 
-/** Header, the panel's frame and title, and the key bar. */
+/** The header's two rows, the panel's frame and the key bar. */
 const PANEL_CHROME_ROWS = 5;
 /** The panel's frame and padding. */
 const PANEL_CHROME_COLUMNS = 4;
@@ -114,6 +122,8 @@ export function Shell(props: ShellProps) {
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  // Which of the dashboard's panels has focus; kept while away from the dashboard.
+  const [panel, setPanel] = createSignal(0);
   const [notice, setNotice] = createSignal<AppError | null>(null);
   const [timer, setTimer] = createSignal(props.timer);
   const [allWork, setAllWork] = createSignal(props.work);
@@ -162,14 +172,15 @@ export function Shell(props: ShellProps) {
   );
 
   // Read only while the section is in front, and again whenever something is recorded.
+  const showing = (...ids: string[]) => ids.includes(section()?.id ?? "");
   const activity = createMemo(() => {
-    if (section()?.id !== "activity") return null;
+    if (!showing("activity", "dashboard")) return null;
     recorded();
     return props.loadActivity(workspace());
   });
   const notes = createMemo((): Result<LoadedNotes, AppError> | null => {
     const current = workspace();
-    if (section()?.id !== "notes" || current === null) return null;
+    if (!showing("notes", "dashboard") || current === null) return null;
     recorded();
     const own = props.loadNote(current, null);
     if (!own.ok) return own;
@@ -178,8 +189,19 @@ export function Shell(props: ShellProps) {
     return onIssue.ok ? ok({ own: own.value, issue: onIssue.value }) : onIssue;
   });
   /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
-  const panelRows = () =>
-    dimensions().height - PANEL_CHROME_ROWS - (tabs().open.length > 0 ? 1 : 0) - (notice() ? 1 : 0);
+  const now = useNow(props.clock, props.tickMs ?? 1000);
+  // A new day starts a new total; the memo holds still until midnight.
+  const since = createMemo(() => startOfDay(now(), props.timeZone));
+  const tracked = createMemo(() => {
+    if (!showing("timesheet", "dashboard")) return null;
+    recorded();
+    return props.loadTracked(since());
+  });
+  const panelRows = () => dimensions().height - PANEL_CHROME_ROWS - (notice() ? 1 : 0);
+  /** Columns right of the sections, where a section or the dashboard is drawn. */
+  const areaWidth = () => dimensions().width - nav();
+  const nav = () => navWidth(dimensions().width, props.icons);
+  const toggle = () => timerToggle(timer()?.timer ?? null, workspace()?.id ?? null);
 
   /** Shows a failure above the key bar; for actions started by a key rather than the palette. */
   const report = (done: Promise<Result<unknown, AppError>>) => {
@@ -282,6 +304,21 @@ export function Shell(props: ShellProps) {
       case "tab.close":
         report(closeTab());
         return;
+      case "panel.focus":
+        if (showing("dashboard")) {
+          setPanel(cycle(panel(), action.to === "next" ? 1 : -1, DASHBOARD_PANELS.length));
+        }
+        return;
+      case "panel.jump":
+        if (showing("dashboard") && action.position <= DASHBOARD_PANELS.length) {
+          setPanel(action.position - 1);
+        }
+        return;
+      case "panel.open": {
+        const target = SECTIONS.findIndex((s) => s.id === DASHBOARD_PANELS[panel()]);
+        if (showing("dashboard") && target !== -1) select(target);
+        return;
+      }
       case "timer.toggle":
         report(toggleTimer());
         return;
@@ -308,61 +345,98 @@ export function Shell(props: ShellProps) {
           timeZone={props.timeZone}
           tickMs={props.tickMs ?? 1000}
           icons={props.icons}
-          workspace={workspace()}
-          work={work()}
+          tabs={tabs()}
           timer={timer()}
           width={dimensions().width}
         />
-        <Show when={tabs().open.length > 0}>
-          <TabBar tabs={tabs()} width={dimensions().width} />
-        </Show>
         <box flexDirection="row" flexGrow={1}>
-          <Nav selected={selected()} icons={props.icons} />
-          <box
-            flexGrow={1}
-            flexDirection="column"
-            border
-            borderColor={PALETTE.borderFocused}
-            paddingX={1}
+          <Nav selected={selected()} icons={props.icons} width={nav()} />
+          <Show
+            when={!showing("dashboard")}
+            fallback={
+              <Dashboard
+                clock={props.clock}
+                timeZone={props.timeZone}
+                tickMs={props.tickMs ?? 1000}
+                ascii={props.icons === "ascii"}
+                workspace={workspace()}
+                work={work()}
+                timer={timer()}
+                notes={notes()}
+                activity={activity()}
+                tracked={tracked()}
+                since={since()}
+                width={areaWidth()}
+                rows={panelRows() + 2}
+                focused={panel()}
+                timerKeys={timerKeys(toggle(), props.icons === "ascii")}
+              />
+            }
           >
-            <text fg={PALETTE.accentSecondary}>
-              <b>{`${props.icons === "ascii" ? "" : "▍"}${section()?.label.toUpperCase()}`}</b>
-            </text>
-            <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
-              <Match when={section()?.id === "work"}>
-                <WorkPanel
-                  clock={props.clock}
-                  timeZone={props.timeZone}
-                  tickMs={props.tickMs ?? 1000}
-                  workspace={workspace()}
-                  work={work()}
-                  timer={timer()}
-                />
-              </Match>
-              <Match when={section()?.id === "notes"}>
-                <NotesPanel
-                  workspace={workspace()}
-                  work={work()}
-                  notes={notes()}
-                  ascii={props.icons === "ascii"}
-                />
-              </Match>
-              <Match when={activity()}>
-                {(loaded: Accessor<Result<readonly ActivityEntry[], AppError>>) => (
-                  <ActivityPanel
+            <Panel
+              title={section()?.label ?? ""}
+              focused
+              flexGrow={1}
+              status={sectionStatus(section()?.id, {
+                work: work(),
+                timer: timer(),
+                workspace: workspace(),
+                today: todayTotal(tracked(), since(), now()),
+              })}
+              keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
+            >
+              <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
+                <Match when={section()?.id === "work"}>
+                  <WorkPanel
                     clock={props.clock}
                     timeZone={props.timeZone}
                     tickMs={props.tickMs ?? 1000}
                     workspace={workspace()}
-                    activity={loaded()}
+                    work={work()}
+                    timer={timer()}
+                    width={areaWidth() - PANEL_CHROME_COLUMNS}
                     rows={panelRows()}
-                    width={dimensions().width - NAV_WIDTH - PANEL_CHROME_COLUMNS}
                     ascii={props.icons === "ascii"}
                   />
-                )}
-              </Match>
-            </Switch>
-          </box>
+                </Match>
+                <Match when={tracked()}>
+                  {(loaded: Accessor<Result<TrackedTime, AppError>>) => (
+                    <TodayPanel
+                      clock={props.clock}
+                      tickMs={props.tickMs ?? 1000}
+                      tracked={loaded()}
+                      since={since()}
+                      width={areaWidth() - PANEL_CHROME_COLUMNS}
+                      rows={panelRows()}
+                      ascii={props.icons === "ascii"}
+                    />
+                  )}
+                </Match>
+                <Match when={section()?.id === "notes"}>
+                  <NotesPanel
+                    workspace={workspace()}
+                    work={work()}
+                    notes={notes()}
+                    ascii={props.icons === "ascii"}
+                  />
+                </Match>
+                <Match when={activity()}>
+                  {(loaded: Accessor<Result<readonly ActivityEntry[], AppError>>) => (
+                    <ActivityPanel
+                      clock={props.clock}
+                      timeZone={props.timeZone}
+                      tickMs={props.tickMs ?? 1000}
+                      workspace={workspace()}
+                      activity={loaded()}
+                      rows={panelRows()}
+                      width={areaWidth() - PANEL_CHROME_COLUMNS}
+                      ascii={props.icons === "ascii"}
+                    />
+                  )}
+                </Match>
+              </Switch>
+            </Panel>
+          </Show>
         </box>
         <Show when={notice()}>
           {(error: Accessor<AppError>) => (
@@ -372,9 +446,12 @@ export function Shell(props: ShellProps) {
           )}
         </Show>
         <KeyBar
+          icons={props.icons}
+          width={dimensions().width}
           hints={keyHints(props.icons, {
             tabs: tabs().open.length > 0,
-            timer: timerToggle(timer()?.timer ?? null, workspace()?.id ?? null) !== null,
+            timer: toggle() !== null,
+            panels: showing("dashboard"),
           })}
         />
         <Show when={switcherOpen()}>

@@ -6,6 +6,7 @@ import {
   type Duration,
   duration,
   durationBetween,
+  shortDuration,
   sumDurations,
   timestamp,
 } from "../../../../src/domain/shared/time";
@@ -86,5 +87,18 @@ describe("clockDuration", () => {
     [360_000_000, "100:00:00"],
   ])("%p ms reads %p", (ms, text) => {
     expect(clockDuration(ms as Duration)).toBe(text);
+  });
+});
+
+describe("shortDuration", () => {
+  test.each([
+    [0, "0m"],
+    [59_999, "0m"],
+    [35 * 60_000, "35m"],
+    [60 * 60_000, "1h 00m"],
+    [(102 * 60 + 59) * 1000, "1h 42m"],
+    [125 * 3_600_000, "125h 00m"],
+  ])("%i ms → %s", (ms, expected) => {
+    expect(shortDuration(ms as Duration)).toBe(expected);
   });
 });

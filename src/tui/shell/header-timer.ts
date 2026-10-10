@@ -4,8 +4,8 @@ import { elapsed } from "../../domain/timesheet/timer";
 import { truncateToWidth } from "./tab-labels";
 
 export interface HeaderTimer {
-  /** "Timer" or "Paused" for the workspace in front, else whose timer it is. */
-  readonly label: string;
+  /** Whose timer it is when it runs for a workspace other than the one in front, else null. */
+  readonly owner: string | null;
   readonly clock: string;
   readonly paused: boolean;
 }
@@ -20,12 +20,16 @@ export function headerTimer(
 ): HeaderTimer | null {
   if (view === null) return null;
   const { timer, workspace } = view;
-  const paused = timer.status === "paused";
   const here = front === null || front === timer.workspaceId;
-  const name = truncateToWidth(workspace?.name ?? timer.workspaceId, NAME_WIDTH);
   return {
-    label: here ? (paused ? "Paused" : "Timer") : paused ? `${name} paused` : name,
+    owner: here ? null : truncateToWidth(workspace?.name ?? timer.workspaceId, NAME_WIDTH),
     clock: clockDuration(elapsed(timer, now)),
-    paused,
+    paused: timer.status === "paused",
   };
+}
+
+/** The timer as the header writes it: "● 01:42:18", "Auth Service ● 00:12:00", "paused" after. */
+export function headerTimerText(timer: HeaderTimer, ascii: boolean): string {
+  const owner = timer.owner === null ? "" : `${timer.owner} `;
+  return `${owner}${ascii ? "*" : "●"} ${timer.clock}${timer.paused ? " paused" : ""}`;
 }
