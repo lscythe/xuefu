@@ -63,6 +63,8 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `Space`        | in Git: stage or unstage the file under the cursor |
 | `a`            | in Git: stage every change except conflicts, or unstage everything once all is staged |
 | `c`            | in Git: write a commit of what is staged |
+| `b`            | in Git: find a branch to switch to, create one, or delete one with `Ctrl+D` |
+| `f`, `p`, `P`  | in Git: fetch, pull, or push the branch (publishing it if it has no upstream) |
 | `q`, `Ctrl+C`  | quit                                             |
 
 Each workspace has at most one piece of work in progress; starting another issue there finishes
@@ -111,6 +113,16 @@ keyboard (`Tab`), the arrows pick a file and `Space` stages or unstages it. `c` 
 the commit message, where `Ctrl+S` commits; the repository's hooks run as usual, and if one
 refuses, its last words are shown and the message stays. `Esc` closes the editor and keeps the
 message for next time, or stops a commit still running.
+
+`b` lists the branches here, then those on remotes that nothing here tracks; typing narrows the
+list, `Enter` switches (a remote's branch gets a local branch tracking it), and a new name is offered
+to create. Pulling, pushing and deleting a branch ask first, naming the branch, where it goes and
+what follows; `Enter` or `y` approves. Git keeps a branch whose commits are not merged, and a second
+`Ctrl+D` offers to force it: that is destructive, so only `y` approves it. An approval is bound to
+the branch it named, so nothing is pushed or pulled if another branch is in front by then.
+
+Git never prompts while the cockpit is open: a key with a passphrase must be in ssh-agent, and
+HTTPS remotes need a credential helper, or the push says so instead of waiting.
 
 Git runs as the installed `git`, with your own config, hooks and credential helpers. XueFu reads
 status without taking git's index lock, so it never blocks your own git commands.

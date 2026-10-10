@@ -8,6 +8,7 @@ import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
 import { err, ok } from "../../../src/domain/shared/result";
 import type { Timestamp } from "../../../src/domain/shared/time";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
+import type { Branch } from "../../../src/plugins/git/domain/branches";
 import type { GitStatus } from "../../../src/plugins/git/domain/status";
 import { gitPlugin } from "../../../src/plugins/git/plugin";
 import { gitView } from "../../../src/plugins/git/tui/git-view";
@@ -17,6 +18,7 @@ import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
+import { gitSectionFor } from "../../support/git-section";
 import { ManualClock } from "../../support/manual-clock";
 import { expectScreenshot } from "../../support/screenshot";
 import { workIn } from "../../support/work";
@@ -72,19 +74,53 @@ const DIRTY: GitStatus = {
   stashes: 1,
 };
 
+const branch = (name: string, extra: Partial<Branch>): Branch => ({
+  name,
+  remote: null,
+  current: false,
+  upstream: null,
+  ahead: 0,
+  behind: 0,
+  gone: false,
+  committedAt: 0,
+  subject: "",
+  ...extra,
+});
+
+/** Branches of a busy repository, as git for-each-ref would list them. */
+const BRANCHES: Branch[] = [
+  branch("feature/MOB-2841-biometric-login", {
+    current: true,
+    upstream: "origin/feature/MOB-2841-biometric-login",
+    ahead: 2,
+    behind: 1,
+    subject: "Add biometric prompt",
+  }),
+  branch("main", { upstream: "origin/main", subject: "Release 4.12.0" }),
+  branch("fix/MOB-2790-session-timeout", {
+    upstream: "origin/fix/MOB-2790-session-timeout",
+    gone: true,
+    subject: "Refresh the token before it expires",
+  }),
+  branch("spike/compose-login", { subject: "Try the login screen in Compose" }),
+  branch("origin/main", { remote: "origin", subject: "Release 4.12.0" }),
+  branch("origin/release/4.13", { remote: "origin", subject: "Cut 4.13" }),
+];
+
 /** The Git section as the git plugin draws it, reading `status` from a stand-in client. */
 const gitSection = (status: GitStatus | null): Section => ({
   id: gitPlugin.id,
   label: gitPlugin.label,
   icons: gitPlugin.icons,
   view: gitView(
-    fakeGit({ status: () => Promise.resolve(ok(status)) }),
-    {
-      stage: () => Promise.resolve(ok(undefined)),
-      unstage: () => Promise.resolve(ok(undefined)),
-      commit: () => Promise.resolve(ok({ commit: "5d1e0c4b3a29", subject: "Add biometric login" })),
-    },
-    60_000,
+    gitSectionFor(
+      fakeGit({
+        status: () => Promise.resolve(ok(status)),
+        commit: () => Promise.resolve(ok("5d1e0c4b3a29")),
+        branches: () => Promise.resolve(ok(BRANCHES)),
+      }),
+      60_000,
+    ),
   ),
 });
 
@@ -486,6 +522,29 @@ describe("screenshots", () => {
     await screen.mockInput.typeText("Falls back to the PIN when no fingerprint is enrolled.");
     await screen.waitForFrame((f) => f.includes("no fingerprint"));
     expectScreenshot("git-commit", screen.captureSpans());
+  });
+
+  test("git, picking a branch", async () => {
+    const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("b");
+    await screen.waitForFrame((f) => f.includes("release/4.13"));
+    screen.mockInput.pressArrow("down");
+    await screen.waitForFrame((f) => f.includes("▸ main"));
+    expectScreenshot("git-branches", screen.captureSpans());
+  });
+
+  test("git, asking before a push", async () => {
+    const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("P");
+    for (let tries = 0; tries < 50 && !screen.captureCharFrame().includes(" Push? "); tries++) {
+      await Bun.sleep(5);
+      await screen.renderOnce();
+    }
+    expectScreenshot("git-push", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

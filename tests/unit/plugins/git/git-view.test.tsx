@@ -4,25 +4,28 @@ import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
-import { cancelled, processError } from "../../../../src/domain/shared/errors";
+import { type ProcessError, processError } from "../../../../src/domain/shared/errors";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
-import type { GitClient, GitFiles } from "../../../../src/plugins/git/application/git-client";
+import type { GitClient } from "../../../../src/plugins/git/application/git-client";
+import type { Branch } from "../../../../src/plugins/git/domain/branches";
 import type { GitStatus } from "../../../../src/plugins/git/domain/status";
 import {
   branchBadge,
+  fitHints,
   fitRows,
-  type GitSectionActions,
   gitView,
   type StatusRow,
   stageAll,
   statusRows,
 } from "../../../../src/plugins/git/tui/git-view";
+import { errorText } from "../../../../src/tui/error-line";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeGit } from "../../../support/fake-git";
+import { gitSectionFor } from "../../../support/git-section";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -60,12 +63,13 @@ const DIRTY: GitStatus = {
 type Read = Awaited<ReturnType<GitClient["status"]>>;
 
 /** A client whose answers the test sets, one read at a time. */
-function fakeClient(first: Read) {
+function fakeClient(first: Read, changes: Partial<GitClient> = {}) {
   let answer = first;
   const signals: AbortSignal[] = [];
   let pending: ((read: Read) => void) | null = null;
   let hold = false;
   const client = fakeGit({
+    ...changes,
     status: (_folder, signal) => {
       if (signal !== undefined) signals.push(signal);
       if (hold) return new Promise((resolve) => (pending = resolve));
@@ -94,38 +98,45 @@ afterEach(() => {
   setup = undefined;
 });
 
-/** Section actions that answer as the test says, remembering what they were asked. */
-function fakeActions() {
-  const calls: { op: string; folder: string; arg: GitFiles | string }[] = [];
-  let answer: Result<unknown, AppError> = ok(undefined);
+/** Changes to the repository that answer as the test says, remembering what they were asked. */
+function fakeActions(repo: { branches?: Branch[]; remotes?: string[] } = {}) {
+  const calls: { op: string; folder: string; arg: unknown }[] = [];
+  let answer: Result<undefined, ProcessError> = ok(undefined);
   let commitSignal: AbortSignal | null = null;
   let holdCommit = false;
-  const actions: GitSectionActions = {
-    stage: (folder, files) => {
-      calls.push({ op: "stage", folder, arg: files });
-      return Promise.resolve(answer);
-    },
-    unstage: (folder, files) => {
-      calls.push({ op: "unstage", folder, arg: files });
-      return Promise.resolve(answer);
+  const record = (op: string, folder: string, arg: unknown) => {
+    calls.push({ op, folder, arg });
+    return Promise.resolve(answer);
+  };
+  const client: Partial<GitClient> = {
+    branches: () => Promise.resolve(ok(repo.branches ?? [])),
+    remotes: () => Promise.resolve(ok(repo.remotes ?? ["origin"])),
+    stage: (folder, files) => record("stage", folder, files),
+    unstage: (folder, files) => record("unstage", folder, files),
+    fetch: (folder) => record("fetch", folder, null),
+    pull: (folder) => record("pull", folder, null),
+    push: (folder, publish) => record("push", folder, publish),
+    createBranch: (folder, name) => record("create", folder, name),
+    switchBranch: (folder, name, track) => record("switch", folder, { name, track }),
+    deleteBranch: async (folder, name, force) => {
+      const done = await record("delete", folder, { name, force });
+      return done.ok ? ok(name !== "unmerged" || force) : done;
     },
     commit: (folder, message, signal) => {
       calls.push({ op: "commit", folder, arg: message });
-      commitSignal = signal;
+      commitSignal = signal ?? null;
       if (holdCommit) {
-        return new Promise((resolve) =>
-          signal.addEventListener("abort", () => resolve(err(cancelled("Commit was cancelled")))),
-        );
+        return new Promise(() => {
+          // Never answers: the bus gives up on it once it is stopped.
+        });
       }
-      return Promise.resolve(
-        answer.ok ? ok({ commit: "1a2b3c4d5e6f", subject: message.split("\n")[0] ?? "" }) : answer,
-      );
+      return Promise.resolve(answer.ok ? ok("1a2b3c4d5e6f") : answer);
     },
   };
   return {
-    actions,
+    client,
     calls,
-    fail: (error: AppError) => {
+    fail: (error: ProcessError) => {
       answer = err(error);
     },
     holdCommit: () => {
@@ -140,7 +151,6 @@ async function render(
   options: {
     workspace?: Workspace | null;
     focused?: boolean;
-    actions?: GitSectionActions;
     rows?: number;
   } = {},
 ) {
@@ -150,7 +160,7 @@ async function render(
   const reports: AppError[] = [];
   const [shown, setShown] = createSignal(true);
   const [focused, setFocused] = createSignal(options.focused ?? false);
-  const View = gitView(client, options.actions ?? fakeActions().actions, 30);
+  const View = gitView(gitSectionFor(client));
   setup = await testRender(
     () => (
       <box width="100%" height="100%" flexDirection="column">
@@ -180,6 +190,17 @@ async function render(
     close: () => setShown(false),
     focus: (on: boolean) => setFocused(on),
   });
+}
+
+/** The frame once it satisfies `ready`, given real time for the command bus's promises. */
+async function until(view: TestRendererSetup, ready: (frame: string) => boolean) {
+  for (let tries = 0; tries < 100; tries++) {
+    await view.renderOnce();
+    const frame = view.captureCharFrame();
+    if (ready(frame)) return frame;
+    await Bun.sleep(5);
+  }
+  throw new Error(`Never drawn:\n${view.captureCharFrame()}`);
 }
 
 /** A lone ESC is only reported once the parser is sure no escape sequence follows. */
@@ -378,14 +399,14 @@ describe("gitView with the keyboard", () => {
   test("focused, the keys follow the file under the cursor", async () => {
     const view = await render(fakeClient(ok(WORKING)).client, { focused: true });
     await view.waitForFrame((f) => f.includes("Untracked (1)"));
-    expect(view.keys.at(-1)).toBe("space unstage · a stage all · c commit");
+    expect(view.keys.at(-1)).toBe("space unstage · c commit · b branch · p pull · P push");
     view.mockInput.pressKey("j");
     await view.renderOnce();
-    expect(view.keys.at(-1)).toBe("space stage · a stage all · c commit");
+    expect(view.keys.at(-1)).toBe("space stage · c commit · b branch · p pull · P push");
     view.mockInput.pressArrow("down");
     view.mockInput.pressArrow("down");
     await view.renderOnce();
-    expect(view.keys.at(-1)).toBe("space unstage · a stage all · c commit");
+    expect(view.keys.at(-1)).toBe("space unstage · c commit · b branch · p pull · P push");
     view.mockInput.pressKey("k");
     view.focus(false);
     await view.renderOnce();
@@ -393,9 +414,9 @@ describe("gitView with the keyboard", () => {
   });
 
   test("space stages or unstages the file under the cursor, then reads status again", async () => {
-    const fake = fakeClient(ok(WORKING));
     const changes = fakeActions();
-    const view = await render(fake.client, { focused: true, actions: changes.actions });
+    const fake = fakeClient(ok(WORKING), changes.client);
+    const view = await render(fake.client, { focused: true });
     await view.waitForFrame((f) => f.includes("Untracked (1)"));
     const reads = fake.signals.length;
     view.mockInput.pressKey(" ");
@@ -413,9 +434,8 @@ describe("gitView with the keyboard", () => {
   test("a stages every change, and a failure is reported", async () => {
     const changes = fakeActions();
     changes.fail(processError("git add failed: index.lock exists", "git", 128));
-    const view = await render(fakeClient(ok(WORKING)).client, {
+    const view = await render(fakeClient(ok(WORKING), changes.client).client, {
       focused: true,
-      actions: changes.actions,
     });
     await view.waitForFrame((f) => f.includes("Untracked (1)"));
     view.mockInput.pressKey("a");
@@ -443,9 +463,8 @@ describe("gitView commits", () => {
   const editorOpen = (f: string) => f.includes("ctrl+s commit 1 file  esc close");
 
   async function writing(changes = fakeActions(), status: GitStatus = WORKING) {
-    const view = await render(fakeClient(ok(status)).client, {
+    const view = await render(fakeClient(ok(status), changes.client).client, {
       focused: true,
-      actions: changes.actions,
     });
     await view.waitForFrame((f) => f.includes("Staged (1)"));
     view.mockInput.pressKey("c");
@@ -501,7 +520,7 @@ describe("gitView commits", () => {
     again.mockInput.pressKey("s", { ctrl: true });
     await again.waitForFrame((f) => f.includes("Committing... hooks may take a while"));
     await pressEsc(again);
-    await again.waitForFrame((f) => f.includes("✗ Commit was cancelled"));
+    await again.waitForFrame((f) => f.includes("✗ Commit staged changes was cancelled"));
     expect(slow.commitSignal()?.aborted).toBe(true);
   });
 
@@ -513,12 +532,221 @@ describe("gitView commits", () => {
     view.mockInput.pressKey("c");
     await view.renderOnce();
     expect(view.modal).toEqual([]);
-    expect(view.keys.at(-1)).toBe("space stage · a stage all");
+    expect(view.keys.at(-1)).toBe("space stage · a stage all · b branch · p pull · P push");
   });
 
   test("a summary longer than 72 characters is pointed out", async () => {
     const view = await writing();
     await view.mockInput.typeText("x".repeat(80));
     await view.waitForFrame((f) => f.includes("Summary is 80 characters"));
+  });
+});
+
+describe("fitHints", () => {
+  const hints = [
+    { text: "space stage", rank: 0 },
+    { text: "a stage all", rank: 5 },
+    { text: "c commit", rank: 1 },
+    { text: "f fetch", rank: 6 },
+  ];
+
+  test("keeps every hint that fits, in order", () => {
+    expect(fitHints(hints, 80, false)).toBe("space stage · a stage all · c commit · f fetch");
+    expect(fitHints(hints, 80, true)).toBe("space stage | a stage all | c commit | f fetch");
+  });
+
+  test("gives up the least needed first when short of room", () => {
+    expect(fitHints(hints, 36, false)).toBe("space stage · a stage all · c commit");
+    expect(fitHints(hints, 24, false)).toBe("space stage · c commit");
+    expect(fitHints(hints, 3, false)).toBeNull();
+  });
+});
+
+const branch = (name: string, extra: Partial<Branch> = {}): Branch => ({
+  name,
+  remote: null,
+  current: false,
+  upstream: null,
+  ahead: 0,
+  behind: 0,
+  gone: false,
+  committedAt: 0,
+  subject: `Work on ${name}`,
+  ...extra,
+});
+
+const BRANCHES = [
+  branch("main", { current: true, upstream: "origin/main" }),
+  branch("feat/login", { ahead: 2 }),
+  branch("unmerged"),
+  branch("origin/main", { remote: "origin" }),
+  branch("origin/release", { remote: "origin" }),
+];
+
+describe("gitView remotes", () => {
+  async function remoteView(status: GitStatus = WORKING, remotes = ["origin"]) {
+    const changes = fakeActions({ remotes });
+    const view = await render(fakeClient(ok(status), changes.client).client, { focused: true });
+    await until(view, (f) => f.includes("Untracked (1)"));
+    return Object.assign(view, { changes });
+  }
+
+  test("f fetches at once and says so", async () => {
+    const view = await remoteView();
+    view.mockInput.pressKey("f");
+    await until(view, (f) => f.includes("✓ Fetched from the remote."));
+    expect(view.changes.calls).toEqual([{ op: "fetch", folder: MOBILE.path, arg: null }]);
+  });
+
+  test("p asks before pulling; declined, nothing happens", async () => {
+    const view = await remoteView({ ...WORKING, behind: 3 });
+    view.mockInput.pressKey("p");
+    const asked = await until(view, (f) => f.includes(" Pull? "));
+    expect(asked).toContain("Brings 3 commits from origin/main into main");
+    expect(view.modal).toEqual([true]);
+    await pressEsc(view);
+    await until(view, (f) => !f.includes(" Pull? "));
+    expect(view.changes.calls).toEqual([]);
+    expect(view.modal).toEqual([true, false]);
+
+    view.mockInput.pressKey("p");
+    await until(view, (f) => f.includes(" Pull? "));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Pulled from origin/main."));
+    expect(view.changes.calls.map((call) => call.op)).toEqual(["pull"]);
+  });
+
+  test("P asks before pushing, then says how much went where", async () => {
+    const view = await remoteView({ ...WORKING, ahead: 2 });
+    view.mockInput.pressKey("P");
+    await until(view, (f) => f.includes(" Push? ") && f.includes("Sends 2 commits"));
+    view.mockInput.pressKey("y");
+    await until(view, (f) => f.includes("✓ Pushed 2 commits to origin/main."));
+    expect(view.changes.calls).toEqual([{ op: "push", folder: MOBILE.path, arg: null }]);
+  });
+
+  test("a branch with no upstream is published on origin", async () => {
+    const view = await remoteView({ ...WORKING, upstream: null }, ["upstream", "origin"]);
+    view.mockInput.pressKey("P");
+    await until(view, (f) => f.includes(" Publish branch? "));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Published main on origin."));
+    expect(view.changes.calls[0]?.arg).toEqual({ remote: "origin", branch: "main" });
+  });
+
+  test("what cannot be pushed or pulled is reported without asking", async () => {
+    const detached = await remoteView({ ...WORKING, branch: null });
+    detached.mockInput.pressKey("P");
+    detached.mockInput.pressKey("p");
+    await detached.renderOnce();
+    expect(detached.reports.map((error) => errorText(error))).toEqual([
+      "HEAD is detached: switch to a branch to push it",
+      "HEAD is detached: switch to a branch to pull into it",
+    ]);
+    detached.renderer.destroy();
+
+    const lonely = await remoteView({ ...WORKING, upstream: null }, []);
+    lonely.mockInput.pressKey("p");
+    lonely.mockInput.pressKey("P");
+    await Bun.sleep(5);
+    expect(lonely.reports.map((error) => errorText(error))).toEqual([
+      "main tracks no remote branch: push it first to publish it",
+      "No remote to push to: add one with git remote add origin <url>",
+    ]);
+    expect(lonely.changes.calls).toEqual([]);
+  });
+
+  test("a failed push is reported and the progress line goes", async () => {
+    const view = await remoteView({ ...WORKING, ahead: 1 });
+    view.changes.fail(processError("git push failed: rejected", "git", 1));
+    view.mockInput.pressKey("P");
+    await until(view, (f) => f.includes(" Push? "));
+    view.mockInput.pressEnter();
+    await Bun.sleep(5);
+    await view.renderOnce();
+    expect(view.reports.map((error) => error.message)).toEqual(["git push failed: rejected"]);
+    expect(view.captureCharFrame()).not.toContain("Pushing");
+  });
+});
+
+describe("gitView branches", () => {
+  const pickerOpen = (f: string) => f.includes(" Branches ");
+
+  async function picking(branches = BRANCHES) {
+    const changes = fakeActions({ branches });
+    const view = await render(fakeClient(ok(WORKING), changes.client).client, { focused: true });
+    await until(view, (f) => f.includes("Untracked (1)"));
+    view.mockInput.pressKey("b");
+    await until(view, (f) => pickerOpen(f) && f.includes("feat/login"));
+    return Object.assign(view, { changes });
+  }
+
+  test("b lists local branches, then remote ones nothing here tracks", async () => {
+    const view = await picking();
+    const frame = view.captureCharFrame();
+    expect(frame).toContain("Local");
+    expect(frame).toContain("main  ● current");
+    expect(frame).toContain("feat/login  ↑2  Work on feat/login");
+    expect(frame).toContain("origin/release");
+    expect(frame).not.toContain("origin/main  Work");
+    expect(view.modal).toEqual([true]);
+  });
+
+  test("typing finds a branch, and enter switches to it", async () => {
+    const view = await picking();
+    await view.mockInput.typeText("login");
+    view.mockInput.pressEnter();
+    await until(view, (f) => !pickerOpen(f) && f.includes("✓ Switched to feat/login."));
+    expect(view.changes.calls).toEqual([
+      { op: "switch", folder: MOBILE.path, arg: { name: "feat/login", track: false } },
+    ]);
+  });
+
+  test("a remote's branch is switched to by tracking it", async () => {
+    const view = await picking();
+    await view.mockInput.typeText("release");
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Switched to release."));
+    expect(view.changes.calls[0]?.arg).toEqual({ name: "origin/release", track: true });
+  });
+
+  test("a new name is offered last, and enter on it creates the branch", async () => {
+    const view = await picking();
+    await view.mockInput.typeText("fix/crash");
+    await until(view, (f) => f.includes("+ Create fix/crash here"));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Created fix/crash and switched to it."));
+    expect(view.changes.calls).toEqual([{ op: "create", folder: MOBILE.path, arg: "fix/crash" }]);
+  });
+
+  test("ctrl+d asks before deleting, and again, more gravely, to force an unmerged one", async () => {
+    const view = await picking();
+    await view.mockInput.typeText("unmerged");
+    view.mockInput.pressKey("d", { ctrl: true });
+    await until(view, (f) => f.includes(" Delete branch? "));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("ctrl+d again"));
+
+    view.mockInput.pressKey("d", { ctrl: true });
+    await until(view, (f) => f.includes(" Force-delete branch? ") && f.includes("y delete"));
+    view.mockInput.pressEnter();
+    await view.renderOnce();
+    expect(view.captureCharFrame()).toContain(" Force-delete branch? ");
+    view.mockInput.pressKey("y");
+    await until(view, (f) => f.includes("Deleted unmerged."));
+    expect(view.changes.calls.map((call) => call.arg)).toEqual([
+      { name: "unmerged", force: false },
+      { name: "unmerged", force: true },
+    ]);
+  });
+
+  test("the branch in front cannot be deleted; esc closes the picker", async () => {
+    const view = await picking();
+    view.mockInput.pressKey("d", { ctrl: true });
+    await until(view, (f) => f.includes("That is the branch you are on"));
+    await pressEsc(view);
+    await until(view, (f) => !pickerOpen(f));
+    expect(view.changes.calls).toEqual([]);
+    expect(view.modal).toEqual([true, false]);
   });
 });

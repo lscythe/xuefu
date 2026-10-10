@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { ok } from "../../../../src/domain/shared/result";
 import { BunProcessRunner } from "../../../../src/infrastructure/process/bun-process-runner";
+import type { BranchName } from "../../../../src/plugins/git/domain/branches";
 import type { CommitMessage } from "../../../../src/plugins/git/domain/commit";
 import { stagedFiles, unstagedFiles } from "../../../../src/plugins/git/domain/status";
 import { cliGit } from "../../../../src/plugins/git/integrations/cli-git";
@@ -226,5 +227,133 @@ describe("cliGit stage, unstage and commit", () => {
     const refused = await client.commit(path, message("Change"));
     expect(!refused.ok && refused.error.message).toBe("git commit failed: tests failed");
     expect(run("log", "--format=%s").trim()).toBe("first");
+  });
+});
+
+const name = (text: string) => text as BranchName;
+
+describe("cliGit branches", () => {
+  /** A repository and a clone of it, with a branch on the origin the clone has not checked out. */
+  function cloned() {
+    const origin = repo();
+    origin.git("branch", "feat/remote");
+    const dir = makeTempDir();
+    cleanups.push(dir.cleanup);
+    const path = realpathSync(dir.path) as AbsolutePath;
+    git(path, "clone", "-q", origin.path, ".");
+    return { origin, path, run: (...args: string[]) => git(path, ...args) };
+  }
+
+  async function branches(path: AbsolutePath) {
+    const listed = await client.branches(path);
+    if (!listed.ok) throw new Error(listed.error.message);
+    return listed.value;
+  }
+
+  test("lists local and remote branches with what they track", async () => {
+    const { path, run } = cloned();
+    run("commit", "-q", "--allow-empty", "-m", "local work");
+    const listed = await branches(path);
+    expect(listed.map((branch) => [branch.name, branch.current, branch.upstream])).toEqual([
+      ["main", true, "origin/main"],
+      ["origin/feat/remote", false, null],
+      ["origin/main", false, null],
+    ]);
+    expect(listed[0]).toMatchObject({ ahead: 1, behind: 0, subject: "local work" });
+  });
+
+  test("creates a branch and switches to it, then back, then to a remote's", async () => {
+    const { path } = cloned();
+    expect(await client.createBranch(path, name("fix/login"), null)).toEqual(ok(undefined));
+    expect((await status(path))?.branch).toBe("fix/login");
+    expect(await client.switchBranch(path, name("main"), false)).toEqual(ok(undefined));
+    expect(await client.switchBranch(path, name("origin/feat/remote"), true)).toEqual(
+      ok(undefined),
+    );
+    expect(await status(path)).toMatchObject({
+      branch: "feat/remote",
+      upstream: "origin/feat/remote",
+    });
+  });
+
+  test("keeps an unmerged branch unless forced", async () => {
+    const { path, write, git: run } = repo();
+    run("switch", "-q", "-c", "spike");
+    write("spike.txt", "try\n");
+    run("add", "spike.txt");
+    run("commit", "-q", "-m", "spike");
+    run("switch", "-q", "main");
+    expect(await client.deleteBranch(path, name("spike"), false)).toEqual(ok(false));
+    expect(await client.deleteBranch(path, name("spike"), true)).toEqual(ok(true));
+    expect(run("branch", "--list", "spike")).toBe("");
+  });
+
+  test("local changes in the way stop a switch, with what to do about them", async () => {
+    const { path, write, git: run } = repo();
+    run("switch", "-q", "-c", "other");
+    write("README.md", "other\n");
+    run("commit", "-q", "-am", "other");
+    run("switch", "-q", "main");
+    write("README.md", "mine\n");
+    const switched = await client.switchBranch(path, name("other"), false);
+    expect(!switched.ok && switched.error.hint).toBe("Commit or stash your changes first.");
+  });
+});
+
+describe("cliGit fetch, pull and push", () => {
+  /** A bare origin with one commit on main, and two clones of it. */
+  function shared() {
+    const seed = repo();
+    const bare = makeTempDir();
+    cleanups.push(bare.cleanup);
+    const origin = realpathSync(bare.path);
+    git(origin, "clone", "-q", "--bare", seed.path, ".");
+    const clone = () => {
+      const dir = makeTempDir();
+      cleanups.push(dir.cleanup);
+      const path = realpathSync(dir.path) as AbsolutePath;
+      git(path, "clone", "-q", origin, ".");
+      return {
+        path,
+        run: (...args: string[]) => git(path, ...args),
+        write: (file: string, text: string) => writeFileSync(join(path, file), text),
+      };
+    };
+    return { mine: clone(), theirs: clone() };
+  }
+
+  test("pushes commits, and the other clone fetches, then pulls them", async () => {
+    const { mine, theirs } = shared();
+    mine.write("a.txt", "a\n");
+    mine.run("add", "a.txt");
+    mine.run("commit", "-q", "-m", "add a");
+    expect(await client.remotes(mine.path)).toEqual(ok(["origin"]));
+    expect(await client.push(mine.path, null)).toEqual(ok(undefined));
+
+    expect(await client.fetch(theirs.path)).toEqual(ok(undefined));
+    expect(await status(theirs.path)).toMatchObject({ behind: 1 });
+    expect(await client.pull(theirs.path)).toEqual(ok(undefined));
+    expect(theirs.run("log", "-1", "--format=%s").trim()).toBe("add a");
+  });
+
+  test("publishes a new branch and tracks it", async () => {
+    const { mine } = shared();
+    mine.run("switch", "-q", "-c", "feat/x");
+    mine.run("commit", "-q", "--allow-empty", "-m", "feat");
+    expect(await client.push(mine.path, { remote: "origin", branch: name("feat/x") })).toEqual(
+      ok(undefined),
+    );
+    expect(await status(mine.path)).toMatchObject({ upstream: "origin/feat/x", ahead: 0 });
+  });
+
+  test("a push behind the remote is refused, saying to pull first", async () => {
+    const { mine, theirs } = shared();
+    theirs.run("commit", "-q", "--allow-empty", "-m", "theirs");
+    theirs.run("push", "-q");
+    mine.run("commit", "-q", "--allow-empty", "-m", "mine");
+    const pushed = await client.push(mine.path, null);
+    expect(!pushed.ok && pushed.error.hint).toBe(
+      "The remote has commits you do not; pull first, then push.",
+    );
   });
 });

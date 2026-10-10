@@ -22,20 +22,26 @@ export const gitPlugin = definePlugin({
     const actions = gitActions(client);
     return {
       commands: gitCommands(client),
-      actions: [actions.stage, actions.unstage, actions.commit],
+      actions: [
+        actions.stage,
+        actions.unstage,
+        actions.commit,
+        actions.createBranch,
+        actions.checkout,
+        actions.deleteBranch,
+        actions.fetch,
+        actions.pull,
+        actions.push,
+      ],
       view: lazy(async () => {
         const { gitView } = await import("./tui/git-view");
         return {
-          default: gitView(
+          default: gitView({
             client,
-            {
-              stage: (folder, files) => context.bus.invoke(actions.stage, { folder, files }),
-              unstage: (folder, files) => context.bus.invoke(actions.unstage, { folder, files }),
-              commit: (folder, message, signal) =>
-                context.bus.invoke(actions.commit, { folder, message }, { signal }),
-            },
-            settings.refreshSeconds * 1000,
-          ),
+            actions,
+            invoke: (command, input, options) => context.bus.invoke(command, input, options),
+            refreshMs: settings.refreshSeconds * 1000,
+          }),
         };
       }),
     };

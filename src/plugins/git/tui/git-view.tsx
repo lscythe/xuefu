@@ -7,13 +7,23 @@ import {
   createSignal,
   For,
   Match,
+  on,
   onCleanup,
   Show,
   Switch,
 } from "solid-js";
+import {
+  type ConfirmationToken,
+  confirmationTokenFor,
+} from "../../../application/commands/command";
+import type { CommandBus } from "../../../application/commands/command-bus";
 import type { AppError } from "../../../application/errors";
+import type { ConfirmationPrompt } from "../../../domain/shared/confirmation";
+import { validationError } from "../../../domain/shared/errors";
 import type { AbsolutePath } from "../../../domain/shared/path";
-import type { Result } from "../../../domain/shared/result";
+import { err, ok, type Result } from "../../../domain/shared/result";
+import type { Workspace } from "../../../domain/workspace/workspace";
+import { ConfirmDialog } from "../../../tui/confirm-dialog";
 import { ErrorLine } from "../../../tui/error-line";
 import { cycle, scrollOffset } from "../../../tui/list-navigation";
 import { panelKeys } from "../../../tui/shell/panel-status";
@@ -21,8 +31,9 @@ import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
 import { statusGlyph } from "../../../tui/theme/status";
-import type { Committed } from "../application/actions";
+import type { Committed, GitActions } from "../application/actions";
 import type { GitClient, GitFiles } from "../application/git-client";
+import { localName } from "../domain/branches";
 import {
   changeLetter,
   describeBranch,
@@ -31,6 +42,7 @@ import {
   stagedFiles,
   unstagedFiles,
 } from "../domain/status";
+import { BranchPicker } from "./branch-picker";
 import { CommitEditor } from "./commit-editor";
 
 type Tone = keyof typeof PALETTE;
@@ -164,15 +176,14 @@ export function stageAll(
   return stagedFiles(status).length > 0 ? { stage: false, files: "all" } : null;
 }
 
-/** What the section changes in a repository; each goes through the command bus. */
-export interface GitSectionActions {
-  readonly stage: (folder: AbsolutePath, files: GitFiles) => Promise<Result<unknown, AppError>>;
-  readonly unstage: (folder: AbsolutePath, files: GitFiles) => Promise<Result<unknown, AppError>>;
-  readonly commit: (
-    folder: AbsolutePath,
-    message: string,
-    signal: AbortSignal,
-  ) => Promise<Result<Committed, AppError>>;
+/** Everything the section needs from the git plugin. */
+export interface GitSection {
+  /** For reading: status, branches and remotes. */
+  readonly client: GitClient;
+  /** For changing: the plugin's commands, run through the bus they are registered on. */
+  readonly actions: GitActions;
+  readonly invoke: CommandBus["invoke"];
+  readonly refreshMs: number;
 }
 
 type Read = Result<GitStatus | null, AppError>;
@@ -185,17 +196,57 @@ interface Writing {
   readonly staged: number;
 }
 
+/** A line above the status: what is running, or how it went. */
+interface Banner {
+  readonly kind: "running" | "success";
+  readonly text: string;
+}
+
+/** A confirmation on screen, and how to answer it. */
+interface Asking {
+  readonly prompt: ConfirmationPrompt;
+  readonly answer: (approved: boolean) => void;
+}
+
+/** Keys for the frame in the order shown, with how much each is worth keeping when space is short. */
+interface Hint {
+  readonly text: string;
+  /** Lower is kept longer. */
+  readonly rank: number;
+}
+
+/** The hints that fit in `width` columns, giving up the least needed first. */
+export function fitHints(hints: readonly Hint[], width: number, ascii: boolean): string | null {
+  const and = ascii ? " | " : " · ";
+  const length = (shown: readonly Hint[]) =>
+    shown.reduce((sum, hint) => sum + Bun.stringWidth(hint.text), 0) +
+    Math.max(0, shown.length - 1) * and.length;
+  let shown = [...hints];
+  while (shown.length > 0 && length(shown) > width) {
+    const least = Math.max(...shown.map((hint) => hint.rank));
+    shown = shown.filter((hint) => hint.rank !== least);
+  }
+  return panelKeys(
+    shown.map((hint) => hint.text),
+    ascii,
+  );
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** A failure the section finds before asking git: there is nothing for the key to act on. */
+const cannot = (message: string, reason: string) =>
+  validationError(message, [{ path: "git", message: reason }]);
+
 /**
  * The Git section: the front workspace's status, read when it opens, every `refreshMs` while it
  * stays open, and straight after each change. Reads never overlap, and one still running when the
- * section closes is stopped. With the keyboard, a cursor picks files to stage or unstage, and `c`
- * writes a commit.
+ * section closes is stopped. With the keyboard, a cursor picks files to stage or unstage, `c`
+ * writes a commit, `b` finds a branch, and `f`, `p` and `P` fetch, pull and push. What the bus
+ * says needs confirming is asked in a dialog first.
  */
-export function gitView(
-  client: GitClient,
-  actions: GitSectionActions,
-  refreshMs: number,
-): Component<SectionProps> {
+export function gitView(section: GitSection): Component<SectionProps> {
+  const { client, actions, invoke, refreshMs } = section;
   // Messages left unfinished, by workspace, kept while XueFu runs.
   const drafts = new Map<string, string>();
 
@@ -206,7 +257,9 @@ export function gitView(
     const [cursor, setCursor] = createSignal(0);
     const [busy, setBusy] = createSignal(false);
     const [writing, setWriting] = createSignal<Writing | null>(null);
-    const [committed, setCommitted] = createSignal<Committed | null>(null);
+    const [picking, setPicking] = createSignal(false);
+    const [asking, setAsking] = createSignal<Asking | null>(null);
+    const [banner, setBanner] = createSignal<Banner | null>(null);
     const ascii = () => props.icons === "ascii";
     // Reads status again at once; set once there is a workspace to read.
     let reload: () => void = () => undefined;
@@ -214,7 +267,7 @@ export function gitView(
     createEffect(() => {
       const workspace = props.workspace;
       setCursor(0);
-      setCommitted(null);
+      setBanner(null);
       if (workspace === null) return;
       let running: AbortController | null = null;
       let again = false;
@@ -245,8 +298,11 @@ export function gitView(
       });
     });
 
+    // A dialog of the section's has every key while it is open.
+    const modal = () => writing() !== null || picking() || asking() !== null;
+    createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
-      if (writing() !== null) props.setModal(false);
+      if (modal()) props.setModal(false);
     });
 
     /** The latest read of the workspace in front; null until there is one. */
@@ -269,18 +325,18 @@ export function gitView(
     const rows = createMemo((): StatusRow[] => {
       const shown = status();
       if (shown === undefined || shown === null) return [];
-      const done = committed();
-      const banner: StatusRow[] =
-        done === null
+      const line = banner();
+      const top: StatusRow[] =
+        line === null
           ? []
           : [
               {
                 kind: "text",
-                text: `${statusGlyph("success", props.icons)} Committed ${done.commit.slice(0, 7)} ${done.subject}`,
-                tone: "success",
+                text: `${statusGlyph(line.kind, props.icons)} ${line.text}`,
+                tone: line.kind === "running" ? "busy" : "success",
               },
             ];
-      return [...banner, ...statusRows(shown, ascii())];
+      return [...top, ...statusRows(shown, ascii())];
     });
     const files = createMemo(() => rows().filter((row): row is FileRow => row.kind === "file"));
     /** The file under the cursor, kept in range as the lists change. */
@@ -306,28 +362,70 @@ export function gitView(
       }
       const file = selected();
       const all = stageAll(shown);
+      const onBranch = shown.branch !== null;
+      const hints: (Hint | null)[] = [
+        file === null
+          ? null
+          : { text: file.side === "staged" ? "space unstage" : "space stage", rank: 0 },
+        all === null ? null : { text: all.stage ? "a stage all" : "a unstage all", rank: 5 },
+        canCommit() ? { text: "c commit", rank: 1 } : null,
+        { text: "b branch", rank: 4 },
+        { text: "f fetch", rank: 6 },
+        onBranch && shown.upstream !== null ? { text: "p pull", rank: 3 } : null,
+        onBranch ? { text: "P push", rank: 2 } : null,
+      ];
       props.setKeys(
-        panelKeys(
-          [
-            file === null ? null : file.side === "staged" ? "space unstage" : "space stage",
-            all === null ? null : all.stage ? "a stage all" : "a unstage all",
-            canCommit() ? "c commit" : null,
-          ],
+        fitHints(
+          hints.filter((hint) => hint !== null),
+          // The frame's corners and the spaces around the keys.
+          props.width - 2,
           ascii(),
         ),
       );
     });
 
-    /** Runs a change to the repository, then reads its status again. */
-    const change = async (run: (folder: AbsolutePath) => Promise<Result<unknown, AppError>>) => {
+    /** Shows a confirmation and resolves to the answer. */
+    const ask = (prompt: ConfirmationPrompt) =>
+      new Promise<boolean>((resolve) =>
+        setAsking({
+          prompt,
+          answer: (approved) => {
+            setAsking(null);
+            resolve(approved);
+          },
+        }),
+      );
+
+    /**
+     * Runs a command, asking first when the bus says it must, then running it again with that
+     * approval; `started` is called once it is really underway. Null when it was not approved.
+     */
+    const approved = async <T,>(
+      run: (confirmation?: ConfirmationToken) => Promise<Result<T, AppError>>,
+      started: () => void = () => undefined,
+    ): Promise<Result<T | null, AppError>> => {
+      const first = await run();
+      if (first.ok || first.error.kind !== "confirmation-required") return first;
+      const required = first.error;
+      if (!(await ask(required.prompt))) return ok(null);
+      started();
+      return run(confirmationTokenFor(required));
+    };
+
+    /** Runs a change to the repository one at a time, then reads its status again. */
+    const change = async <T,>(
+      run: (folder: AbsolutePath) => Promise<Result<T, AppError>>,
+    ): Promise<T | null> => {
       const workspace = props.workspace;
-      if (workspace === null || busy()) return;
+      if (workspace === null || busy()) return null;
       setBusy(true);
-      setCommitted(null);
       const done = await run(workspace.path);
       setBusy(false);
-      if (!done.ok) props.report(done.error);
       reload();
+      if (done.ok) return done.value;
+      setBanner(null);
+      props.report(done.error);
+      return null;
     };
 
     const openEditor = (shown: GitStatus) => {
@@ -339,24 +437,130 @@ export function gitView(
         branch: shown.branch,
         staged: stagedFiles(shown).length,
       });
-      props.setModal(true);
     };
 
     const closeEditor = (made: Committed | null) => {
       const was = writing();
       setWriting(null);
-      props.setModal(false);
       if (made === null || was === null) return;
       drafts.delete(was.workspace);
-      setCommitted(made);
+      setBanner({ kind: "success", text: `Committed ${made.commit.slice(0, 7)} ${made.subject}` });
       reload();
+    };
+
+    const fetch = () => {
+      setBanner({ kind: "running", text: "Fetching..." });
+      void change(async (folder) => {
+        const fetched = await invoke(actions.fetch, { folder });
+        if (fetched.ok) setBanner({ kind: "success", text: "Fetched from the remote." });
+        return fetched;
+      });
+    };
+
+    const pull = (shown: GitStatus) => {
+      const branch = shown.branch;
+      const upstream = shown.upstream;
+      if (branch === null || upstream === null) {
+        props.report(
+          branch === null
+            ? cannot("HEAD is detached", "switch to a branch to pull into it")
+            : cannot(`${branch} tracks no remote branch`, "push it first to publish it"),
+        );
+        return;
+      }
+      void change(async (folder) => {
+        const pulled = await approved(
+          (confirmation) =>
+            invoke(
+              actions.pull,
+              { folder, branch, upstream, behind: shown.behind },
+              confirmation === undefined ? {} : { confirmation },
+            ),
+          () => setBanner({ kind: "running", text: `Pulling from ${upstream}...` }),
+        );
+        if (pulled.ok && pulled.value !== null) {
+          setBanner({ kind: "success", text: `Pulled from ${upstream}.` });
+        }
+        return pulled;
+      });
+    };
+
+    /** The remote to publish a branch on: origin, or the only one there is. */
+    const publishTo = async (folder: AbsolutePath): Promise<Result<string, AppError>> => {
+      const listed = await client.remotes(folder);
+      if (!listed.ok) return listed;
+      const remotes = listed.value;
+      const remote = remotes.includes("origin")
+        ? "origin"
+        : remotes.length === 1
+          ? remotes[0]
+          : null;
+      return remote === null || remote === undefined
+        ? err(
+            cannot(
+              remotes.length === 0 ? "No remote to push to" : "More than one remote to push to",
+              remotes.length === 0
+                ? "add one with git remote add origin <url>"
+                : "push this branch once in a terminal to choose one",
+            ),
+          )
+        : ok(remote);
+    };
+
+    const push = (shown: GitStatus) => {
+      const branch = shown.branch;
+      if (branch === null) {
+        props.report(cannot("HEAD is detached", "switch to a branch to push it"));
+        return;
+      }
+      const upstream = shown.upstream;
+      void change(async (folder) => {
+        const remote =
+          upstream === null ? await publishTo(folder) : ok(upstream.split("/", 1)[0] ?? "");
+        if (!remote.ok) return remote;
+        const to = upstream ?? `${remote.value}/${branch}`;
+        const pushed = await approved(
+          (confirmation) =>
+            invoke(
+              actions.push,
+              { folder, branch, remote: remote.value, upstream, ahead: shown.ahead },
+              confirmation === undefined ? {} : { confirmation },
+            ),
+          () => setBanner({ kind: "running", text: `Pushing to ${to}...` }),
+        );
+        if (pushed.ok && pushed.value !== null) {
+          setBanner({
+            kind: "success",
+            text:
+              upstream === null
+                ? `Published ${branch} on ${remote.value}.`
+                : `Pushed ${plural(shown.ahead, "commit", "commits")} to ${to}.`,
+          });
+        }
+        return pushed;
+      });
+    };
+
+    /** Runs a branch change from the picker; on success the picker closes and says what happened. */
+    const fromPicker = async (
+      run: (folder: AbsolutePath) => Promise<Result<unknown, AppError>>,
+      done: string,
+    ) => {
+      const workspace = props.workspace;
+      if (workspace === null) return ok(null);
+      const ran = await run(workspace.path);
+      if (ran.ok) {
+        setPicking(false);
+        setCursor(0);
+        setBanner({ kind: "success", text: done });
+        reload();
+      }
+      return ran;
     };
 
     useKeyboard((key) => {
       const shown = status();
-      if (!props.focused || writing() !== null || busy() || shown === undefined || shown === null) {
-        return;
-      }
+      if (!props.focused || modal() || busy() || shown === undefined || shown === null) return;
       const count = files().length;
       switch (key.name) {
         case "up":
@@ -376,18 +580,21 @@ export function gitView(
         case "space": {
           const file = selected();
           if (file === null) return;
+          setBanner(null);
           void change((folder) =>
-            file.side === "staged"
-              ? actions.unstage(folder, file.files)
-              : actions.stage(folder, file.files),
+            invoke(file.side === "staged" ? actions.unstage : actions.stage, {
+              folder,
+              files: file.files,
+            }),
           );
           return;
         }
         case "a": {
           const all = stageAll(shown);
           if (all === null) return;
+          setBanner(null);
           void change((folder) =>
-            all.stage ? actions.stage(folder, all.files) : actions.unstage(folder, all.files),
+            invoke(all.stage ? actions.stage : actions.unstage, { folder, files: all.files }),
           );
           return;
         }
@@ -396,6 +603,17 @@ export function gitView(
           // The editor takes focus at once; without this the "c" would be typed into it.
           key.preventDefault();
           openEditor(shown);
+          return;
+        case "b":
+          key.preventDefault();
+          setPicking(true);
+          return;
+        case "f":
+          fetch();
+          return;
+        case "p":
+          if (key.shift) push(shown);
+          else pull(shown);
           return;
         default:
           return;
@@ -479,10 +697,52 @@ export function gitView(
               staged={commit().staged}
               draft={drafts.get(commit().workspace) ?? ""}
               icons={props.icons}
-              commit={(message, signal) => actions.commit(commit().folder, message, signal)}
+              commit={(message, signal) =>
+                invoke(actions.commit, { folder: commit().folder, message }, { signal })
+              }
               onDraft={(text) => drafts.set(commit().workspace, text)}
               onClose={closeEditor}
             />
+          )}
+        </Show>
+        <Show when={picking() ? props.workspace : null}>
+          {(workspace: Accessor<Workspace>) => (
+            <BranchPicker
+              load={() => client.branches(workspace().path)}
+              icons={props.icons}
+              onSwitch={(branch) =>
+                fromPicker(
+                  (folder) =>
+                    invoke(actions.checkout, {
+                      folder,
+                      name: branch.name,
+                      track: branch.remote !== null,
+                    }),
+                  `Switched to ${localName(branch)}.`,
+                )
+              }
+              onCreate={(name) =>
+                fromPicker(
+                  (folder) => invoke(actions.createBranch, { folder, name, start: null }),
+                  `Created ${name} and switched to it.`,
+                )
+              }
+              onDelete={(branch, force) =>
+                approved((confirmation) =>
+                  invoke(
+                    actions.deleteBranch,
+                    { folder: workspace().path, name: branch.name, force },
+                    confirmation === undefined ? {} : { confirmation },
+                  ),
+                )
+              }
+              onClose={() => setPicking(false)}
+            />
+          )}
+        </Show>
+        <Show when={asking()}>
+          {(shown: Accessor<Asking>) => (
+            <ConfirmDialog prompt={shown().prompt} icons={props.icons} onAnswer={shown().answer} />
           )}
         </Show>
       </>
