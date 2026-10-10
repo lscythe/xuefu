@@ -25,7 +25,18 @@ export const gitPlugin = definePlugin({
       actions: [actions.stage, actions.unstage, actions.commit],
       view: lazy(async () => {
         const { gitView } = await import("./tui/git-view");
-        return { default: gitView(client, settings.refreshSeconds * 1000) };
+        return {
+          default: gitView(
+            client,
+            {
+              stage: (folder, files) => context.bus.invoke(actions.stage, { folder, files }),
+              unstage: (folder, files) => context.bus.invoke(actions.unstage, { folder, files }),
+              commit: (folder, message, signal) =>
+                context.bus.invoke(actions.commit, { folder, message }, { signal }),
+            },
+            settings.refreshSeconds * 1000,
+          ),
+        };
       }),
     };
   },

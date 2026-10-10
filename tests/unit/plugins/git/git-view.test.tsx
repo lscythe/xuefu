@@ -1,21 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
-import { processError } from "../../../../src/domain/shared/errors";
+import type { AppError } from "../../../../src/application/errors";
+import { cancelled, processError } from "../../../../src/domain/shared/errors";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
-import { err, ok } from "../../../../src/domain/shared/result";
+import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
-import type { GitClient } from "../../../../src/plugins/git/application/git-client";
+import type { GitClient, GitFiles } from "../../../../src/plugins/git/application/git-client";
 import type { GitStatus } from "../../../../src/plugins/git/domain/status";
 import {
   branchBadge,
   fitRows,
+  type GitSectionActions,
   gitView,
+  type StatusRow,
+  stageAll,
   statusRows,
 } from "../../../../src/plugins/git/tui/git-view";
+import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakeGit } from "../../../support/fake-git";
 
 const MOBILE: Workspace = {
@@ -88,10 +94,63 @@ afterEach(() => {
   setup = undefined;
 });
 
-async function render(client: GitClient, options: { workspace?: Workspace | null } = {}) {
+/** Section actions that answer as the test says, remembering what they were asked. */
+function fakeActions() {
+  const calls: { op: string; folder: string; arg: GitFiles | string }[] = [];
+  let answer: Result<unknown, AppError> = ok(undefined);
+  let commitSignal: AbortSignal | null = null;
+  let holdCommit = false;
+  const actions: GitSectionActions = {
+    stage: (folder, files) => {
+      calls.push({ op: "stage", folder, arg: files });
+      return Promise.resolve(answer);
+    },
+    unstage: (folder, files) => {
+      calls.push({ op: "unstage", folder, arg: files });
+      return Promise.resolve(answer);
+    },
+    commit: (folder, message, signal) => {
+      calls.push({ op: "commit", folder, arg: message });
+      commitSignal = signal;
+      if (holdCommit) {
+        return new Promise((resolve) =>
+          signal.addEventListener("abort", () => resolve(err(cancelled("Commit was cancelled")))),
+        );
+      }
+      return Promise.resolve(
+        answer.ok ? ok({ commit: "1a2b3c4d5e6f", subject: message.split("\n")[0] ?? "" }) : answer,
+      );
+    },
+  };
+  return {
+    actions,
+    calls,
+    fail: (error: AppError) => {
+      answer = err(error);
+    },
+    holdCommit: () => {
+      holdCommit = true;
+    },
+    commitSignal: () => commitSignal,
+  };
+}
+
+async function render(
+  client: GitClient,
+  options: {
+    workspace?: Workspace | null;
+    focused?: boolean;
+    actions?: GitSectionActions;
+    rows?: number;
+  } = {},
+) {
   const statuses: (string | null)[] = [];
+  const keys: (string | null)[] = [];
+  const modal: boolean[] = [];
+  const reports: AppError[] = [];
   const [shown, setShown] = createSignal(true);
-  const View = gitView(client, 30);
+  const [focused, setFocused] = createSignal(options.focused ?? false);
+  const View = gitView(client, options.actions ?? fakeActions().actions, 30);
   setup = await testRender(
     () => (
       <box width="100%" height="100%" flexDirection="column">
@@ -99,21 +158,34 @@ async function render(client: GitClient, options: { workspace?: Workspace | null
           <View
             workspace={options.workspace === undefined ? MOBILE : options.workspace}
             width={60}
-            rows={12}
+            rows={options.rows ?? 12}
             icons="unicode"
-            focused={false}
+            focused={focused()}
             setStatus={(status) => statuses.push(status)}
-            setKeys={() => undefined}
-            setModal={() => undefined}
-            report={() => undefined}
+            setKeys={(next) => keys.push(next)}
+            setModal={(open) => modal.push(open)}
+            report={(error) => reports.push(error)}
           />
         </Show>
       </box>
     ),
-    { width: 60, height: 14 },
+    { width: 64, height: 20 },
   );
   await setup.renderOnce();
-  return Object.assign(setup, { statuses, close: () => setShown(false) });
+  return Object.assign(setup, {
+    statuses,
+    keys,
+    modal,
+    reports,
+    close: () => setShown(false),
+    focus: (on: boolean) => setFocused(on),
+  });
+}
+
+/** A lone ESC is only reported once the parser is sure no escape sequence follows. */
+async function pressEsc(view: TestRendererSetup) {
+  view.mockInput.pressEscape();
+  await Bun.sleep(30);
 }
 
 describe("statusRows", () => {
@@ -236,5 +308,217 @@ describe("gitView", () => {
     const view = await render(fakeClient(ok({ ...CLEAN, untracked: many })).client);
     const frame = await view.waitForFrame((f) => f.includes("more"));
     expect(frame).toContain("… and 22 more");
+  });
+});
+
+const WORKING: GitStatus = {
+  ...CLEAN,
+  changes: [
+    { path: "src/app.ts", from: null, staged: "modified", unstaged: "unchanged" },
+    { path: "README.md", from: null, staged: "unchanged", unstaged: "modified" },
+  ],
+  untracked: ["notes.txt"],
+};
+
+describe("statusRows files", () => {
+  test("say which list they are in, and a staged rename names both its sides", () => {
+    const files = statusRows(DIRTY, false).flatMap((row) =>
+      row.kind === "file" ? [[row.side, row.files]] : [],
+    );
+    expect(files).toEqual([
+      ["conflict", ["merge.ts"]],
+      ["staged", ["src/app.ts"]],
+      ["staged", ["src/new.ts", "src/old.ts"]],
+      ["unstaged", ["README.md"]],
+      ["untracked", ["notes.txt"]],
+    ]);
+  });
+});
+
+describe("fitRows with a selection", () => {
+  test("keeps the selected row in view instead of cutting the list short", () => {
+    const rows = statusRows(
+      { ...CLEAN, untracked: Array.from({ length: 30 }, (_, i) => `f${i}`) },
+      false,
+    );
+    const window = fitRows(rows, 5, 20);
+    expect(window).toHaveLength(5);
+    expect(window).toContain(rows[20] as StatusRow);
+    expect(window.some((row) => row.kind === "text" && row.text.includes("more"))).toBe(false);
+  });
+});
+
+describe("stageAll", () => {
+  test.each([
+    [WORKING, { stage: true, files: "all" }],
+    [
+      { ...WORKING, conflicts: ["merge.ts"] },
+      { stage: true, files: ["README.md", "notes.txt"] },
+    ],
+    [
+      { ...WORKING, changes: [WORKING.changes[0]], untracked: [] },
+      { stage: false, files: "all" },
+    ],
+    [CLEAN, null],
+  ] as [GitStatus, unknown][])("%#", (status, expected) => {
+    expect(stageAll(status)).toEqual(expected as never);
+  });
+});
+
+describe("gitView with the keyboard", () => {
+  test("idle, it shows no cursor and sets no keys", async () => {
+    const view = await render(fakeClient(ok(WORKING)).client);
+    await view.waitForFrame((f) => f.includes("Untracked (1)"));
+    expect(view.keys.at(-1)).toBeNull();
+    view.mockInput.pressKey(" ");
+    await view.renderOnce();
+    expect(view.keys.filter((keys) => keys !== null)).toEqual([]);
+  });
+
+  test("focused, the keys follow the file under the cursor", async () => {
+    const view = await render(fakeClient(ok(WORKING)).client, { focused: true });
+    await view.waitForFrame((f) => f.includes("Untracked (1)"));
+    expect(view.keys.at(-1)).toBe("space unstage · a stage all · c commit");
+    view.mockInput.pressKey("j");
+    await view.renderOnce();
+    expect(view.keys.at(-1)).toBe("space stage · a stage all · c commit");
+    view.mockInput.pressArrow("down");
+    view.mockInput.pressArrow("down");
+    await view.renderOnce();
+    expect(view.keys.at(-1)).toBe("space unstage · a stage all · c commit");
+    view.mockInput.pressKey("k");
+    view.focus(false);
+    await view.renderOnce();
+    expect(view.keys.at(-1)).toBeNull();
+  });
+
+  test("space stages or unstages the file under the cursor, then reads status again", async () => {
+    const fake = fakeClient(ok(WORKING));
+    const changes = fakeActions();
+    const view = await render(fake.client, { focused: true, actions: changes.actions });
+    await view.waitForFrame((f) => f.includes("Untracked (1)"));
+    const reads = fake.signals.length;
+    view.mockInput.pressKey(" ");
+    await Bun.sleep(5);
+    view.mockInput.pressKey("END");
+    view.mockInput.pressKey(" ");
+    await Bun.sleep(5);
+    expect(changes.calls).toEqual([
+      { op: "unstage", folder: MOBILE.path, arg: ["src/app.ts"] },
+      { op: "stage", folder: MOBILE.path, arg: ["notes.txt"] },
+    ]);
+    expect(fake.signals.length).toBeGreaterThan(reads);
+  });
+
+  test("a stages every change, and a failure is reported", async () => {
+    const changes = fakeActions();
+    changes.fail(processError("git add failed: index.lock exists", "git", 128));
+    const view = await render(fakeClient(ok(WORKING)).client, {
+      focused: true,
+      actions: changes.actions,
+    });
+    await view.waitForFrame((f) => f.includes("Untracked (1)"));
+    view.mockInput.pressKey("a");
+    await Bun.sleep(5);
+    expect(changes.calls).toEqual([{ op: "stage", folder: MOBILE.path, arg: "all" }]);
+    expect(view.reports.map((error) => error.message)).toEqual([
+      "git add failed: index.lock exists",
+    ]);
+  });
+
+  test("the cursor's row is lit", async () => {
+    const view = await render(fakeClient(ok(WORKING)).client, { focused: true });
+    await view.waitForFrame((f) => f.includes("Untracked (1)"));
+    const lit = view
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .filter((span) => span.bg.equals(RGBA.fromHex(PALETTE.selectionBg)))
+      .map((span) => span.text)
+      .join("");
+    expect(lit.trim()).toStartWith("M  src/app.ts");
+  });
+});
+
+describe("gitView commits", () => {
+  const editorOpen = (f: string) => f.includes("ctrl+s commit 1 file  esc close");
+
+  async function writing(changes = fakeActions(), status: GitStatus = WORKING) {
+    const view = await render(fakeClient(ok(status)).client, {
+      focused: true,
+      actions: changes.actions,
+    });
+    await view.waitForFrame((f) => f.includes("Staged (1)"));
+    view.mockInput.pressKey("c");
+    await view.waitForFrame((f) => f.includes(" Commit on main ") && editorOpen(f));
+    return view;
+  }
+
+  test("c opens the editor with every key its own; ctrl+s commits and says so", async () => {
+    const changes = fakeActions();
+    const view = await writing(changes);
+    expect(view.modal).toEqual([true]);
+    expect(view.captureCharFrame()).not.toContain(" Commit on main c");
+    await view.mockInput.typeText("Fix login");
+    view.mockInput.pressKey("s", { ctrl: true });
+    const frame = await view.waitForFrame((f) => f.includes("✓ Committed 1a2b3c4 Fix login"));
+    expect(editorOpen(frame)).toBe(false);
+    expect(changes.calls).toEqual([{ op: "commit", folder: MOBILE.path, arg: "Fix login" }]);
+    expect(view.modal).toEqual([true, false]);
+  });
+
+  test("esc closes it and keeps the message for next time", async () => {
+    const view = await writing();
+    await view.mockInput.typeText("Half a thought");
+    await pressEsc(view);
+    await view.waitForFrame((f) => !editorOpen(f));
+    view.mockInput.pressKey("c");
+    await view.waitForFrame((f) => editorOpen(f) && f.includes("Half a thought"));
+  });
+
+  test("a blank message is refused before git is asked", async () => {
+    const changes = fakeActions();
+    const view = await writing(changes);
+    view.mockInput.pressKey("s", { ctrl: true });
+    await view.waitForFrame((f) => f.includes("Commit message is invalid: write a summary"));
+    expect(changes.calls).toEqual([]);
+  });
+
+  test("a refusal stays in the editor; esc stops a commit still running", async () => {
+    const refused = fakeActions();
+    refused.fail(processError("git commit failed: tests failed", "git", 1));
+    const view = await writing(refused);
+    await view.mockInput.typeText("Fix");
+    view.mockInput.pressKey("s", { ctrl: true });
+    await view.waitForFrame(
+      (f) => f.includes("✗ git commit failed: tests failed") && editorOpen(f),
+    );
+
+    view.renderer.destroy();
+    const slow = fakeActions();
+    slow.holdCommit();
+    const again = await writing(slow);
+    await again.mockInput.typeText("Fix");
+    again.mockInput.pressKey("s", { ctrl: true });
+    await again.waitForFrame((f) => f.includes("Committing... hooks may take a while"));
+    await pressEsc(again);
+    await again.waitForFrame((f) => f.includes("✗ Commit was cancelled"));
+    expect(slow.commitSignal()?.aborted).toBe(true);
+  });
+
+  test("with conflicts, or nothing staged, c does nothing", async () => {
+    const view = await render(fakeClient(ok({ ...WORKING, conflicts: ["merge.ts"] })).client, {
+      focused: true,
+    });
+    await view.waitForFrame((f) => f.includes("Conflicts (1)"));
+    view.mockInput.pressKey("c");
+    await view.renderOnce();
+    expect(view.modal).toEqual([]);
+    expect(view.keys.at(-1)).toBe("space stage · a stage all");
+  });
+
+  test("a summary longer than 72 characters is pointed out", async () => {
+    const view = await writing();
+    await view.mockInput.typeText("x".repeat(80));
+    await view.waitForFrame((f) => f.includes("Summary is 80 characters"));
   });
 });

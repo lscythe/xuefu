@@ -77,7 +77,15 @@ const gitSection = (status: GitStatus | null): Section => ({
   id: gitPlugin.id,
   label: gitPlugin.label,
   icons: gitPlugin.icons,
-  view: gitView(fakeGit({ status: () => Promise.resolve(ok(status)) }), 60_000),
+  view: gitView(
+    fakeGit({ status: () => Promise.resolve(ok(status)) }),
+    {
+      stage: () => Promise.resolve(ok(undefined)),
+      unstage: () => Promise.resolve(ok(undefined)),
+      commit: () => Promise.resolve(ok({ commit: "5d1e0c4b3a29", subject: "Add biometric login" })),
+    },
+    60_000,
+  ),
 });
 
 let setup: TestRendererSetup | undefined;
@@ -453,6 +461,31 @@ describe("screenshots", () => {
     const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
     await screen.waitForFrame((f) => f.includes("Untracked (1)"));
     expectScreenshot("git", screen.captureSpans());
+  });
+
+  test("git, with the keyboard on a file", async () => {
+    const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("j");
+    screen.mockInput.pressKey("j");
+    screen.mockInput.pressKey("j");
+    await screen.waitForFrame((f) => f.includes("space stage · a stage all · c commit"));
+    expectScreenshot("git-focused", screen.captureSpans());
+  });
+
+  test("git, writing a commit", async () => {
+    const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("c");
+    await screen.waitForFrame((f) => f.includes(" Commit on feature/MOB-2841-biometric-login "));
+    await screen.mockInput.typeText("Add biometric login");
+    screen.mockInput.pressEnter();
+    screen.mockInput.pressEnter();
+    await screen.mockInput.typeText("Falls back to the PIN when no fingerprint is enrolled.");
+    await screen.waitForFrame((f) => f.includes("no fingerprint"));
+    expectScreenshot("git-commit", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {
