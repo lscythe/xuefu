@@ -53,12 +53,16 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `Ctrl+W`       | find a workspace and open it in a tab            |
 | `Alt+1`…`Alt+9` | bring that tab to the front                     |
 | `Alt+W`        | close the front tab                              |
-| `Tab`, `Shift+Tab` | on the dashboard: move focus between its panels |
+| `Tab`, `Shift+Tab` | on the dashboard: move focus between its panels; on a plugin's section such as Git: give it the keyboard, or take it back |
 | `1`…`4`        | on the dashboard: focus that panel               |
-| `Enter`        | on the dashboard: open the focused panel's section |
+| `Enter`        | on the dashboard: open the focused panel's section; on a plugin's section: give it the keyboard |
+| `Esc`          | in a plugin's section: give the keyboard back to the navigation |
 | `t`            | start, pause or resume the front workspace's timer (for its work in progress) |
 | `Shift+T`      | stop the timer                                   |
 | `e`, `i`       | in Notes: edit the workspace's note, or the note on its work in progress |
+| `Space`        | in Git: stage or unstage the file under the cursor |
+| `a`            | in Git: stage every change except conflicts, or unstage everything once all is staged |
+| `c`            | in Git: write a commit of what is staged |
 | `q`, `Ctrl+C`  | quit                                             |
 
 Each workspace has at most one piece of work in progress; starting another issue there finishes
@@ -98,11 +102,15 @@ plugins:
 
 | Plugin | Adds |
 |--------|------|
-| `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files |
+| `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
-it stays open, with the branch and how far it is ahead or behind in the panel's frame.
+it stays open, with the branch and how far it is ahead or behind in the panel's frame. With the
+keyboard (`Tab`), the arrows pick a file and `Space` stages or unstages it. `c` opens an editor for
+the commit message, where `Ctrl+S` commits; the repository's hooks run as usual, and if one
+refuses, its last words are shown and the message stays. `Esc` closes the editor and keeps the
+message for next time, or stops a commit still running.
 
 Git runs as the installed `git`, with your own config, hooks and credential helpers. XueFu reads
 status without taking git's index lock, so it never blocks your own git commands.

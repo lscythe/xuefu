@@ -7,9 +7,9 @@ import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
-import type { GitClient } from "../../../../src/plugins/git/application/git-client";
 import { gitCommands } from "../../../../src/plugins/git/cli/commands";
 import type { GitStatus } from "../../../../src/plugins/git/domain/status";
+import { fakeGit } from "../../../support/fake-git";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -39,7 +39,7 @@ async function show(
   flags: PluginInvocation["flags"] = {},
   workspace: Result<Workspace, AppError> = ok(MOBILE),
 ) {
-  const client: GitClient = { status: () => Promise.resolve(ok(status)) };
+  const client = fakeGit({ status: () => Promise.resolve(ok(status)) });
   let stdout = "";
   let stderr = "";
   const asked: (string | null)[] = [];
@@ -146,7 +146,7 @@ describe("git status", () => {
 
   test("a failing status is the error", async () => {
     const failure = processError("git status failed", "git", 128);
-    const client: GitClient = { status: () => Promise.resolve(err(failure)) };
+    const client = fakeGit({ status: () => Promise.resolve(err(failure)) });
     const code = await gitCommands(client)(
       { group: "git", name: "status", args: [], flags: {} },
       {

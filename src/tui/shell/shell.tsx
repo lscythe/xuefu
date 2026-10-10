@@ -149,6 +149,10 @@ export function Shell(props: ShellProps) {
   const [notice, setNotice] = createSignal<AppError | null>(null);
   // What a plugin's section sets into its frame; cleared when the section changes.
   const [pluginStatus, setPluginStatus] = createSignal<string | null>(null);
+  const [pluginKeys, setPluginKeys] = createSignal<string | null>(null);
+  // A plugin's section has the keyboard, or one of its dialogs has every key.
+  const [inSection, setInSection] = createSignal(false);
+  const [modal, setModal] = createSignal(false);
   const [timer, setTimer] = createSignal(props.timer);
   const [allWork, setAllWork] = createSignal(props.work);
   // Each workspace keeps its own place in the navigation; "" is the no-workspace screen.
@@ -173,7 +177,11 @@ export function Shell(props: ShellProps) {
     const current = workspace();
     setSections((all) => new Map(all).set(current?.id ?? "", index));
     const target = props.sections[index];
-    setPluginStatus(null);
+    batch(() => {
+      setPluginStatus(null);
+      setPluginKeys(null);
+      setInSection(false);
+    });
     if (current === null || target === undefined) return;
     void props.saveNavigation(current, target.id).then((saved) => {
       if (!saved.ok) setNotice(saved.error);
@@ -198,6 +206,8 @@ export function Shell(props: ShellProps) {
 
   // Read only while the section is in front, and again whenever something is recorded.
   const showing = (...ids: string[]) => ids.includes(section()?.id ?? "");
+  /** Plugins' sections can take the keyboard; the core's have nothing to select yet. */
+  const focusable = () => section()?.view !== undefined;
   const activity = createMemo(() => {
     if (!showing("activity", "dashboard")) return null;
     recorded();
@@ -320,9 +330,14 @@ export function Shell(props: ShellProps) {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
     // note editor, which asks before Ctrl+C drops unsaved text.
-    if (editing() !== null) return;
+    if (editing() !== null || modal()) return;
     const overlay = switcherOpen() || paletteOpen();
     if (action === null || (overlay && action.kind !== "interrupt")) return;
+    // In a section, the arrows, j and k, digits and Enter are its own.
+    const own = ["nav", "panel.jump", "panel.open"];
+    if (inSection() && own.includes(action.kind)) return;
+    // What the cockpit acts on stops here, so a section never acts on the same key.
+    key.stopPropagation();
     setNotice(null);
     switch (action.kind) {
       case "nav":
@@ -345,7 +360,8 @@ export function Shell(props: ShellProps) {
         report(closeTab());
         return;
       case "panel.focus":
-        if (showing("dashboard")) {
+        if (focusable()) setInSection(!inSection());
+        else if (showing("dashboard")) {
           setPanel(cycle(panel(), action.to === "next" ? 1 : -1, DASHBOARD_PANELS.length));
         }
         return;
@@ -356,9 +372,13 @@ export function Shell(props: ShellProps) {
         return;
       case "panel.open": {
         const target = props.sections.findIndex((s) => s.id === DASHBOARD_PANELS[panel()]);
-        if (showing("dashboard") && target !== -1) select(target);
+        if (focusable()) setInSection(true);
+        else if (showing("dashboard") && target !== -1) select(target);
         return;
       }
+      case "section.leave":
+        setInSection(false);
+        return;
       case "note.edit":
         if (showing("notes") || (showing("dashboard") && DASHBOARD_PANELS[panel()] === "notes")) {
           // The editor takes focus at once; without this the "e" would be typed into it.
@@ -397,7 +417,13 @@ export function Shell(props: ShellProps) {
           width={dimensions().width}
         />
         <box flexDirection="row" flexGrow={1}>
-          <Nav sections={props.sections} selected={selected()} icons={props.icons} width={nav()} />
+          <Nav
+            sections={props.sections}
+            selected={selected()}
+            away={inSection()}
+            icons={props.icons}
+            width={nav()}
+          />
           <Show
             when={!showing("dashboard")}
             fallback={
@@ -435,11 +461,15 @@ export function Shell(props: ShellProps) {
                   : pluginStatus()
               }
               keys={
-                section()?.id === "work"
-                  ? timerKeys(toggle(), props.icons === "ascii")
-                  : section()?.id === "notes" && workspace() !== null
-                    ? noteKeys(work(), props.icons === "ascii")
+                focusable()
+                  ? inSection()
+                    ? pluginKeys()
                     : null
+                  : section()?.id === "work"
+                    ? timerKeys(toggle(), props.icons === "ascii")
+                    : section()?.id === "notes" && workspace() !== null
+                      ? noteKeys(work(), props.icons === "ascii")
+                      : null
               }
             >
               <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
@@ -450,7 +480,11 @@ export function Shell(props: ShellProps) {
                       width={areaWidth() - PANEL_CHROME_COLUMNS}
                       rows={panelRows()}
                       icons={props.icons}
+                      focused={inSection()}
                       setStatus={setPluginStatus}
+                      setKeys={setPluginKeys}
+                      setModal={setModal}
+                      report={setNotice}
                     />
                   )}
                 </Match>
@@ -519,7 +553,8 @@ export function Shell(props: ShellProps) {
           hints={keyHints(props.icons, {
             tabs: tabs().open.length > 0,
             timer: toggle() !== null,
-            panels: showing("dashboard"),
+            panels: showing("dashboard") || focusable(),
+            inSection: inSection(),
           })}
         />
         <Show when={switcherOpen()}>

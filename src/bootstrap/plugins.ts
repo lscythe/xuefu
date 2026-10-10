@@ -1,4 +1,11 @@
-import { type ConfigurationError, configurationError } from "../domain/shared/errors";
+import type { CommandBus } from "../application/commands/command-bus";
+import {
+  type ConfigurationError,
+  configurationError,
+  type DuplicateCommandError,
+  type ValidationError,
+  validationError,
+} from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
 import { gitPlugin } from "../plugins/git/plugin";
 import type { Plugin, PluginContext, PluginParts } from "../plugins/plugin";
@@ -45,4 +52,25 @@ export function startPlugins(
     if (parts.value !== null) started.push({ plugin, parts: parts.value });
   }
   return ok(started);
+}
+
+/** Registers the started plugins' actions; each must be named under its plugin's id. */
+export function registerPluginActions(
+  bus: Pick<CommandBus, "register">,
+  started: readonly StartedPlugin[],
+): Result<void, DuplicateCommandError | ValidationError> {
+  for (const { plugin, parts } of started) {
+    for (const action of parts.actions ?? []) {
+      if (!action.name.startsWith(`${plugin.id}.`)) {
+        return err(
+          validationError(`The ${plugin.label} plugin's command ${action.name} is misnamed`, [
+            { path: action.name, message: `name it ${plugin.id}.<action>` },
+          ]),
+        );
+      }
+      const registered = bus.register(action);
+      if (!registered.ok) return registered;
+    }
+  }
+  return ok(undefined);
 }

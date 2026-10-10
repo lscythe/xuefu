@@ -41,6 +41,7 @@ describe("actionFor", () => {
     [press("1"), { kind: "panel.jump", position: 1 }],
     [press("9"), { kind: "panel.jump", position: 9 }],
     [press("return"), { kind: "panel.open" }],
+    [press("escape"), { kind: "section.leave" }],
   ] as const)("%o → %o", (key, action) => {
     expect(actionFor(key)).toEqual(action);
   });
@@ -100,6 +101,16 @@ describe("keyHints", () => {
       keys: "tab",
       label: "focus",
     });
+  });
+
+  test("in a section, esc back replaces navigate and tab", () => {
+    expect(
+      keyHints("unicode", { tabs: false, timer: false, panels: true, inSection: true }),
+    ).toEqual([
+      { keys: "esc", label: "back" },
+      { keys: "^W", label: "workspaces" },
+      { keys: "q", label: "quit" },
+    ]);
   });
 
   test("the timer key shows when it has something to do", () => {

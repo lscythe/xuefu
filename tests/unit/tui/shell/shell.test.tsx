@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
-import { testRender } from "@opentui/solid";
-import { type Component, createEffect } from "solid-js";
+import { testRender, useKeyboard } from "@opentui/solid";
+import { type Component, createEffect, createSignal } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
@@ -93,6 +93,12 @@ const noteOn = (issue: string | null): Note => ({
   updatedAt: 0 as Timestamp,
 });
 /** The section in front, by the title in its frame; the dashboard by its first panel. */
+/** A lone ESC is only reported once the parser is sure no escape sequence follows. */
+async function pressEsc(shell: TestRendererSetup) {
+  shell.mockInput.pressEscape();
+  await Bun.sleep(30);
+}
+
 const showing = (label: string) => (frame: string) =>
   frame.includes(label === "Dashboard" ? "─ 1 Work ─" : `─ ${label} ─`);
 
@@ -633,12 +639,6 @@ describe("Shell note editor", () => {
   }
 
   const editorOpen = (f: string) => f.includes("ctrl+s save  esc cancel");
-  /** A lone ESC is only reported once the parser is sure no escape sequence follows. */
-  const pressEsc = async (shell: TestRendererSetup) => {
-    shell.mockInput.pressEscape();
-    await Bun.sleep(30);
-  };
-
   test("e opens the workspace's note as stored; ctrl+s saves it and closes", async () => {
     const shell = await notes();
     shell.mockInput.pressKey("e");
@@ -817,6 +817,101 @@ describe("Shell plugin sections", () => {
     await shell.waitForFrame(
       (f) => f.includes("│ Mobile Banking in") && f.includes(" on mobile-banking "),
     );
+  });
+
+  /** A view that takes keys while focused, says so in its frame, and opens a dialog on d. */
+  const keyed: Component<SectionProps> = (props) => {
+    const [pressed, setPressed] = createSignal<string[]>([]);
+    createEffect(() => props.setKeys(props.focused ? "x mark" : null));
+    useKeyboard((key) => {
+      if (!props.focused) return;
+      if (key.name === "d") props.setModal(true);
+      else if (key.name === "x") props.setModal(false);
+      else if (key.name === "f") props.report(storageError("Disk full", "write"));
+      setPressed((all) => [...all, key.name]);
+    });
+    return <text>{`${props.focused ? "focused" : "idle"}: ${pressed().join(" ")}`}</text>;
+  };
+  const KEYED = { ...GIT, view: keyed };
+
+  const onKeyed = () =>
+    renderShell({
+      sections: cockpitSections([KEYED]),
+      navigation: new Map([["mobile-banking", "git"]]),
+    });
+
+  test("tab gives a plugin's section the keyboard, and its keys go there", async () => {
+    let toggles = 0;
+    const shell = await renderShell({
+      sections: cockpitSections([KEYED]),
+      navigation: new Map([["mobile-banking", "git"]]),
+      toggleTimer: () => {
+        toggles++;
+        return Promise.resolve(ok(null));
+      },
+    });
+    const idle = await shell.waitForFrame((f) => f.includes("idle: "));
+    expect(rowContaining(idle, "navigate")).toContain("tab focus");
+
+    shell.mockInput.pressTab();
+    const focused = await shell.waitForFrame((f) => f.includes("focused: "));
+    expect(focused).toContain("─ x mark ─");
+    expect(rowContaining(focused, "esc back")).not.toContain("navigate");
+
+    shell.mockInput.pressKey("j");
+    shell.mockInput.pressArrow("down");
+    shell.mockInput.pressKey("1");
+    shell.mockInput.pressEnter();
+    shell.mockInput.pressKey("t");
+    const moved = await shell.waitForFrame((f) => f.includes("focused: j down 1 return"));
+    expect(toggles).toBe(1);
+    expect(showing("Git")(moved)).toBe(true);
+    // The cockpit's own keys, such as t for the timer, never reach the section.
+    shell.mockInput.pressKey("k");
+    await shell.waitForFrame((f) => f.includes("focused: j down 1 return k"));
+  });
+
+  test("esc or tab hands the keyboard back to the navigation", async () => {
+    const shell = await onKeyed();
+    shell.mockInput.pressTab();
+    await shell.waitForFrame((f) => f.includes("focused: "));
+    await pressEsc(shell);
+    const back = await shell.waitForFrame((f) => f.includes("idle: "));
+    expect(back).not.toContain("x mark");
+
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes("focused: "));
+    shell.mockInput.pressTab();
+    await shell.waitForFrame((f) => f.includes("idle: "));
+    shell.mockInput.pressKey("j");
+    await shell.waitForFrame(showing("Timesheet"));
+  });
+
+  test("while its dialog is open, the section has every key, the cockpit's too", async () => {
+    let quit = 0;
+    const shell = await renderShell({
+      sections: cockpitSections([KEYED]),
+      navigation: new Map([["mobile-banking", "git"]]),
+      onQuit: () => quit++,
+    });
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("d");
+    shell.mockInput.pressKey("q");
+    shell.mockInput.pressTab();
+    await pressEsc(shell);
+    shell.mockInput.pressKey("x");
+    await shell.waitForFrame((f) => f.includes("focused: d q tab escape x"));
+    expect(quit).toBe(0);
+    shell.mockInput.pressKey("q");
+    await shell.renderOnce();
+    expect(quit).toBe(1);
+  });
+
+  test("a failure it reports shows above the key bar", async () => {
+    const shell = await onKeyed();
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("f");
+    await shell.waitForFrame((f) => f.includes("Disk full"));
   });
 });
 

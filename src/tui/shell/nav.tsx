@@ -7,6 +7,8 @@ import { type Section, sectionIcon } from "./sections";
 export interface NavProps {
   readonly sections: readonly Section[];
   readonly selected: number;
+  /** The section in front has the keyboard, so its marker dims. */
+  readonly away?: boolean;
   readonly icons: IconSet;
   /** Columns the panel takes; see navWidth. */
   readonly width: number;
@@ -45,8 +47,16 @@ export function Nav(props: NavProps) {
             <text marginTop={index() === 0 ? 0 : 1}>
               <span
                 style={{
-                  fg: active() ? PALETTE.textInverse : PALETTE.textDim,
-                  bg: active() ? PALETTE.accentSecondary : PALETTE.bg,
+                  fg: active()
+                    ? props.away
+                      ? PALETTE.text
+                      : PALETTE.textInverse
+                    : PALETTE.textDim,
+                  bg: active()
+                    ? props.away
+                      ? PALETTE.selectionBg
+                      : PALETTE.accentSecondary
+                    : PALETTE.bg,
                 }}
               >
                 {block(sectionIcon(section, props.icons), props.icons)}

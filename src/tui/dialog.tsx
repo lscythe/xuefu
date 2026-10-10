@@ -1,3 +1,5 @@
+import type { BoxRenderable } from "@opentui/core";
+import { Portal } from "@opentui/solid";
 import type { JSX } from "solid-js";
 import { PALETTE } from "./theme/palette";
 
@@ -21,32 +23,47 @@ export function dialogListRows(rows: number, items: number): number {
   return Math.min(room, Math.max(MIN_LIST_ROWS, items));
 }
 
-/** A framed box over the cockpit, centred both ways. */
+/** Makes the portal's own box cover the screen, so the dialog centres on the whole cockpit. */
+function cover(container: BoxRenderable) {
+  container.position = "absolute";
+  container.top = 0;
+  container.left = 0;
+  container.width = "100%";
+  container.height = "100%";
+  container.zIndex = 10;
+}
+
+/**
+ * A framed box over the cockpit, centred both ways. It is drawn at the root wherever it is
+ * declared, so a section's dialog centres on the screen rather than on the section.
+ */
 export function Dialog(props: { title: string; width: number; children: JSX.Element }) {
   return (
-    <box
-      position="absolute"
-      zIndex={10}
-      top={0}
-      left={0}
-      width="100%"
-      height="100%"
-      justifyContent="center"
-      alignItems="center"
-    >
+    <Portal ref={(container) => cover(container as BoxRenderable)}>
       <box
-        width={props.width}
-        flexDirection="column"
-        border
-        borderColor={PALETTE.borderFocused}
-        // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
-        backgroundColor={PALETTE.panelBg}
-        title={props.title}
-        titleColor={PALETTE.accentSecondary}
-        paddingX={1}
+        position="absolute"
+        zIndex={10}
+        top={0}
+        left={0}
+        width="100%"
+        height="100%"
+        justifyContent="center"
+        alignItems="center"
       >
-        {props.children}
+        <box
+          width={props.width}
+          flexDirection="column"
+          border
+          borderColor={PALETTE.borderFocused}
+          // panelBg, not elevatedBg: the selection colour is elevatedBg's twin and would vanish.
+          backgroundColor={PALETTE.panelBg}
+          title={props.title}
+          titleColor={PALETTE.accentSecondary}
+          paddingX={1}
+        >
+          {props.children}
+        </box>
       </box>
-    </box>
+    </Portal>
   );
 }
