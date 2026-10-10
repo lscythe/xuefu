@@ -12,8 +12,8 @@ A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooli
 around a single **Work Context**.
 
 > Status: **early development.** The cockpit opens, switches workspaces, keeps them in tabs,
-> tracks the issue you are working on and times it, and reads git status; the Jira, PR, Jenkins
-> and Android plugins are not built yet.
+> tracks the issue you are working on and times it, works with git, and lists your Jira issues;
+> the PR, Jenkins and Android plugins are not built yet.
 
 ## Usage
 
@@ -35,14 +35,18 @@ pbpaste | xuefu note save                                      # replace the not
 xuefu note list                                                # every note with its first line
 xuefu activity -w mobile-banking -n 50                         # what happened there, newest first
 xuefu git                                                      # branch and changed files here
+xuefu jira                                                     # your open Jira issues
+xuefu jira show MOB-2841                                       # one issue, with its description
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
 Exit codes follow sysexits: `64` usage, `65` conflict, `66` not found, `69` a tool such as git
-failed or is missing, `74` I/O, `78` configuration.
+failed or is missing, or a service such as Jira failed, `74` I/O, `77` a service refused the
+credentials, `78` configuration.
 `workspace which` exits `1` outside every workspace, and `work` and `timer` exit `1` when nothing
 is in progress, which makes them usable in shell prompts. `activity` and `note` exit `1` when
-there is nothing to show, and `git` exits `1` when the workspace is not a git repository.
+there is nothing to show, `git` exits `1` when the workspace is not a git repository, and `jira`
+exits `1` when no issue matches.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -91,8 +95,9 @@ Keyboard, "Use Option as Meta key"; iTerm2: Profiles, Keys, Left Option key "Esc
 
 ## Plugins
 
-Integrations are built-in plugins, each on unless turned off in `config.yml`. Settings for a
-plugin XueFu does not have are an error, so a typo does not go unnoticed.
+Integrations are built-in plugins, set in `config.yml`. Git is on unless turned off; Jira is on
+once it has an address. Settings for a plugin XueFu does not have are an error, so a typo does not
+go unnoticed.
 
 ```yaml
 version: 1
@@ -100,11 +105,18 @@ plugins:
   git:
     enabled: false     # no `xuefu git` and no Git section
     refreshSeconds: 3  # how often the Git section reads status while open (1 to 300)
+  jira:
+    url: https://jira.example.com
+    token: { env: JIRA_TOKEN }  # or { keychain: { service: jira, account: you } }
+    jql: project = MOB AND assignee = currentUser()  # optional; your open issues by default
+    maxResults: 50              # how many to list (1 to 100)
+    refreshSeconds: 120         # how often the Jira section reads them while open (30 to 3600)
 ```
 
 | Plugin | Adds |
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
+| `jira` | `xuefu jira issues` and `xuefu jira show <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -126,6 +138,17 @@ HTTPS remotes need a credential helper, or the push says so instead of waiting.
 
 Git runs as the installed `git`, with your own config, hooks and credential helpers. XueFu reads
 status without taking git's index lock, so it never blocks your own git commands.
+
+The Jira section lists what the query finds, with how many in the panel's frame, and reads it again
+every couple of minutes while it stays open; if a read fails, the list last read stays, with why
+above it. With the keyboard, `Enter` shows the issue under the cursor with its description, which
+the arrows scroll, and `r` reads the list again.
+
+Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
+it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret
+Service keyring on Linux (`security add-generic-password -s jira -a you -w` or
+`secret-tool store --label Jira service jira account you`). XueFu reads it only when it first
+asks Jira, never writes it to logs, and sends it only over HTTPS, unless Jira runs on this machine.
 
 ## Development
 

@@ -103,6 +103,7 @@ describe("errors", () => {
         case "cancelled":
         case "timeout":
         case "process":
+        case "remote":
         case "unexpected":
           return e.kind;
         default:

@@ -63,3 +63,31 @@ export function panelKeys(parts: readonly (string | null)[], ascii: boolean): st
   const shown = parts.filter((part): part is string => part !== null);
   return shown.length === 0 ? null : shown.join(ascii ? " | " : " · ");
 }
+
+/** A key for a section's frame, with how much it is worth keeping when space is short. */
+export interface PanelHint {
+  readonly text: string;
+  /** Lower is kept longer. */
+  readonly rank: number;
+}
+
+/** The hints that fit in `width` columns, giving up the least needed first. */
+export function fitHints(
+  hints: readonly PanelHint[],
+  width: number,
+  ascii: boolean,
+): string | null {
+  const and = ascii ? " | " : " · ";
+  const length = (shown: readonly PanelHint[]) =>
+    shown.reduce((sum, hint) => sum + Bun.stringWidth(hint.text), 0) +
+    Math.max(0, shown.length - 1) * and.length;
+  let shown = [...hints];
+  while (shown.length > 0 && length(shown) > width) {
+    const least = Math.max(...shown.map((hint) => hint.rank));
+    shown = shown.filter((hint) => hint.rank !== least);
+  }
+  return panelKeys(
+    shown.map((hint) => hint.text),
+    ascii,
+  );
+}

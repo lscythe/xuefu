@@ -13,7 +13,7 @@ import {
 import { NoteQueries } from "../application/notes/queries";
 import type { Logger } from "../application/ports/logger";
 import type { ProcessRunner } from "../application/ports/process-runner";
-import type { Redactor } from "../application/security/redaction";
+import type { Redactor, SecretRegistry } from "../application/security/redaction";
 import {
   registerTimerCommands,
   type TimerCommands,
@@ -47,6 +47,7 @@ import { resolvePaths, type XueFuPaths } from "../infrastructure/config/paths";
 import { readConfigFile } from "../infrastructure/config/read-config-file";
 import type { GlobalConfig } from "../infrastructure/config/schema";
 import { fsWorkspaceProbe } from "../infrastructure/filesystem/workspace-probe";
+import { FetchHttpClient } from "../infrastructure/http/fetch-http-client";
 import { JsonLinesFileSink } from "../infrastructure/logging/file-sink";
 import { createLogger } from "../infrastructure/logging/logger";
 import { MIGRATIONS } from "../infrastructure/persistence/migrations/catalog";
@@ -62,6 +63,7 @@ import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/
 import { SqliteWorkspaceSessionRepository } from "../infrastructure/persistence/sqlite/workspace-session-repository";
 import { SqliteWorkspaceTabsRepository } from "../infrastructure/persistence/sqlite/workspace-tabs-repository";
 import { BunProcessRunner } from "../infrastructure/process/bun-process-runner";
+import { SystemSecrets } from "../infrastructure/security/system-secrets";
 import { systemClock } from "../infrastructure/system/clock";
 import { uuidV7Ids } from "../infrastructure/system/ids";
 import { PLUGINS, registerPluginActions, type StartedPlugin, startPlugins } from "./plugins";
@@ -79,6 +81,8 @@ export interface StartOptions {
   readonly version: string;
   readonly overrides: Readonly<Record<string, unknown>>;
   readonly redactor: Redactor;
+  /** Where credentials looked up for plugins are registered, so the redactor masks them. */
+  readonly secrets: SecretRegistry;
   /** Where to report a failing log sink; logging itself must never crash XueFu. */
   readonly reportSinkFailure: (message: string) => void;
 }
@@ -234,6 +238,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     {
       bus: { invoke: (command, input, options) => commandBus.invoke(command, input, options) },
       processes,
+      http: new FetchHttpClient(logger),
+      secrets: new SystemSecrets(options.env, processes, process.platform, options.secrets),
       logger,
       clock: systemClock,
     },

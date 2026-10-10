@@ -959,11 +959,18 @@ describe("runCli: plugins", () => {
     expect(shown.stderr).toContain("plugins.git.enabled");
   });
 
+  test("a plugin that needs setting up says what to set", async () => {
+    const shown = await run(["jira"]);
+    expect(shown.code).toBe(EXIT.config);
+    expect(shown.stderr).toContain("The Jira plugin is not set up");
+    expect(shown.stderr).toContain("plugins.jira.url");
+  });
+
   test("settings for an unknown plugin, or invalid ones, stop XueFu from starting", async () => {
     config("plugins:\n  gti:\n    enabled: true\n");
     const typo = await run(["diagnostics"]);
     expect(typo.code).toBe(EXIT.config);
-    expect(typo.stderr).toContain('no plugin named "gti"; plugins: git');
+    expect(typo.stderr).toContain('no plugin named "gti"; plugins: git, jira');
 
     config("plugins:\n  git:\n    enabled: sometimes\n");
     const invalid = await run(["diagnostics"]);
@@ -996,6 +1003,10 @@ describe("exitCodeFor", () => {
     [errors.migrationError("m", 1, "failed"), EXIT.io],
     [errors.timeout("t", 10), EXIT.tempFail],
     [errors.processError("p", "git", 128), EXIT.unavailable],
+    [errors.remoteError("r", "jira.example.com", null), EXIT.unavailable],
+    [errors.remoteError("r", "jira.example.com", 503), EXIT.unavailable],
+    [errors.remoteError("r", "jira.example.com", 401), EXIT.noPermission],
+    [errors.remoteError("r", "jira.example.com", 403), EXIT.noPermission],
     [errors.cancelled("c"), EXIT.cancelled],
     [errors.commandNotFound("x.y"), EXIT.software],
     [errors.duplicateCommand("x.y"), EXIT.software],

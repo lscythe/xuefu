@@ -133,7 +133,8 @@ function displayWidth(value: string): number {
   return width;
 }
 
-function table(rows: readonly (readonly string[])[]): string {
+/** Rows in columns two spaces apart, sized to the widest cell; the last column is not padded. */
+export function table(rows: readonly (readonly string[])[]): string {
   const widths: number[] = [];
   for (const row of rows) {
     row.forEach((cell, i) => {

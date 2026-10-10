@@ -52,6 +52,7 @@ export const EXIT = {
   data: 65,
   noInput: 66,
   unavailable: 69,
+  noPermission: 77,
   software: 70,
   io: 74,
   tempFail: 75,
@@ -113,6 +114,8 @@ export function exitCodeFor(error: AppError): number {
       return EXIT.tempFail;
     case "process":
       return EXIT.unavailable;
+    case "remote":
+      return error.status === 401 || error.status === 403 ? EXIT.noPermission : EXIT.unavailable;
     case "cancelled":
       return EXIT.cancelled;
     case "command-not-found":
@@ -637,13 +640,14 @@ async function runPluginCommand(
   const started = app.plugins.find(({ plugin }) => plugin.id === invocation.group);
   const commands = started?.parts.commands;
   if (commands === undefined) {
-    const label =
-      PLUGINS.find((plugin) => plugin.id === invocation.group)?.label ?? invocation.group;
+    const off = PLUGINS.find((plugin) => plugin.id === invocation.group)?.whenOff ?? {
+      message: `The ${invocation.group} plugin is turned off`,
+      path: `plugins.${invocation.group}.enabled`,
+      fix: "set it to true to use it",
+    };
     return fail(
       out,
-      configurationError(`The ${label} plugin is turned off`, app.paths.configFile, [
-        { path: `plugins.${invocation.group}.enabled`, message: "set it to true to use it" },
-      ]),
+      configurationError(off.message, app.paths.configFile, [{ path: off.path, message: off.fix }]),
     );
   }
   const ran = await commands(invocation, {
@@ -753,6 +757,7 @@ export async function runCli(runtime: CliRuntime): Promise<number> {
     version: runtime.version,
     overrides: invocation.value.overrides,
     redactor: out.redactor,
+    secrets: registry,
     reportSinkFailure: (message) => runtime.stderr.write(`${out.redactor.redactString(message)}\n`),
   });
   if (!started.ok) return fail(out, started.error);

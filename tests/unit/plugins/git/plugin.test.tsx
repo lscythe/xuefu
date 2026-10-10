@@ -12,6 +12,7 @@ import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import { gitPlugin } from "../../../../src/plugins/git/plugin";
 import type { PluginParts } from "../../../../src/plugins/plugin";
+import { fakeSecrets } from "../../../support/fake-secrets";
 import { ManualClock } from "../../../support/manual-clock";
 import { SequentialIds } from "../../../support/sequential-ids";
 import { testLogger } from "../../../support/test-logger";
@@ -60,7 +61,14 @@ function start(settings: unknown, specs: ProcessSpec[] = [], repository = false)
   const logger = testLogger().logger;
   const clock = new ManualClock();
   const bus = new CommandBus({ logger, clock, ids: new SequentialIds() });
-  const context = { bus, processes: fakeGitRunner(specs, repository), logger, clock };
+  const context = {
+    bus,
+    processes: fakeGitRunner(specs, repository),
+    http: { request: () => Promise.reject(new Error("git makes no HTTP requests")) },
+    secrets: fakeSecrets(),
+    logger,
+    clock,
+  };
   const started = gitPlugin.start(context, settings, "config.yml");
   if (started.ok && started.value !== null) {
     registerPluginActions(bus, [{ plugin: gitPlugin, parts: started.value }]);

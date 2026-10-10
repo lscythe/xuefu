@@ -12,10 +12,13 @@ import type { Branch } from "../../../src/plugins/git/domain/branches";
 import type { GitStatus } from "../../../src/plugins/git/domain/status";
 import { gitPlugin } from "../../../src/plugins/git/plugin";
 import { gitView } from "../../../src/plugins/git/tui/git-view";
+import { jiraPlugin } from "../../../src/plugins/jira/plugin";
+import { jiraView } from "../../../src/plugins/jira/tui/jira-view";
 import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
+import { fakeJira, jiraIssue } from "../../support/fake-jira";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { gitSectionFor } from "../../support/git-section";
@@ -123,6 +126,63 @@ const gitSection = (status: GitStatus | null): Section => ({
     ),
   ),
 });
+
+/** Issues assigned to you that are not done, as Jira would list them. */
+const MY_ISSUES = [
+  jiraIssue("MOB-2841", {
+    summary: "Add biometric login to the mobile banking app",
+    description: [
+      "h3. Why",
+      "Customers sign in several times a day and typing a PIN on the go is slow.",
+      "",
+      "h3. Acceptance criteria",
+      "* Face ID and fingerprint unlock the app once enrolled in settings",
+      "* Falls back to the PIN after three failed attempts, or when nothing is enrolled",
+      "* The biometric prompt names the app and says why it is asking",
+      "* Turning it off in settings removes the stored key from the keystore",
+      "",
+      "Design: see the Login v4 frames.",
+    ].join("\n"),
+  }),
+  jiraIssue("MOB-2790", {
+    summary: "Crash when rotating the transfer confirmation screen",
+    type: "Bug",
+    priority: "Highest",
+    status: { name: "In Review", category: "doing" },
+  }),
+  jiraIssue("MOB-2802", {
+    summary: "Show pending card transactions in the account history",
+    status: { name: "To Do", category: "todo" },
+  }),
+  jiraIssue("MOB-2755", {
+    summary: "Upgrade the networking stack to OkHttp 5",
+    type: "Task",
+    status: { name: "Blocked", category: "todo" },
+  }),
+  jiraIssue("SDK-412", {
+    summary: "Expose the session refresh callback in the shared SDK",
+    status: { name: "Selected for Development", category: "todo" },
+  }),
+  jiraIssue("MOB-2611", {
+    summary: "Accessibility labels for the payee list",
+    priority: "Low",
+    status: { name: "Ready for QA", category: "doing" },
+  }),
+];
+
+/** The Jira section as the jira plugin draws it, over a stand-in Jira. */
+const jiraSection: Section = {
+  id: jiraPlugin.id,
+  label: jiraPlugin.label,
+  icons: jiraPlugin.icons,
+  view: jiraView({
+    client: fakeJira(MY_ISSUES, 9),
+    jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+    maxResults: 6,
+    refreshMs: 60_000,
+    timeZone: "UTC",
+  }),
+};
 
 let setup: TestRendererSetup | undefined;
 afterEach(() => {
@@ -545,6 +605,30 @@ describe("screenshots", () => {
       await screen.renderOnce();
     }
     expectScreenshot("git-push", screen.captureSpans());
+  });
+
+  test("jira issues", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection]),
+      navigation: new Map([["mobile-banking", "jira"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("MOB-2611"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressArrow("down");
+    await screen.waitForFrame((f) => f.includes("enter details"));
+    expectScreenshot("jira", screen.captureSpans());
+  });
+
+  test("jira, an issue's details", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection]),
+      navigation: new Map([["mobile-banking", "jira"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("MOB-2611"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Acceptance criteria"));
+    expectScreenshot("jira-issue", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {
