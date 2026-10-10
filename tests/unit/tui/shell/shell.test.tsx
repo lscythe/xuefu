@@ -74,8 +74,16 @@ function rowContaining(frame: string, text: string): string {
 }
 
 const header = (frame: string) => rowContaining(frame, "血符");
-/** The section in front, by the title in its frame. */
-const showing = (label: string) => (frame: string) => frame.includes(`─ ${label} ─`);
+const noteOn = (issue: string | null): Note => ({
+  id: "n-1" as NoteId,
+  workspaceId: "mobile-banking" as WorkspaceId,
+  issueKey: issue as Note["issueKey"],
+  body: "" as NoteBody,
+  updatedAt: 0 as Timestamp,
+});
+/** The section in front, by the title in its frame; the dashboard by its first panel. */
+const showing = (label: string) => (frame: string) =>
+  frame.includes(label === "Dashboard" ? "─ 1 Work ─" : `─ ${label} ─`);
 
 describe("Shell tabs", () => {
   test("shows a numbered tab per open workspace in the header, underlining the front one", async () => {
@@ -585,6 +593,91 @@ describe("Shell notes", () => {
   });
 });
 
+describe("Shell dashboard", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const WORK = workIn("mobile-banking", "MOB-2841", "Add biometric login", NOW - 3_600_000);
+  const peach = RGBA.fromHex(PALETTE.borderFocused);
+
+  /** Whether the panel with this title is the one lit. */
+  const lit = (shell: TestRendererSetup, title: string) =>
+    shell
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .some((span) => span.fg.equals(peach) && span.text.includes(` ${title} `));
+
+  test("shows Work, Notes and Activity, numbered, with Work in focus", async () => {
+    const shell = await renderShell({
+      work: WORK,
+      loadNote: (_, issue) =>
+        ok(issue === null ? null : { ...noteOn("MOB-2841"), body: "Ask QA" as NoteBody }),
+      loadActivity: () => ok([activityEntry(NOW - 60_000, MOBILE.workspace, "Opened")]),
+    });
+    const frame = shell.captureCharFrame();
+    for (const title of ["─ 1 Work ─", "─ 2 Notes ─", "─ 3 Activity ─"]) {
+      expect(frame).toContain(title);
+    }
+    expect(frame).toContain("MOB-2841  Add biometric login");
+    expect(frame).toContain("Ask QA");
+    expect(frame).toContain("13:58  Opened");
+    expect(rowContaining(frame, "⏎ open")).toContain("─ t start timer · ⏎ open ─");
+    expect(rowContaining(frame, "navigate")).toContain("tab focus");
+    expect(lit(shell, "1 Work")).toBe(true);
+    expect(lit(shell, "2 Notes")).toBe(false);
+  });
+
+  test("tab and shift+tab move the focus round; a digit jumps to a panel", async () => {
+    const shell = await renderShell();
+    shell.mockInput.pressTab();
+    await shell.waitForFrame(() => lit(shell, "2 Notes"));
+    expect(lit(shell, "1 Work")).toBe(false);
+    expect(rowContaining(shell.captureCharFrame(), "⏎ open")).toContain("─ ⏎ open ─");
+    shell.mockInput.pressKey("3");
+    await shell.waitForFrame(() => lit(shell, "3 Activity"));
+    shell.mockInput.pressTab();
+    await shell.waitForFrame(() => lit(shell, "1 Work"));
+    shell.mockInput.pressTab({ shift: true });
+    await shell.waitForFrame(() => lit(shell, "3 Activity"));
+    shell.mockInput.pressKey("9");
+    await shell.renderOnce();
+    expect(lit(shell, "3 Activity")).toBe(true);
+  });
+
+  test("enter opens the focused panel's section, and the focus waits for the way back", async () => {
+    const shell = await renderShell();
+    shell.mockInput.pressKey("2");
+    await shell.waitForFrame(() => lit(shell, "2 Notes"));
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame(showing("Notes"));
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("1");
+    shell.mockInput.pressEnter();
+    await shell.renderOnce();
+    expect(shell.captureCharFrame()).toContain("─ Notes ─");
+    expect(rowContaining(shell.captureCharFrame(), "navigate")).not.toContain("tab focus");
+    shell.mockInput.pressKey("HOME");
+    await shell.waitForFrame(showing("Dashboard"));
+    expect(lit(shell, "2 Notes")).toBe(true);
+  });
+
+  test("at 80×24 the clock is drawn small and the key bar keeps what matters", async () => {
+    const clock = new ManualClock(NOW);
+    const timer = fakeTimer(
+      clock,
+      VIEWS.map((v) => v.workspace),
+    );
+    await timer.toggle(MOBILE.workspace, "MOB-2841" as IssueKey);
+    const frame = (
+      await renderShell({ clock, work: WORK, timer: timer.current() }, { width: 80, height: 24 })
+    ).captureCharFrame();
+    for (const row of bigClockRows("00:00:00", "small")) expect(frame).toContain(row);
+    expect(frame).toContain("Started Tue 06 Oct 12:59 · running");
+    const keys = rowContaining(frame, "q quit");
+    expect(keys).toContain("t timer");
+    expect(keys).not.toContain("alt+1-9");
+    expect(keys).toMatch(/│ : commands $/);
+  });
+});
+
 describe("Shell refresh", () => {
   const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
 
@@ -807,7 +900,7 @@ describe("Shell", () => {
     for (const label of ["Dashboard", "Work", "Jira", "Git", "PRs", "Timesheet", "Notes"]) {
       expect(frame).toContain(label);
     }
-    expect(frame).toContain("─ Dashboard ─");
+    expect(frame).toContain("─ 1 Work ─");
     expect(rowContaining(frame, "navigate")).toContain("↑↓ navigate");
     expect(rowContaining(frame, "navigate")).toContain("^W workspaces");
     expect(rowContaining(frame, "navigate")).toContain("q quit");
@@ -905,7 +998,7 @@ describe("Shell", () => {
     await Bun.sleep(30);
     const closed = await shell.waitForFrame((f) => !f.includes("Switch workspace"));
     expect(header(closed)).toContain("Mobile Banking");
-    expect(closed).toContain("─ Dashboard ─");
+    expect(closed).toContain("─ 1 Work ─");
     shell.mockInput.pressKey("j");
     await shell.waitForFrame((f) => showing("Work")(f));
   });
@@ -935,7 +1028,7 @@ describe("Shell", () => {
     expect(frame).not.toContain("Dashboard");
 
     shell.resize(80, 24);
-    await shell.waitForFrame((f) => f.includes("Dashboard"));
+    await shell.waitForFrame(showing("Dashboard"));
   });
 
   test("ascii icons drop glyphs and arrows but keep every label", async () => {
@@ -954,7 +1047,8 @@ describe("Shell", () => {
     const brand = spans.find((span) => span.text.includes("血符"));
     const peach = RGBA.fromHex(PALETTE.borderFocused);
     expect(brand?.fg.equals(RGBA.fromHex(PALETTE.accentPrimary))).toBe(true);
-    expect(spans.find((span) => span.text.includes(" Dashboard "))?.fg.equals(peach)).toBe(true);
+    expect(spans.find((span) => span.text.includes(" 1 Work "))?.fg.equals(peach)).toBe(true);
+    expect(spans.find((span) => span.text.includes(" 2 Notes "))?.fg.equals(peach)).toBe(false);
     expect(spans.find((span) => span.text.includes(" Go "))?.fg.equals(peach)).toBe(false);
   });
 });

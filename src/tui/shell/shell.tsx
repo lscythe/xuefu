@@ -18,7 +18,7 @@ import type { OpenTabs, WorkspaceView } from "../../application/workspace/querie
 import type { Note } from "../../domain/notes/note";
 import { assertNever } from "../../domain/shared/assert-never";
 import { ok, type Result } from "../../domain/shared/result";
-import { type TimerToggle, timerToggle } from "../../domain/timesheet/timer";
+import { timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -30,12 +30,14 @@ import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { ActivityPanel } from "./activity-panel";
+import { DASHBOARD_PANELS, Dashboard } from "./dashboard";
 import { Header } from "./header";
 import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
 import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
+import { sectionStatus, timerKeys } from "./panel-status";
 import { SECTIONS } from "./sections";
 import { fitsTerminal } from "./terminal-size";
 import { TooSmall } from "./too-small";
@@ -109,56 +111,13 @@ const PANEL_CHROME_ROWS = 5;
 /** The panel's frame and padding. */
 const PANEL_CHROME_COLUMNS = 4;
 
-/** What the timer key does, set into the Work panel's frame. */
-function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | null {
-  const and = ascii ? " | " : " · ";
-  switch (toggle) {
-    case null:
-      return null;
-    case "start":
-      return "t start timer";
-    case "pause":
-      return `t pause${and}T stop`;
-    case "resume":
-      return `t resume${and}T stop`;
-    default:
-      return assertNever(toggle);
-  }
-}
-
-/** A word on the state of the section in front, set into the right of its frame. */
-function sectionStatus(
-  id: string | undefined,
-  state: {
-    readonly work: WorkContext | null;
-    readonly timer: TimerView | null;
-    readonly workspace: Workspace | null;
-  },
-): string | null {
-  switch (id) {
-    case "work": {
-      const active = state.timer?.timer;
-      const timing =
-        active !== undefined &&
-        state.work !== null &&
-        active.workspaceId === state.work.workspaceId &&
-        active.issueKey === state.work.issueKey;
-      return timing ? (active.status === "paused" ? "paused" : "running") : null;
-    }
-    case "notes":
-      return state.work?.issueKey ?? null;
-    case "activity":
-      return state.workspace === null ? "everywhere" : null;
-    default:
-      return null;
-  }
-}
-
 export function Shell(props: ShellProps) {
   const dimensions = useTerminalDimensions();
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  // Which of the dashboard's panels has focus; kept while away from the dashboard.
+  const [panel, setPanel] = createSignal(0);
   const [notice, setNotice] = createSignal<AppError | null>(null);
   const [timer, setTimer] = createSignal(props.timer);
   const [allWork, setAllWork] = createSignal(props.work);
@@ -207,14 +166,15 @@ export function Shell(props: ShellProps) {
   );
 
   // Read only while the section is in front, and again whenever something is recorded.
+  const showing = (...ids: string[]) => ids.includes(section()?.id ?? "");
   const activity = createMemo(() => {
-    if (section()?.id !== "activity") return null;
+    if (!showing("activity", "dashboard")) return null;
     recorded();
     return props.loadActivity(workspace());
   });
   const notes = createMemo((): Result<LoadedNotes, AppError> | null => {
     const current = workspace();
-    if (section()?.id !== "notes" || current === null) return null;
+    if (!showing("notes", "dashboard") || current === null) return null;
     recorded();
     const own = props.loadNote(current, null);
     if (!own.ok) return own;
@@ -224,6 +184,8 @@ export function Shell(props: ShellProps) {
   });
   /** Rows left for a section's content once the header, tabs, frame, notice and key bar are drawn. */
   const panelRows = () => dimensions().height - PANEL_CHROME_ROWS - (notice() ? 1 : 0);
+  /** Columns right of the sections, where a section or the dashboard is drawn. */
+  const areaWidth = () => dimensions().width - nav();
   const nav = () => navWidth(dimensions().width, props.icons);
   const toggle = () => timerToggle(timer()?.timer ?? null, workspace()?.id ?? null);
 
@@ -328,6 +290,21 @@ export function Shell(props: ShellProps) {
       case "tab.close":
         report(closeTab());
         return;
+      case "panel.focus":
+        if (showing("dashboard")) {
+          setPanel(cycle(panel(), action.to === "next" ? 1 : -1, DASHBOARD_PANELS.length));
+        }
+        return;
+      case "panel.jump":
+        if (showing("dashboard") && action.position <= DASHBOARD_PANELS.length) {
+          setPanel(action.position - 1);
+        }
+        return;
+      case "panel.open": {
+        const target = SECTIONS.findIndex((s) => s.id === DASHBOARD_PANELS[panel()]);
+        if (showing("dashboard") && target !== -1) select(target);
+        return;
+      }
       case "timer.toggle":
         report(toggleTimer());
         return;
@@ -360,55 +337,76 @@ export function Shell(props: ShellProps) {
         />
         <box flexDirection="row" flexGrow={1}>
           <Nav selected={selected()} icons={props.icons} width={nav()} />
-          <Panel
-            title={section()?.label ?? ""}
-            focused
-            flexGrow={1}
-            status={sectionStatus(section()?.id, {
-              work: work(),
-              timer: timer(),
-              workspace: workspace(),
-            })}
-            keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
+          <Show
+            when={!showing("dashboard")}
+            fallback={
+              <Dashboard
+                clock={props.clock}
+                timeZone={props.timeZone}
+                tickMs={props.tickMs ?? 1000}
+                ascii={props.icons === "ascii"}
+                workspace={workspace()}
+                work={work()}
+                timer={timer()}
+                notes={notes()}
+                activity={activity()}
+                width={areaWidth()}
+                rows={panelRows() + 2}
+                focused={panel()}
+                timerKeys={timerKeys(toggle(), props.icons === "ascii")}
+              />
+            }
           >
-            <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
-              <Match when={section()?.id === "work"}>
-                <WorkPanel
-                  clock={props.clock}
-                  timeZone={props.timeZone}
-                  tickMs={props.tickMs ?? 1000}
-                  workspace={workspace()}
-                  work={work()}
-                  timer={timer()}
-                  width={dimensions().width - nav() - PANEL_CHROME_COLUMNS}
-                  rows={panelRows()}
-                  ascii={props.icons === "ascii"}
-                />
-              </Match>
-              <Match when={section()?.id === "notes"}>
-                <NotesPanel
-                  workspace={workspace()}
-                  work={work()}
-                  notes={notes()}
-                  ascii={props.icons === "ascii"}
-                />
-              </Match>
-              <Match when={activity()}>
-                {(loaded: Accessor<Result<readonly ActivityEntry[], AppError>>) => (
-                  <ActivityPanel
+            <Panel
+              title={section()?.label ?? ""}
+              focused
+              flexGrow={1}
+              status={sectionStatus(section()?.id, {
+                work: work(),
+                timer: timer(),
+                workspace: workspace(),
+              })}
+              keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
+            >
+              <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
+                <Match when={section()?.id === "work"}>
+                  <WorkPanel
                     clock={props.clock}
                     timeZone={props.timeZone}
                     tickMs={props.tickMs ?? 1000}
                     workspace={workspace()}
-                    activity={loaded()}
+                    work={work()}
+                    timer={timer()}
+                    width={areaWidth() - PANEL_CHROME_COLUMNS}
                     rows={panelRows()}
-                    width={dimensions().width - nav() - PANEL_CHROME_COLUMNS}
                     ascii={props.icons === "ascii"}
                   />
-                )}
-              </Match>
-            </Switch>
-          </Panel>
+                </Match>
+                <Match when={section()?.id === "notes"}>
+                  <NotesPanel
+                    workspace={workspace()}
+                    work={work()}
+                    notes={notes()}
+                    ascii={props.icons === "ascii"}
+                  />
+                </Match>
+                <Match when={activity()}>
+                  {(loaded: Accessor<Result<readonly ActivityEntry[], AppError>>) => (
+                    <ActivityPanel
+                      clock={props.clock}
+                      timeZone={props.timeZone}
+                      tickMs={props.tickMs ?? 1000}
+                      workspace={workspace()}
+                      activity={loaded()}
+                      rows={panelRows()}
+                      width={areaWidth() - PANEL_CHROME_COLUMNS}
+                      ascii={props.icons === "ascii"}
+                    />
+                  )}
+                </Match>
+              </Switch>
+            </Panel>
+          </Show>
         </box>
         <Show when={notice()}>
           {(error: Accessor<AppError>) => (
@@ -419,7 +417,12 @@ export function Shell(props: ShellProps) {
         </Show>
         <KeyBar
           icons={props.icons}
-          hints={keyHints(props.icons, { tabs: tabs().open.length > 0, timer: toggle() !== null })}
+          width={dimensions().width}
+          hints={keyHints(props.icons, {
+            tabs: tabs().open.length > 0,
+            timer: toggle() !== null,
+            panels: showing("dashboard"),
+          })}
         />
         <Show when={switcherOpen()}>
           <Switcher

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   actionFor,
   COMMANDS_HINT,
+  fitKeyHints,
+  hintWidth,
   type KeyPress,
   keyHints,
 } from "../../../../src/tui/shell/keymap";
@@ -32,6 +34,11 @@ describe("actionFor", () => {
     [alt("w"), { kind: "tab.close" }],
     [press("t"), { kind: "timer.toggle" }],
     [press("t", { shift: true }), { kind: "timer.stop" }],
+    [press("tab"), { kind: "panel.focus", to: "next" }],
+    [press("tab", { shift: true }), { kind: "panel.focus", to: "previous" }],
+    [press("1"), { kind: "panel.jump", position: 1 }],
+    [press("9"), { kind: "panel.jump", position: 9 }],
+    [press("return"), { kind: "panel.open" }],
   ] as const)("%o → %o", (key, action) => {
     expect(actionFor(key)).toEqual(action);
   });
@@ -39,7 +46,7 @@ describe("actionFor", () => {
   test.each([
     press("x"),
     press("c"),
-    press("1"),
+    press("0"),
     alt("0"),
     press("q", { ctrl: true }),
     press("q", { shift: true }),
@@ -51,12 +58,12 @@ describe("actionFor", () => {
 
 describe("keyHints", () => {
   test("every hint names a bound action; tab keys only show with tabs open", () => {
-    expect(keyHints("unicode", { tabs: false, timer: false })).toEqual([
+    expect(keyHints("unicode", { tabs: false, timer: false, panels: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "q", label: "quit" },
     ]);
-    expect(keyHints("unicode", { tabs: true, timer: false })).toEqual([
+    expect(keyHints("unicode", { tabs: true, timer: false, panels: false })).toEqual([
       { keys: "↑↓", label: "navigate" },
       { keys: "^W", label: "workspaces" },
       { keys: "alt+1-9", label: "tabs" },
@@ -71,20 +78,42 @@ describe("keyHints", () => {
     });
   });
 
+  test("a narrow key bar gives up tabs, then focus, then navigate, keeping the rest", () => {
+    const all = keyHints("unicode", { tabs: true, timer: true, panels: true });
+    const width = (hints: readonly { keys: string; label: string }[]) =>
+      hints.reduce((sum, hint) => sum + hintWidth(hint), 0);
+    expect(fitKeyHints(all, width(all))).toEqual(all);
+    expect(fitKeyHints(all, width(all) - 1).map((h) => h.label)).toEqual([
+      "navigate",
+      "focus",
+      "workspaces",
+      "timer",
+      "quit",
+    ]);
+    expect(fitKeyHints(all, 10).map((h) => h.label)).toEqual(["workspaces", "timer", "quit"]);
+  });
+
+  test("tab shows while there are panels to move between", () => {
+    expect(keyHints("unicode", { tabs: false, timer: false, panels: true })[1]).toEqual({
+      keys: "tab",
+      label: "focus",
+    });
+  });
+
   test("the timer key shows when it has something to do", () => {
-    expect(keyHints("unicode", { tabs: false, timer: true })).toContainEqual({
+    expect(keyHints("unicode", { tabs: false, timer: true, panels: false })).toContainEqual({
       keys: "t",
       label: "timer",
     });
   });
 
   test("ascii icons avoid arrow glyphs", () => {
-    expect(keyHints("ascii", { tabs: false, timer: false })[0]).toEqual({
+    expect(keyHints("ascii", { tabs: false, timer: false, panels: false })[0]).toEqual({
       keys: "j/k",
       label: "navigate",
     });
-    expect(keyHints("nerd", { tabs: true, timer: false })).toEqual(
-      keyHints("unicode", { tabs: true, timer: false }),
+    expect(keyHints("nerd", { tabs: true, timer: false, panels: false })).toEqual(
+      keyHints("unicode", { tabs: true, timer: false, panels: false }),
     );
   });
 });
