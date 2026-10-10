@@ -37,6 +37,7 @@ xuefu activity -w mobile-banking -n 50                         # what happened t
 xuefu git                                                      # branch and changed files here
 xuefu jira                                                     # your open Jira issues
 xuefu jira show MOB-2841                                       # one issue, with its description
+xuefu jira start MOB-2841 --yes                                # work on it here, and move it to in progress
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
@@ -116,7 +117,7 @@ plugins:
 | Plugin | Adds |
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
-| `jira` | `xuefu jira issues` and `xuefu jira show <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
+| `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -143,6 +144,10 @@ The Jira section lists what the query finds, with how many in the panel's frame,
 every couple of minutes while it stays open; if a read fails, the list last read stays, with why
 above it. With the keyboard, `Enter` shows the issue under the cursor with its description, which
 the arrows scroll, and `r` reads the list again.
+
+`xuefu jira start` works on the issue in this workspace, titled with its summary, and times it, as
+`xuefu work start` does. When the issue is still to do, `--yes` also moves it to in progress in
+Jira; without it, the command says how.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret

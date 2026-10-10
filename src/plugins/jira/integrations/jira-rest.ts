@@ -9,7 +9,7 @@ import {
 } from "../../../domain/shared/errors";
 import { err, ok, type Result } from "../../../domain/shared/result";
 import type { Secret } from "../../../domain/shared/secret";
-import type { JiraClient } from "../application/jira-client";
+import type { JiraClient, JiraFailure } from "../application/jira-client";
 import { type JiraIssue, statusCategory } from "../domain/issue";
 
 const TIMEOUT_MS = 20_000;
@@ -36,7 +36,20 @@ const IssueSchema = z.object({
 });
 
 const SearchSchema = z.object({ issues: z.array(IssueSchema), total: z.number().int() });
-const ErrorsSchema = z.object({ errorMessages: z.array(z.string()).optional() });
+const TransitionsSchema = z.object({
+  transitions: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      to: z.object({ name: z.string(), statusCategory: z.object({ key: z.string() }) }),
+    }),
+  ),
+});
+const ErrorsSchema = z.object({
+  errorMessages: z.array(z.string()).optional(),
+  /** Per field, when what was sent does not satisfy the workflow. */
+  errors: z.record(z.string(), z.string()).optional(),
+});
 
 /** Jira writes offsets as "+0200"; JavaScript dates read only "+02:00". */
 export function jiraTime(text: string): number {
@@ -66,7 +79,9 @@ function toIssue(raw: z.infer<typeof IssueSchema>): JiraIssue {
 function jiraSays(response: HttpResponse): string | null {
   try {
     const parsed = ErrorsSchema.safeParse(JSON.parse(response.body));
-    return parsed.success ? (parsed.data.errorMessages?.[0] ?? null) : null;
+    if (!parsed.success) return null;
+    const { errorMessages, errors } = parsed.data;
+    return errorMessages?.[0] ?? Object.values(errors ?? {})[0] ?? null;
   } catch {
     return null;
   }
@@ -114,26 +129,41 @@ export function jiraRest(options: JiraRestOptions): JiraClient {
     }
   };
 
-  /** GETs a path, decoding a 200 with `schema`; other statuses go to `otherwise` or `refused`. */
-  const get = async <T>(
-    path: string,
-    schema: z.ZodType<T>,
+  /** Asks Jira, giving back a 2xx answer; other statuses go to `otherwise` or `refused`. */
+  const ask = async (
+    request: { readonly method: "GET" | "POST"; readonly path: string; readonly body?: unknown },
     signal: AbortSignal | undefined,
-    otherwise: (response: HttpResponse) => ReturnType<typeof refused> | null = () => null,
+    otherwise: (response: HttpResponse) => RemoteError | null = () => null,
   ) => {
     const token = await options.token();
     if (!token.ok) return token;
     const answered = await http.request(
       {
-        method: "GET",
-        url: `${url}${path}`,
+        method: request.method,
+        url: `${url}${request.path}`,
         headers: { Authorization: `Bearer ${token.value.reveal()}` },
+        ...(request.body === undefined ? {} : { body: request.body }),
       },
       { timeoutMs: TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) },
     );
     if (!answered.ok) return answered;
     const response = answered.value;
-    if (response.status !== 200) return err(otherwise(response) ?? refused(response));
+    if (response.status < 200 || response.status > 299) {
+      return err(otherwise(response) ?? refused(response));
+    }
+    return ok(response);
+  };
+
+  /** GETs a path, decoding the answer with `schema`. */
+  const get = async <T>(
+    path: string,
+    schema: z.ZodType<T>,
+    signal: AbortSignal | undefined,
+    otherwise?: (response: HttpResponse) => RemoteError | null,
+  ) => {
+    const answered = await ask({ method: "GET", path }, signal, otherwise);
+    if (!answered.ok) return answered;
+    const response = answered.value;
     let json: unknown;
     try {
       json = JSON.parse(response.body);
@@ -149,6 +179,16 @@ export function jiraRest(options: JiraRestOptions): JiraClient {
           }),
         );
   };
+
+  /** A 404 about an issue says it is not found, or not visible to the token's user. */
+  const missing = (error: JiraFailure, key: string) =>
+    err(
+      error.kind === "remote" && error.status === 404
+        ? notFound("issue", key, {
+            hint: "Check the key, and that your token's user can see it.",
+          })
+        : error,
+    );
 
   return {
     async search(jql, max, signal) {
@@ -189,16 +229,51 @@ export function jiraRest(options: JiraRestOptions): JiraClient {
         IssueSchema,
         signal,
       );
-      if (!found.ok) {
-        return found.error.kind === "remote" && found.error.status === 404
-          ? err(
-              notFound("issue", key, {
-                hint: "Check the key, and that your token's user can see it.",
-              }),
-            )
-          : found;
-      }
+      if (!found.ok) return missing(found.error, key);
       return ok(toIssue(found.value));
+    },
+
+    async transitions(key, signal) {
+      const found = await get(
+        `/rest/api/2/issue/${encodeURIComponent(key)}/transitions`,
+        TransitionsSchema,
+        signal,
+      );
+      if (!found.ok) return missing(found.error, key);
+      return ok(
+        found.value.transitions.map((transition) => ({
+          id: transition.id,
+          name: transition.name,
+          to: {
+            name: transition.to.name,
+            category: statusCategory(transition.to.statusCategory.key),
+          },
+        })),
+      );
+    },
+
+    async transition(key, id, signal) {
+      const moved = await ask(
+        {
+          method: "POST",
+          path: `/rest/api/2/issue/${encodeURIComponent(key)}/transitions`,
+          body: { transition: { id } },
+        },
+        signal,
+        (response) =>
+          response.status === 400
+            ? remoteError(
+                `Jira did not move ${key}${jiraSays(response) === null ? "" : `: ${jiraSays(response)}`}`,
+                host,
+                400,
+                {
+                  hint: "The move may ask for fields XueFu does not fill in; make it in Jira.",
+                },
+              )
+            : null,
+      );
+      if (!moved.ok) return missing(moved.error, key);
+      return ok(undefined);
     },
 
     browseUrl(key) {

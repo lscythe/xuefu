@@ -13,14 +13,24 @@ const fixture = (name: string) => Bun.file(join(import.meta.dir, "fixtures", `${
 /** Each test says how the fake Jira answers; requests are kept for checking what was sent. */
 let answer: (request: Request) => Response | Promise<Response> = () => new Response("unset");
 /** What the fake Jira was sent; a Request itself is not readable once it has been answered. */
-const requests: { readonly url: string; readonly authorization: string | null }[] = [];
+const requests: {
+  readonly method: string;
+  readonly url: string;
+  readonly authorization: string | null;
+  readonly body: string;
+}[] = [];
 let server: ReturnType<typeof Bun.serve>;
 
 beforeAll(() => {
   server = Bun.serve({
     port: 0,
-    fetch: (request) => {
-      requests.push({ url: request.url, authorization: request.headers.get("authorization") });
+    fetch: async (request) => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        authorization: request.headers.get("authorization"),
+        body: await request.clone().text(),
+      });
       return answer(request);
     },
   });
@@ -141,6 +151,59 @@ describe("jira REST v2: issue", () => {
 
   test("the browse address is the issue's page", () => {
     expect(client().browseUrl("MOB-2841")).toBe(`http://127.0.0.1:${server.port}/browse/MOB-2841`);
+  });
+});
+
+describe("jira REST v2: transitions", () => {
+  test("lists the moves the workflow allows, with where each goes", async () => {
+    requests.length = 0;
+    answer = () => new Response(fixture("transitions"));
+    const found = await client().transitions("MOB-2841");
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe("/rest/api/2/issue/MOB-2841/transitions");
+    expect(found).toEqual(
+      ok([
+        { id: "11", name: "Start Progress", to: { name: "In Progress", category: "doing" } },
+        { id: "31", name: "Done", to: { name: "Done", category: "done" } },
+      ]),
+    );
+  });
+
+  test("moves the issue by posting the transition's id once", async () => {
+    requests.length = 0;
+    answer = () => new Response(null, { status: 204 });
+    expect(await client().transition("MOB-2841", "11")).toEqual(ok(undefined));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      authorization: `Bearer ${TOKEN}`,
+    });
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe("/rest/api/2/issue/MOB-2841/transitions");
+    expect(JSON.parse(requests[0]?.body ?? "")).toEqual({ transition: { id: "11" } });
+  });
+
+  test("a move the workflow refuses says why, and to make it in Jira", async () => {
+    requests.length = 0;
+    answer = status(400, { errorMessages: [], errors: { resolution: "Resolution is required." } });
+    const moved = await client().transition("MOB-2841", "31");
+    expect(moved.ok ? null : moved.error).toMatchObject({
+      kind: "remote",
+      status: 400,
+      message: "Jira did not move MOB-2841: Resolution is required.",
+    });
+    expect(moved.ok ? "" : moved.error.hint).toContain("make it in Jira");
+    // A change is never sent twice.
+    answer = status(503);
+    requests.length = 0;
+    await client().transition("MOB-2841", "11");
+    expect(requests).toHaveLength(1);
+  });
+
+  test("an issue that is not there is not found, for its moves as for itself", async () => {
+    answer = status(404, { errorMessages: ["Issue Does Not Exist"] });
+    const moves = await client().transitions("MOB-1");
+    expect(moves.ok ? null : moves.error.kind).toBe("not-found");
+    const moved = await client().transition("MOB-1", "11");
+    expect(moved.ok ? null : moved.error.kind).toBe("not-found");
   });
 });
 
