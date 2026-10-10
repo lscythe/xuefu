@@ -128,6 +128,16 @@ export async function runTui(
         // Masked for display only; the stored note keeps what was written.
         return ok(note === null ? null : { ...note, body: redact(note.body) as NoteBody });
       },
+      noteText: (workspace, issue) => {
+        const found = app.notes.find(workspace.id, issue);
+        return found.ok ? ok(found.value.note?.body ?? "") : found;
+      },
+      saveNote: (workspace, issue, text) =>
+        app.commandBus.invoke(app.noteCommands.save, {
+          workspace: workspace.id,
+          ...(issue === null ? {} : { issue }),
+          body: text,
+        }),
       loadTracked: (since) => app.timers.trackedSince(since),
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),

@@ -59,6 +59,8 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
         loadNote={() => ok(null)}
+        noteText={() => ok("")}
+        saveNote={() => Promise.resolve(err(storageError("not wired", "test")))}
         loadTracked={() => ok({ spans: [], workspaces: new Map() })}
         onExternalChange={() => () => undefined}
         onQuit={() => undefined}
@@ -365,6 +367,34 @@ describe("screenshots", () => {
     );
     await screen.waitForFrame((f) => f.includes("─ Notes ─"));
     expectScreenshot("notes-empty", screen.captureSpans());
+  });
+
+  test("editing a note", async () => {
+    const screen = await shell({
+      work: workIn("mobile-banking", "MOB-2841", "Add biometric authentication", NOW - 600_000),
+      navigation: new Map([["mobile-banking", "notes"]]),
+      loadNote: (_workspace, issue) => ok(issue === null ? OWN_NOTE : ISSUE_NOTE),
+      noteText: () => ok(ISSUE_NOTE.body),
+    });
+    await screen.waitForFrame((f) => f.includes("─ Notes ─"));
+    screen.mockInput.pressKey("i");
+    await screen.waitForFrame((f) => f.includes(" Note on MOB-2841 "));
+    expectScreenshot("note-editor", screen.captureSpans());
+  });
+
+  test("editing a note at 80 columns, with unsaved changes", async () => {
+    const screen = await shell(
+      { navigation: new Map([["mobile-banking", "notes"]]), noteText: () => ok("") },
+      { width: 80, height: 24 },
+    );
+    await screen.waitForFrame((f) => f.includes("─ Notes ─"));
+    screen.mockInput.pressKey("e");
+    await screen.waitForFrame((f) => f.includes(" Note on Mobile Banking "));
+    await screen.mockInput.typeText("Ask Dana about the staging VPN");
+    screen.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await screen.waitForFrame((f) => f.includes("Unsaved changes"));
+    expectScreenshot("note-editor-unsaved", screen.captureSpans());
   });
 
   test("palette", async () => {

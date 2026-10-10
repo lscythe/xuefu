@@ -11,7 +11,7 @@ import { Panel } from "../panel";
 import { useNow } from "../use-now";
 import { ActivityPanel } from "./activity-panel";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
-import { panelKeys, sectionStatus } from "./panel-status";
+import { noteKeys, panelKeys, sectionStatus } from "./panel-status";
 import type { Section } from "./sections";
 import { TodayPanel, todayTotal } from "./today-panel";
 import { WorkPanel } from "./work-panel";
@@ -129,7 +129,11 @@ export function Dashboard(props: DashboardProps) {
           focused={focused("notes")}
           flexGrow={1}
           status={status("notes")}
-          keys={open()}
+          keys={
+            props.workspace === null
+              ? open()
+              : panelKeys([noteKeys(props.work, props.ascii), open()], props.ascii)
+          }
         >
           <NotesPanel
             workspace={props.workspace}

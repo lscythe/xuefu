@@ -20,22 +20,15 @@ export interface NotesPanelProps {
   readonly ascii: boolean;
 }
 
-/** A note's text, or how to start one: the command on a line of its own so it never wraps mid-flag. */
-function NoteBody(props: {
-  readonly note: Note | null;
-  readonly empty: string;
-  readonly command: string;
-}) {
+/** A note's text, or how to start one. */
+function NoteBody(props: { readonly note: Note | null; readonly empty: string }) {
   return (
     <Show
       when={props.note}
       fallback={
-        <>
-          <text flexShrink={0} fg={PALETTE.textMuted}>
-            {props.empty}
-          </text>
-          <text flexShrink={0} fg={PALETTE.textMuted}>{`  ${props.command}`}</text>
-        </>
+        <text flexShrink={0} fg={PALETTE.textMuted}>
+          {props.empty}
+        </text>
       }
     >
       {(note: Accessor<Note>) => (
@@ -65,11 +58,7 @@ export function NotesPanel(props: NotesPanelProps) {
             <text flexShrink={0} fg={PALETTE.accentTertiary}>
               <b>{props.workspace?.name ?? ""}</b>
             </text>
-            <NoteBody
-              note={notes().own}
-              empty="No note yet. Add one with:"
-              command="xuefu note append <text>"
-            />
+            <NoteBody note={notes().own} empty="No note yet. Press e to write one." />
             <Show when={props.work}>
               {(work: Accessor<WorkContext>) => (
                 <>
@@ -84,8 +73,7 @@ export function NotesPanel(props: NotesPanelProps) {
                   </text>
                   <NoteBody
                     note={notes().issue}
-                    empty={`No note on ${work().issueKey} yet. Add one with:`}
-                    command={`xuefu note append --issue ${work().issueKey} <text>`}
+                    empty={`No note on ${work().issueKey} yet. Press i to write one.`}
                   />
                 </>
               )}

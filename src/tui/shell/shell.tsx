@@ -11,6 +11,7 @@ import {
 } from "solid-js";
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
+import type { SavedNote } from "../../application/notes/commands";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
@@ -26,6 +27,7 @@ import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
+import { NoteEditor } from "../note-editor/note-editor";
 import { Palette } from "../palette/palette";
 import { Panel } from "../panel";
 import { Switcher } from "../switcher/switcher";
@@ -40,7 +42,7 @@ import { actionFor, keyHints } from "./keymap";
 import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
-import { sectionStatus, timerKeys } from "./panel-status";
+import { noteKeys, sectionStatus, timerKeys } from "./panel-status";
 import { SECTIONS } from "./sections";
 import { fitsTerminal } from "./terminal-size";
 import { TodayPanel, todayTotal } from "./today-panel";
@@ -102,6 +104,14 @@ export interface ShellProps {
     workspace: Workspace,
     issue: IssueKey | null,
   ) => Result<Note | null, AppError>;
+  /** The note's text as stored, unmasked, for editing; empty when there is none. */
+  readonly noteText: (workspace: Workspace, issue: IssueKey | null) => Result<string, AppError>;
+  /** Saves the note's text; blank text clears it. */
+  readonly saveNote: (
+    workspace: Workspace,
+    issue: IssueKey | null,
+    text: string,
+  ) => Promise<Result<SavedNote, AppError>>;
   /** Time tracked since `since`, in every workspace. */
   readonly loadTracked: (since: Timestamp) => Result<TrackedTime, AppError>;
   /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
@@ -110,6 +120,13 @@ export interface ShellProps {
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
   readonly tickMs?: number;
+}
+
+/** A note open in the editor, with its text as it was when opened. */
+interface EditingNote {
+  readonly workspace: Workspace;
+  readonly issue: IssueKey | null;
+  readonly text: string;
 }
 
 /** The header's two rows, the panel's frame and the key bar. */
@@ -122,6 +139,7 @@ export function Shell(props: ShellProps) {
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const [editing, setEditing] = createSignal<EditingNote | null>(null);
   // Which of the dashboard's panels has focus; kept while away from the dashboard.
   const [panel, setPanel] = createSignal(0);
   const [notice, setNotice] = createSignal<AppError | null>(null);
@@ -263,6 +281,19 @@ export function Shell(props: ShellProps) {
     return finished;
   };
 
+  /** Opens the editor on the front workspace's note, or on the note on its work in progress. */
+  const editNote = (on: "workspace" | "issue") => {
+    const current = workspace();
+    const issue = on === "issue" ? (work()?.issueKey ?? null) : null;
+    if (current === null || (on === "issue" && issue === null)) return;
+    const text = props.noteText(current, issue);
+    if (!text.ok) {
+      setNotice(text.error);
+      return;
+    }
+    setEditing({ workspace: current, issue, text: text.value });
+  };
+
   const move = (to: "previous" | "next" | "first" | "last") => {
     switch (to) {
       case "previous":
@@ -280,7 +311,9 @@ export function Shell(props: ShellProps) {
 
   useKeyboard((key) => {
     const action = actionFor(key);
-    // An open overlay owns the keyboard; only Ctrl+C still reaches the shell.
+    // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
+    // note editor, which asks before Ctrl+C drops unsaved text.
+    if (editing() !== null) return;
     const overlay = switcherOpen() || paletteOpen();
     if (action === null || (overlay && action.kind !== "interrupt")) return;
     setNotice(null);
@@ -319,6 +352,13 @@ export function Shell(props: ShellProps) {
         if (showing("dashboard") && target !== -1) select(target);
         return;
       }
+      case "note.edit":
+        if (showing("notes") || (showing("dashboard") && DASHBOARD_PANELS[panel()] === "notes")) {
+          // The editor takes focus at once; without this the "e" would be typed into it.
+          key.preventDefault();
+          editNote(action.on);
+        }
+        return;
       case "timer.toggle":
         report(toggleTimer());
         return;
@@ -383,7 +423,13 @@ export function Shell(props: ShellProps) {
                 workspace: workspace(),
                 today: todayTotal(tracked(), since(), now()),
               })}
-              keys={section()?.id === "work" ? timerKeys(toggle(), props.icons === "ascii") : null}
+              keys={
+                section()?.id === "work"
+                  ? timerKeys(toggle(), props.icons === "ascii")
+                  : section()?.id === "notes" && workspace() !== null
+                    ? noteKeys(work(), props.icons === "ascii")
+                    : null
+              }
             >
               <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
                 <Match when={section()?.id === "work"}>
@@ -484,12 +530,27 @@ export function Shell(props: ShellProps) {
                   setPaletteOpen(false);
                   setSwitcherOpen(true);
                 },
+                editNote: (on) => {
+                  setPaletteOpen(false);
+                  editNote(on);
+                },
                 quit: props.onQuit,
               },
             )}
             icons={props.icons}
             onClose={() => setPaletteOpen(false)}
           />
+        </Show>
+        <Show when={editing()}>
+          {(note: Accessor<EditingNote>) => (
+            <NoteEditor
+              subject={note().issue ?? note().workspace.name}
+              text={note().text}
+              icons={props.icons}
+              save={(text) => props.saveNote(note().workspace, note().issue, text)}
+              onClose={() => setEditing(null)}
+            />
+          )}
         </Show>
       </Show>
     </box>

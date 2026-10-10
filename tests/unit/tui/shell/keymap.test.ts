@@ -32,6 +32,8 @@ describe("actionFor", () => {
     [alt("1"), { kind: "tab.focus", position: 1 }],
     [alt("9"), { kind: "tab.focus", position: 9 }],
     [alt("w"), { kind: "tab.close" }],
+    [press("e"), { kind: "note.edit", on: "workspace" }],
+    [press("i"), { kind: "note.edit", on: "issue" }],
     [press("t"), { kind: "timer.toggle" }],
     [press("t", { shift: true }), { kind: "timer.stop" }],
     [press("tab"), { kind: "panel.focus", to: "next" }],
