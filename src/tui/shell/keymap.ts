@@ -16,6 +16,8 @@ export type ShellAction =
   | { readonly kind: "panel.jump"; readonly position: number }
   /** Enter opens the focused panel's section. */
   | { readonly kind: "panel.open" }
+  /** Where notes are shown: e edits the workspace's note, i the note on its work in progress. */
+  | { readonly kind: "note.edit"; readonly on: "workspace" | "issue" }
   | { readonly kind: "quit" }
   /** Ctrl+C: quits from anywhere, including while an overlay owns the keyboard. */
   | { readonly kind: "interrupt" };
@@ -55,6 +57,8 @@ const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
     (_, i) => [`${i + 1}`, { kind: "panel.jump", position: i + 1 }] as const,
   ),
   ["return", { kind: "panel.open" }],
+  ["e", { kind: "note.edit", on: "workspace" }],
+  ["i", { kind: "note.edit", on: "issue" }],
   ["t", { kind: "timer.toggle" }],
   ["shift+t", { kind: "timer.stop" }],
   ["q", { kind: "quit" }],

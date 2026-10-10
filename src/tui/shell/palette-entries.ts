@@ -21,6 +21,8 @@ export interface CockpitActions {
   readonly toggleTimer: () => Promise<Result<unknown, AppError>>;
   readonly stopTimer: () => Promise<Result<unknown, AppError>>;
   readonly openSwitcher: () => void;
+  /** Opens the editor on the workspace's own note, or on the note on its work in progress. */
+  readonly editNote: (on: "workspace" | "issue") => void;
   readonly closeTab: () => Promise<Result<unknown, AppError>>;
   readonly quit: () => void;
 }
@@ -52,6 +54,22 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
       keys: null,
       fields: [],
       run: actions.finishWork,
+    });
+  }
+  if (state.workspace !== null) {
+    entries.push({
+      title: `Edit note on ${state.workspace.name}`,
+      keys: "e",
+      fields: [],
+      run: done(() => actions.editNote("workspace")),
+    });
+  }
+  if (state.work !== null) {
+    entries.push({
+      title: `Edit note on ${state.work.issueKey}`,
+      keys: "i",
+      fields: [],
+      run: done(() => actions.editNote("issue")),
     });
   }
   const toggle = timerToggle(state.timer?.timer ?? null, state.workspace?.id ?? null);

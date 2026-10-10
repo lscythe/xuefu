@@ -21,6 +21,11 @@ export function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | 
   }
 }
 
+/** What the note keys do, set into the Notes panel's frame. */
+export function noteKeys(work: WorkContext | null, ascii: boolean): string {
+  return work === null ? "e edit" : `e edit${ascii ? " | " : " · "}i edit ${work.issueKey}`;
+}
+
 /** A word on the state of the section in front, set into the right of its frame. */
 export function sectionStatus(
   id: string | undefined,

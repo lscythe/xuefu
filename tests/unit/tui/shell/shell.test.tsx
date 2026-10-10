@@ -2,12 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import type { AppError } from "../../../../src/application/errors";
+import type { SavedNote } from "../../../../src/application/notes/commands";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
 import { storageError } from "../../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
-import { err, ok } from "../../../../src/domain/shared/result";
+import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
+import type { Workspace } from "../../../../src/domain/workspace/workspace";
 import { bigClockRows } from "../../../../src/tui/big-clock";
 import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
 import { PALETTE } from "../../../../src/tui/theme/palette";
@@ -56,6 +59,8 @@ async function renderShell(
         onRecorded={() => () => undefined}
         reload={() => ok({ tabs: tabs.initial, timer: null, work: new Map() })}
         loadNote={() => ok(null)}
+        noteText={() => ok("")}
+        saveNote={() => Promise.resolve(err(storageError("not wired", "test")))}
         loadTracked={() => ok({ spans: [], workspaces: new Map() })}
         onExternalChange={() => () => undefined}
         onQuit={() => {
@@ -64,7 +69,8 @@ async function renderShell(
         {...props}
       />
     ),
-    size,
+    // As in main.ts: Ctrl+C reaches the cockpit, which decides what it means.
+    { ...size, exitOnCtrlC: false },
   );
   await setup.renderOnce();
   return Object.assign(setup, { quits: () => quits });
@@ -561,12 +567,11 @@ describe("Shell notes", () => {
     expect(rowContaining(frame, "flaky")).toContain("│ Ask QA about the flaky test");
   });
 
-  test("says how to add a note where there is none", async () => {
+  test("says which key writes a note where there is none, and sets the keys in the frame", async () => {
     const frame = (await openNotes({ work: WORK })).captureCharFrame();
-    expect(rowContaining(frame, "No note yet")).toContain("│ No note yet. Add one with:");
-    expect(rowContaining(frame, "append <text>")).toContain("│   xuefu note append <text>");
-    expect(frame).toContain("No note on MOB-2841 yet. Add one with:");
-    expect(frame).toContain("│   xuefu note append --issue MOB-2841 <text>");
+    expect(rowContaining(frame, "No note yet")).toContain("│ No note yet. Press e to write one.");
+    expect(frame).toContain("No note on MOB-2841 yet. Press i to write one.");
+    expect(frame).toContain(" e edit · i edit MOB-2841 ");
   });
 
   test("without work in progress only the workspace's own note is shown", async () => {
@@ -591,6 +596,179 @@ describe("Shell notes", () => {
       loadNote: () => err(storageError("Unable to read notes", "notes.read")),
     });
     expect(failing.captureCharFrame()).toContain("✗ Unable to read notes");
+  });
+});
+
+describe("Shell note editor", () => {
+  const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
+  const WORK = workIn("mobile-banking", "MOB-2841", "Add biometric login", NOW - 3_600_000);
+  const SAVED: SavedNote = {
+    note: null,
+    changed: true,
+    secret: false,
+    workspace: VIEWS[0]?.workspace as Workspace,
+  };
+
+  /** The cockpit on its Notes section, recording every save. */
+  async function notes(
+    props: Partial<ShellProps> = {},
+    saved: Result<SavedNote, AppError> = ok(SAVED),
+  ) {
+    const saves: { workspace: string; issue: string | null; text: string }[] = [];
+    const shell = await renderShell({
+      navigation: new Map([["mobile-banking", "notes"]]),
+      noteText: () => ok("Staging needs the VPN"),
+      saveNote: (workspace, issue, text) => {
+        saves.push({ workspace: workspace.id, issue, text });
+        return Promise.resolve(saved);
+      },
+      ...props,
+    });
+    await shell.waitForFrame((f) => showing("Notes")(f));
+    return Object.assign(shell, { saves });
+  }
+
+  const editorOpen = (f: string) => f.includes("ctrl+s save  esc cancel");
+  /** A lone ESC is only reported once the parser is sure no escape sequence follows. */
+  const pressEsc = async (shell: TestRendererSetup) => {
+    shell.mockInput.pressEscape();
+    await Bun.sleep(30);
+  };
+
+  test("e opens the workspace's note as stored; ctrl+s saves it and closes", async () => {
+    const shell = await notes();
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame((f) => f.includes(" Note on Mobile Banking ") && editorOpen(f));
+    expect(shell.captureCharFrame()).toContain("Staging needs the VPN");
+
+    shell.mockInput.pressKey("END");
+    await shell.mockInput.typeText("; ask Dana");
+    shell.mockInput.pressKey("s", { ctrl: true });
+    await shell.waitForFrame((f) => !f.includes(" Note on "));
+    expect(shell.saves).toEqual([
+      { workspace: "mobile-banking", issue: null, text: "Staging needs the VPN; ask Dana" },
+    ]);
+  });
+
+  test("i opens the note on the work in progress, and does nothing without any", async () => {
+    const idle = await notes();
+    idle.mockInput.pressKey("i");
+    await idle.renderOnce();
+    expect(idle.captureCharFrame()).not.toContain(" Note on ");
+    idle.renderer.destroy();
+
+    const shell = await notes({ work: WORK, noteText: (_, issue) => ok(`on ${issue}`) });
+    shell.mockInput.pressKey("i");
+    await shell.waitForFrame((f) => f.includes(" Note on MOB-2841 ") && f.includes("on MOB-2841"));
+  });
+
+  test("keys typed into the editor stay there: q, t and digits do not reach the cockpit", async () => {
+    const shell = await notes({ noteText: () => ok("") });
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    await shell.mockInput.typeText("qt1");
+    shell.mockInput.pressKey("s", { ctrl: true });
+    await shell.waitForFrame((f) => !f.includes(" Note on "));
+    expect(shell.quits()).toBe(0);
+    expect(shell.saves.map((saved) => saved.text)).toEqual(["qt1"]);
+  });
+
+  test("esc closes at once when nothing changed", async () => {
+    const shell = await notes();
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Note on "));
+    expect(shell.saves).toEqual([]);
+  });
+
+  test("with unsaved text, esc and ctrl+c ask first; a second press discards", async () => {
+    const shell = await notes();
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    await shell.mockInput.typeText("draft");
+
+    shell.mockInput.pressCtrlC();
+    await shell.waitForFrame((f) => f.includes("Unsaved changes: esc again discards them"));
+    expect(shell.quits()).toBe(0);
+
+    await shell.mockInput.typeText("!");
+    await shell.waitForFrame(editorOpen);
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => f.includes("Unsaved changes"));
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Note on "));
+    expect(shell.saves).toEqual([]);
+    expect(shell.quits()).toBe(0);
+  });
+
+  test("emptying the text offers to clear the note", async () => {
+    const shell = await notes({ noteText: () => ok("x") });
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    shell.mockInput.pressKey("END");
+    shell.mockInput.pressBackspace();
+    await shell.waitForFrame((f) => f.includes("ctrl+s clear note  esc cancel"));
+  });
+
+  test("a failed save keeps the editor open with the error", async () => {
+    const failed = err(storageError("Unable to save the note", "notes.save"));
+    const shell = await notes({}, failed);
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    await shell.mockInput.typeText("more");
+    shell.mockInput.pressKey("s", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("✗ Unable to save the note") && editorOpen(f));
+  });
+
+  test("text that looks like a secret is saved, then the editor says so until esc", async () => {
+    const shell = await notes({}, ok({ ...SAVED, secret: true }));
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+    await shell.mockInput.typeText(" token=abc");
+    shell.mockInput.pressKey("s", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("looks like it holds a secret"));
+    expect(shell.saves).toHaveLength(1);
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Note on "));
+  });
+
+  test("a note that cannot be read is reported instead of opening an empty editor", async () => {
+    const shell = await notes({
+      noteText: () => err(storageError("Unable to read notes", "notes.read")),
+    });
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame((f) => f.includes("✗ Unable to read notes"));
+    expect(shell.captureCharFrame()).not.toContain(" Note on ");
+  });
+
+  test("on the dashboard, e edits only once the Notes panel has focus", async () => {
+    const shell = await renderShell({ noteText: () => ok("") });
+    shell.mockInput.pressKey("e");
+    await shell.renderOnce();
+    expect(shell.captureCharFrame()).not.toContain(" Note on ");
+
+    shell.mockInput.pressKey("3");
+    await shell.waitForFrame((f) => f.includes(" e edit · ⏎ open "));
+    shell.mockInput.pressKey("e");
+    await shell.waitForFrame(editorOpen);
+  });
+
+  test("the palette opens the editor too", async () => {
+    const own = await notes();
+    own.mockInput.pressKey(":");
+    await own.waitForFrame((f) => f.includes("Edit note on Mobile Banking"));
+    await own.mockInput.typeText("edit note");
+    own.mockInput.pressEnter();
+    await own.waitForFrame((f) => f.includes(" Note on Mobile Banking ") && editorOpen(f));
+    own.renderer.destroy();
+
+    const shell = await notes({ work: WORK });
+    shell.mockInput.pressKey(":");
+    await shell.waitForFrame((f) => f.includes("Edit note on MOB-2841"));
+    await shell.mockInput.typeText("edit note on mob-");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes(" Note on MOB-2841 ") && editorOpen(f));
   });
 });
 

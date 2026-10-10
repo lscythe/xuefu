@@ -53,6 +53,7 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `Alt+W`        | close the front tab                              |
 | `t`            | start, pause or resume the front workspace's timer (for its work in progress) |
 | `Shift+T`      | stop the timer                                   |
+| `e`, `i`       | in Notes: edit the workspace's note, or the note on its work in progress |
 | `q`, `Ctrl+C`  | quit                                             |
 
 Each workspace has at most one piece of work in progress; starting another issue there finishes
@@ -65,9 +66,11 @@ them for the workspace in front, newest first under a heading for each day (ever
 when none is open). `xuefu activity` prints the same timeline.
 
 Each workspace has a note of its own and one per issue. The Notes section shows the workspace's
-note and the note on its work in progress. Notes are stored unencrypted: saving one that looks like
-it holds a token or password warns you, and anything shaped like a credential is masked wherever
-XueFu shows it.
+note and the note on its work in progress; `e` and `i` open them in an editor (also from the
+palette), where `Ctrl+S` saves and `Esc` closes. Unsaved text is never lost to one key: `Esc` or
+`Ctrl+C` asks first, and saving blank text clears the note. Notes are stored unencrypted: saving one
+that looks like it holds a token or password warns you, and anything shaped like a credential is
+masked wherever XueFu shows it, except in the editor, which shows the note as written.
 
 The cockpit keeps up with commands run in other terminals: start work or a timer from the CLI and
 the header, the Work section and Activity update within a second, without reopening.
