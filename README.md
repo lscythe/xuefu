@@ -51,6 +51,9 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `Ctrl+W`       | find a workspace and open it in a tab            |
 | `Alt+1`…`Alt+9` | bring that tab to the front                     |
 | `Alt+W`        | close the front tab                              |
+| `Tab`, `Shift+Tab` | on the dashboard: move focus between its panels |
+| `1`…`4`        | on the dashboard: focus that panel               |
+| `Enter`        | on the dashboard: open the focused panel's section |
 | `t`            | start, pause or resume the front workspace's timer (for its work in progress) |
 | `Shift+T`      | stop the timer                                   |
 | `e`, `i`       | in Notes: edit the workspace's note, or the note on its work in progress |
