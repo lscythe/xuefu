@@ -2,6 +2,7 @@ import { type Accessor, type JSX, Show } from "solid-js";
 import { PALETTE } from "./theme/palette";
 
 export interface PanelProps {
+  /** Left out of the border when empty. */
   readonly title: string;
   /** The key that focuses the panel, shown before the title. */
   readonly number?: number;
@@ -22,8 +23,10 @@ export interface PanelProps {
  */
 export function Panel(props: PanelProps) {
   const tone = () => (props.focused ? PALETTE.borderFocused : PALETTE.borderIdle);
-  const title = () =>
-    props.number === undefined ? ` ${props.title} ` : ` ${props.number} ${props.title} `;
+  const title = () => {
+    const words = [props.number, props.title].filter((word) => word !== undefined && word !== "");
+    return words.length === 0 ? "" : ` ${words.join(" ")} `;
+  };
   return (
     <box
       border

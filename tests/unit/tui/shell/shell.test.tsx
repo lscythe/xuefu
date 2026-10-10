@@ -1471,6 +1471,6 @@ describe("Shell", () => {
     expect(brand?.fg.equals(RGBA.fromHex(PALETTE.accentPrimary))).toBe(true);
     expect(spans.find((span) => span.text.includes(" 1 Work "))?.fg.equals(peach)).toBe(true);
     expect(spans.find((span) => span.text.includes(" 3 Notes "))?.fg.equals(peach)).toBe(false);
-    expect(spans.find((span) => span.text.includes(" Go "))?.fg.equals(peach)).toBe(false);
+    expect(spans.find((span) => span.text.includes(" 导航 "))?.fg.equals(peach)).toBe(false);
   });
 });
