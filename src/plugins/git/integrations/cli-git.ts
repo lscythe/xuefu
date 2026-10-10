@@ -3,6 +3,7 @@ import { processError } from "../../../domain/shared/errors";
 import type { AbsolutePath } from "../../../domain/shared/path";
 import { err, ok } from "../../../domain/shared/result";
 import type { GitClient, GitFiles } from "../application/git-client";
+import { BRANCH_FORMAT, parseBranches } from "../domain/branches";
 import { parseStatus } from "../domain/status";
 
 const STATUS_TIMEOUT_MS = 10_000;
@@ -29,6 +30,8 @@ const STATUS_ENV = {
 };
 
 const NOT_A_REPOSITORY = /not a git repository/i;
+const NOT_MERGED = /is not fully merged/i;
+const LOCAL_CHANGES = /local changes .* would be overwritten/i;
 
 /**
  * Why git failed, in a line: its first fatal or error line, or else the last thing it said, which
@@ -43,9 +46,23 @@ function reason({ stderr, stdout }: ProcessOutput): string {
   return (fatal ?? lines.at(-1) ?? "").replace(/^(fatal|error): /, "");
 }
 
+/** What to do about a failure git explains in a way XueFu recognises. */
+function hintFor({ stderr }: ProcessOutput): string | undefined {
+  if (LOCAL_CHANGES.test(stderr)) return "Commit or stash your changes first.";
+  return undefined;
+}
+
 function failed(what: string, output: ProcessOutput) {
   const why = reason(output);
-  return err(processError(`${what} failed${why === "" ? "" : `: ${why}`}`, "git", output.exitCode));
+  const hint = hintFor(output);
+  return err(
+    processError(
+      `${what} failed${why === "" ? "" : `: ${why}`}`,
+      "git",
+      output.exitCode,
+      hint === undefined ? {} : { hint },
+    ),
+  );
 }
 
 /**
@@ -123,6 +140,45 @@ export function cliGit(processes: ProcessRunner): GitClient {
       const args = ["reset", "--quiet", "--", ...pathspecs(files)];
       const unstaged = await change("git reset", folder, args, INDEX_TIMEOUT_MS, signal);
       return unstaged.ok ? ok(undefined) : unstaged;
+    },
+
+    async branches(folder, signal) {
+      const listed = await change(
+        "git for-each-ref",
+        folder,
+        [
+          "for-each-ref",
+          "--sort=-committerdate",
+          `--format=${BRANCH_FORMAT}`,
+          "refs/heads",
+          "refs/remotes",
+        ],
+        STATUS_TIMEOUT_MS,
+        signal,
+      );
+      return listed.ok ? parseBranches(listed.value.stdout) : listed;
+    },
+
+    async createBranch(folder, name, start, signal) {
+      const args = ["switch", "--create", name, ...(start === null ? [] : [start])];
+      const made = await change("git switch", folder, args, INDEX_TIMEOUT_MS, signal);
+      return made.ok ? ok(undefined) : made;
+    },
+
+    async switchBranch(folder, name, track, signal) {
+      const args = track ? ["switch", "--track", name] : ["switch", name];
+      const switched = await change("git switch", folder, args, INDEX_TIMEOUT_MS, signal);
+      return switched.ok ? ok(undefined) : switched;
+    },
+
+    async deleteBranch(folder, name, force, signal) {
+      const args = ["branch", "--delete", ...(force ? ["--force"] : []), name];
+      const ran = await run(folder, args, INDEX_TIMEOUT_MS, signal);
+      if (!ran.ok) return ran;
+      if (ran.value.exitCode === 0) return ok(true);
+      return !force && NOT_MERGED.test(ran.value.stderr)
+        ? ok(false)
+        : failed("git branch", ran.value);
     },
 
     async commit(folder, message, signal) {

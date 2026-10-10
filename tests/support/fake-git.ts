@@ -7,6 +7,10 @@ export function fakeGit(overrides: Partial<GitClient> = {}): GitClient {
     status: () => Promise.resolve(ok(null)),
     stage: () => Promise.resolve(ok(undefined)),
     unstage: () => Promise.resolve(ok(undefined)),
+    branches: () => Promise.resolve(ok([])),
+    createBranch: () => Promise.resolve(ok(undefined)),
+    switchBranch: () => Promise.resolve(ok(undefined)),
+    deleteBranch: () => Promise.resolve(ok(true)),
     commit: () => Promise.resolve(ok("9f8e7d6c5b4a39281706f5e4d3c2b1a098765432")),
     ...overrides,
   };

@@ -3,6 +3,7 @@ import { defineCommand } from "../../../application/commands/command";
 import { domainString } from "../../../application/validation";
 import { absolutePath } from "../../../domain/shared/path";
 import { ok } from "../../../domain/shared/result";
+import { branchName } from "../domain/branches";
 import { commitMessage, commitSubject, repositoryPath } from "../domain/commit";
 import type { GitClient } from "./git-client";
 
@@ -18,6 +19,11 @@ const files = z.union([
 export interface Committed {
   readonly commit: string;
   readonly subject: string;
+}
+
+/** A branch delete's outcome: false when git kept it because its commits are not merged. */
+export interface DeletedBranch {
+  readonly deleted: boolean;
 }
 
 /** What the git plugin can do to a repository, as commands on the bus. */
@@ -56,5 +62,66 @@ export function gitActions(client: GitClient) {
     },
   });
 
-  return { stage, unstage, commit } as const;
+  const createBranch = defineCommand({
+    name: "git.branch.create",
+    title: "Create branch",
+    category: "Git",
+    safety: "safe",
+    input: z.strictObject({
+      folder: domainString(absolutePath),
+      name: domainString(branchName),
+      start: domainString(branchName).nullable(),
+    }),
+    handler: (input, context) =>
+      client.createBranch(input.folder, input.name, input.start, context.signal),
+  });
+
+  const checkout = defineCommand({
+    name: "git.branch.checkout",
+    title: "Switch branch",
+    category: "Git",
+    safety: "safe",
+    input: z.strictObject({
+      folder: domainString(absolutePath),
+      name: domainString(branchName),
+      track: z.boolean(),
+    }),
+    handler: (input, context) =>
+      client.switchBranch(input.folder, input.name, input.track, context.signal),
+  });
+
+  const deleteBranch = defineCommand({
+    name: "git.branch.delete",
+    title: "Delete branch",
+    category: "Git",
+    safety: "destructive",
+    input: z.strictObject({
+      folder: domainString(absolutePath),
+      name: domainString(branchName),
+      force: z.boolean(),
+    }),
+    describe: (input) => ({
+      title: input.force ? "Force-delete branch" : "Delete branch",
+      severity: input.force ? "destructive" : "confirm",
+      details: [
+        { label: "Branch", value: input.name },
+        { label: "Repository", value: input.folder },
+      ],
+      consequence: input.force
+        ? "Commits on it and on no other branch are lost, but for git's reflog."
+        : "Git deletes it only once its commits are merged, so nothing is lost.",
+      confirmLabel: "Delete",
+    }),
+    handler: async (input, context) => {
+      const deleted = await client.deleteBranch(
+        input.folder,
+        input.name,
+        input.force,
+        context.signal,
+      );
+      return deleted.ok ? ok<DeletedBranch>({ deleted: deleted.value }) : deleted;
+    },
+  });
+
+  return { stage, unstage, commit, createBranch, checkout, deleteBranch } as const;
 }

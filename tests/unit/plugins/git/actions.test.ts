@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { confirmationTokenFor } from "../../../../src/application/commands/command";
 import { CommandBus } from "../../../../src/application/commands/command-bus";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { ok } from "../../../../src/domain/shared/result";
@@ -75,5 +76,87 @@ describe("gitActions", () => {
       expect(refused.error.issues.map((issue) => issue.path)).toContain(path);
     }
     expect(calls).toEqual([]);
+  });
+});
+
+describe("gitActions branches", () => {
+  function setupDelete() {
+    const deletes: { name: string; force: boolean }[] = [];
+    const bus = new CommandBus({
+      logger: testLogger().logger,
+      clock: new ManualClock(),
+      ids: new SequentialIds(),
+    });
+    const actions = gitActions(
+      fakeGit({
+        deleteBranch: (_folder, name, force) => {
+          deletes.push({ name, force });
+          return Promise.resolve(ok(name !== "unmerged"));
+        },
+      }),
+    );
+    bus.register(actions.createBranch);
+    bus.register(actions.checkout);
+    bus.register(actions.deleteBranch);
+    return { bus, actions, deletes };
+  }
+
+  test("deleting asks first, more gravely when forced, and the answer binds the branch", async () => {
+    const { bus, actions, deletes } = setupDelete();
+    const asked = await bus.invoke(actions.deleteBranch, {
+      folder: FOLDER,
+      name: "feat",
+      force: false,
+    });
+    expect(asked.ok ? null : asked.error.kind).toBe("confirmation-required");
+    if (asked.ok || asked.error.kind !== "confirmation-required") return;
+    expect(asked.error.prompt).toMatchObject({ severity: "confirm", title: "Delete branch" });
+
+    const token = confirmationTokenFor(asked.error);
+    const other = await bus.invoke(
+      actions.deleteBranch,
+      { folder: FOLDER, name: "main", force: false },
+      { confirmation: token },
+    );
+    expect(other.ok ? null : other.error.kind).toBe("confirmation-required");
+    expect(
+      await bus.invoke(
+        actions.deleteBranch,
+        { folder: FOLDER, name: "feat", force: false },
+        { confirmation: token },
+      ),
+    ).toEqual(ok({ deleted: true }));
+    expect(deletes).toEqual([{ name: "feat", force: false }]);
+
+    const forced = await bus.invoke(actions.deleteBranch, {
+      folder: FOLDER,
+      name: "feat",
+      force: true,
+    });
+    expect(
+      forced.ok ? null : forced.error.kind === "confirmation-required" && forced.error.prompt,
+    ).toMatchObject({ severity: "destructive", title: "Force-delete branch" });
+  });
+
+  test("a branch git keeps as unmerged is reported as not deleted", async () => {
+    const { bus, actions } = setupDelete();
+    const input = { folder: FOLDER, name: "unmerged", force: false };
+    const asked = await bus.invoke(actions.deleteBranch, input);
+    if (asked.ok || asked.error.kind !== "confirmation-required") throw new Error("not asked");
+    expect(
+      await bus.invoke(actions.deleteBranch, input, {
+        confirmation: confirmationTokenFor(asked.error),
+      }),
+    ).toEqual(ok({ deleted: false }));
+  });
+
+  test.each([
+    ["git.branch.create", { folder: FOLDER, name: "has space", start: null }],
+    ["git.branch.create", { folder: FOLDER, name: "ok", start: "-x" }],
+    ["git.branch.checkout", { folder: FOLDER, name: "a..b", track: false }],
+  ])("%s refuses %j", async (command, input) => {
+    const { bus } = setupDelete();
+    const refused = await bus.dispatch(command, input);
+    expect(refused.ok ? null : refused.error.kind).toBe("validation");
   });
 });

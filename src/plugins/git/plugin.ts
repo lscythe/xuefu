@@ -22,7 +22,14 @@ export const gitPlugin = definePlugin({
     const actions = gitActions(client);
     return {
       commands: gitCommands(client),
-      actions: [actions.stage, actions.unstage, actions.commit],
+      actions: [
+        actions.stage,
+        actions.unstage,
+        actions.commit,
+        actions.createBranch,
+        actions.checkout,
+        actions.deleteBranch,
+      ],
       view: lazy(async () => {
         const { gitView } = await import("./tui/git-view");
         return {

@@ -83,6 +83,9 @@ describe("gitPlugin", () => {
       "git.stage",
       "git.unstage",
       "git.commit",
+      "git.branch.create",
+      "git.branch.checkout",
+      "git.branch.delete",
     ]);
   });
 

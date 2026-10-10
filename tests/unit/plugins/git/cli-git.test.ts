@@ -9,6 +9,7 @@ import type {
 import { processError } from "../../../../src/domain/shared/errors";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { type Err, err, ok } from "../../../../src/domain/shared/result";
+import type { BranchName } from "../../../../src/plugins/git/domain/branches";
 import type { CommitMessage } from "../../../../src/plugins/git/domain/commit";
 import { cliGit } from "../../../../src/plugins/git/integrations/cli-git";
 
@@ -133,5 +134,62 @@ describe("cliGit commit", () => {
     const made = await cliGit(runner).commit(HERE, "Fix" as CommitMessage);
     expect(!made.ok && made.error.message).toBe("git commit failed: ✗ lint failed");
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("cliGit branches", () => {
+  test("lists branches here and on remotes, the most recently committed to first", async () => {
+    const { runner, calls } = fakeRunner({
+      stdout: "refs/heads/main\0*\0\0\0\x001791622028\0Fix\n",
+    });
+    const listed = await cliGit(runner).branches(HERE);
+    expect(listed.ok && listed.value.map((branch) => branch.name)).toEqual(["main"]);
+    expect(calls[0]?.spec.args.slice(0, 2)).toEqual(["for-each-ref", "--sort=-committerdate"]);
+    expect(calls[0]?.spec.args.slice(-2)).toEqual(["refs/heads", "refs/remotes"]);
+  });
+
+  test("creates, switches to and tracks branches", async () => {
+    const { runner, calls } = fakeRunner({});
+    const git = cliGit(runner);
+    await git.createBranch(HERE, "feat" as BranchName, null);
+    await git.createBranch(HERE, "fix" as BranchName, "origin/main" as BranchName);
+    await git.switchBranch(HERE, "main" as BranchName, false);
+    await git.switchBranch(HERE, "origin/feat" as BranchName, true);
+    expect(calls.map((call) => call.spec.args)).toEqual([
+      ["switch", "--create", "feat"],
+      ["switch", "--create", "fix", "origin/main"],
+      ["switch", "main"],
+      ["switch", "--track", "origin/feat"],
+    ]);
+  });
+
+  test("local changes in the way come with what to do about them", async () => {
+    const { runner } = fakeRunner({
+      exitCode: 1,
+      stderr:
+        "error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\n",
+    });
+    const switched = await cliGit(runner).switchBranch(HERE, "main" as BranchName, false);
+    expect(!switched.ok && switched.error.hint).toBe("Commit or stash your changes first.");
+  });
+
+  test("an unmerged branch is kept, which is an answer rather than a failure", async () => {
+    const unmerged = fakeRunner({
+      exitCode: 1,
+      stderr: "error: the branch 'feat' is not fully merged.\n",
+    });
+    expect(await cliGit(unmerged.runner).deleteBranch(HERE, "feat" as BranchName, false)).toEqual(
+      ok(false),
+    );
+    const forced = fakeRunner({});
+    expect(await cliGit(forced.runner).deleteBranch(HERE, "feat" as BranchName, true)).toEqual(
+      ok(true),
+    );
+    expect(forced.calls[0]?.spec.args).toEqual(["branch", "--delete", "--force", "feat"]);
+    const current = fakeRunner({ exitCode: 1, stderr: "error: cannot delete branch 'main'\n" });
+    const refused = await cliGit(current.runner).deleteBranch(HERE, "main" as BranchName, false);
+    expect(!refused.ok && refused.error.message).toBe(
+      "git branch failed: cannot delete branch 'main'",
+    );
   });
 });
