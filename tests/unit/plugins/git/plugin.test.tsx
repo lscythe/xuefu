@@ -99,7 +99,11 @@ describe("gitPlugin", () => {
               width={60}
               rows={10}
               icons="unicode"
+              focused={false}
               setStatus={() => undefined}
+              setKeys={() => undefined}
+              setModal={() => undefined}
+              report={() => undefined}
             />
           </Suspense>
         </box>

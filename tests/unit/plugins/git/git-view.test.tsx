@@ -101,7 +101,11 @@ async function render(client: GitClient, options: { workspace?: Workspace | null
             width={60}
             rows={12}
             icons="unicode"
+            focused={false}
             setStatus={(status) => statuses.push(status)}
+            setKeys={() => undefined}
+            setModal={() => undefined}
+            report={() => undefined}
           />
         </Show>
       </box>

@@ -16,6 +16,8 @@ export type ShellAction =
   | { readonly kind: "panel.jump"; readonly position: number }
   /** Enter opens the focused panel's section. */
   | { readonly kind: "panel.open" }
+  /** Esc gives the keyboard back to the navigation from a section that took it. */
+  | { readonly kind: "section.leave" }
   /** Where notes are shown: e edits the workspace's note, i the note on its work in progress. */
   | { readonly kind: "note.edit"; readonly on: "workspace" | "issue" }
   | { readonly kind: "quit" }
@@ -57,6 +59,7 @@ const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
     (_, i) => [`${i + 1}`, { kind: "panel.jump", position: i + 1 }] as const,
   ),
   ["return", { kind: "panel.open" }],
+  ["escape", { kind: "section.leave" }],
   ["e", { kind: "note.edit", on: "workspace" }],
   ["i", { kind: "note.edit", on: "issue" }],
   ["t", { kind: "timer.toggle" }],
@@ -79,11 +82,20 @@ export function actionFor(key: KeyPress): ShellAction | null {
 /** What the key bar shows; kept next to BINDINGS so a hint never advertises an unbound key. */
 export function keyHints(
   icons: IconSet,
-  state: { readonly tabs: boolean; readonly timer: boolean; readonly panels: boolean },
+  state: {
+    readonly tabs: boolean;
+    readonly timer: boolean;
+    /** Tab moves focus: between the dashboard's panels, or into a section that takes it. */
+    readonly panels: boolean;
+    /** A section has the keyboard; its own keys are in its frame. */
+    readonly inSection?: boolean;
+  },
 ): readonly KeyHint[] {
   return [
-    { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
-    ...(state.panels ? [{ keys: "tab", label: "focus" }] : []),
+    state.inSection === true
+      ? { keys: "esc", label: "back" }
+      : { keys: icons === "ascii" ? "j/k" : "↑↓", label: "navigate" },
+    ...(state.panels && state.inSection !== true ? [{ keys: "tab", label: "focus" }] : []),
     { keys: "^W", label: "workspaces" },
     ...(state.tabs ? [{ keys: "alt+1-9", label: "tabs" }] : []),
     ...(state.timer ? [{ keys: "t", label: "timer" }] : []),
