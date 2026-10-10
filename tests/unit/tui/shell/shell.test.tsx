@@ -1128,6 +1128,23 @@ describe("Shell refresh", () => {
     expect(frame.split("\n")[1]).toContain(`${" ".repeat(25)}${"▔".repeat(11)}`);
   });
 
+  test("work a plugin starts here shows up as it is recorded", async () => {
+    const recorded = elsewhere();
+    let stored: CockpitSnapshot = {
+      tabs: fakeTabs(VIEWS, "mobile-banking").initial,
+      timer: null,
+      work: new Map(),
+    };
+    const shell = await renderShell({
+      reload: () => ok(stored),
+      onRecorded: recorded.onExternalChange,
+    });
+    await shell.waitForFrame((f) => f.includes("Nothing in progress"));
+    stored = { ...stored, work: workIn("mobile-banking", "MOB-2802", "Pending card rows", NOW) };
+    recorded.change();
+    await shell.waitForFrame((f) => f.includes("MOB-2802"));
+  });
+
   test("the Activity section is read again", async () => {
     const outside = elsewhere();
     const activity = fakeActivity();
