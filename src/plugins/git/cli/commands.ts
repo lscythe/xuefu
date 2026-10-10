@@ -4,6 +4,7 @@ import type { GitClient } from "../application/git-client";
 import {
   type ChangedFile,
   changeLetter,
+  describeBranch,
   type GitStatus,
   isClean,
   stagedFiles,
@@ -32,23 +33,6 @@ export const GIT_COMMANDS: readonly PluginCommandSpec[] = [
 ];
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-
-/** Where the branch stands: its name or detached commit, and how it compares with upstream. */
-function describeBranch(status: GitStatus): string {
-  if (status.branch === null) {
-    return `HEAD detached at ${status.commit?.slice(0, 7) ?? "an unborn commit"}`;
-  }
-  const on = `On ${status.branch}`;
-  if (status.commit === null) return `${on}, no commits yet`;
-  if (status.upstream === null) return `${on}, not tracking a remote branch`;
-  const { ahead, behind, upstream } = status;
-  if (ahead > 0 && behind > 0) {
-    return `${on}, diverged from ${upstream}: ${ahead} ahead, ${behind} behind`;
-  }
-  if (ahead > 0) return `${on}, ${plural(ahead, "commit", "commits")} ahead of ${upstream}`;
-  if (behind > 0) return `${on}, ${plural(behind, "commit", "commits")} behind ${upstream}`;
-  return `${on}, up to date with ${upstream}`;
-}
 
 const fileLine = (letter: string, file: { path: string; from?: string | null }) =>
   `  ${letter}  ${file.path}${file.from ? ` (from ${file.from})` : ""}`;

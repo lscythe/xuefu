@@ -1,3 +1,4 @@
+import type { Component } from "solid-js";
 import type { z } from "zod";
 import type { Clock } from "../application/ports/clock";
 import type { Logger } from "../application/ports/logger";
@@ -5,6 +6,7 @@ import type { ProcessRunner } from "../application/ports/process-runner";
 import type { PluginCommandRunner, PluginCommandSpec } from "../cli/plugin-command";
 import { type ConfigurationError, configurationError } from "../domain/shared/errors";
 import { err, ok, type Result } from "../domain/shared/result";
+import type { SectionProps } from "../tui/shell/section-props";
 
 /** What XueFu lends a plugin when it starts. */
 export interface PluginContext {
@@ -17,6 +19,11 @@ export interface PluginContext {
 export interface PluginParts {
   /** Runs the commands the plugin declared. */
   readonly commands?: PluginCommandRunner;
+  /**
+   * Draws the plugin's section in the cockpit, under its label and icons. Loaded lazily, so
+   * commands that never open the cockpit never load the terminal UI.
+   */
+  readonly view?: Component<SectionProps>;
 }
 
 /** Every plugin's settings can turn it off. */

@@ -106,7 +106,7 @@
 <text x="0" y="140" fill="#3d405a">│</text>
 <rect x="9" y="126" width="9" height="18" fill="#1c1d29"/>
 <rect x="18" y="126" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="140" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
+<text x="18" y="140" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
 <rect x="36" y="126" width="9" height="18" fill="#1c1d29"/>
 <rect x="45" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="45" y="140" fill="#3d405a">│</text>
@@ -139,7 +139,7 @@
 <text x="0" y="176" fill="#3d405a">│</text>
 <rect x="9" y="162" width="9" height="18" fill="#1c1d29"/>
 <rect x="18" y="162" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="176" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
+<text x="18" y="176" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
 <rect x="36" y="162" width="9" height="18" fill="#1c1d29"/>
 <rect x="45" y="162" width="9" height="18" fill="#1c1d29"/>
 <text x="45" y="176" fill="#3d405a">│</text>
@@ -164,7 +164,7 @@
 <text x="0" y="212" fill="#3d405a">│</text>
 <rect x="9" y="198" width="9" height="18" fill="#1c1d29"/>
 <rect x="18" y="198" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="212" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
+<text x="18" y="212" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
 <rect x="36" y="198" width="9" height="18" fill="#1c1d29"/>
 <rect x="45" y="198" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="212" fill="#3d405a">││</text>
@@ -201,7 +201,7 @@
 <text x="0" y="248" fill="#3d405a">│</text>
 <rect x="9" y="234" width="9" height="18" fill="#1c1d29"/>
 <rect x="18" y="234" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="248" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
+<text x="18" y="248" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
 <rect x="36" y="234" width="9" height="18" fill="#1c1d29"/>
 <rect x="45" y="234" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="248" fill="#3d405a">││</text>
@@ -224,10 +224,7 @@
 <text x="711" y="266" fill="#3d405a">│</text>
 <rect x="0" y="270" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="284" fill="#3d405a">│</text>
-<rect x="9" y="270" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="270" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="284" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
-<rect x="36" y="270" width="9" height="18" fill="#1c1d29"/>
+<rect x="9" y="270" width="36" height="18" fill="#1c1d29"/>
 <rect x="45" y="270" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="284" fill="#3d405a">││</text>
 <rect x="63" y="270" width="378" height="18" fill="#1c1d29"/>
@@ -249,10 +246,7 @@
 <text x="711" y="302" fill="#3d405a">│</text>
 <rect x="0" y="306" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="320" fill="#3d405a">│</text>
-<rect x="9" y="306" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="306" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="320" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
-<rect x="36" y="306" width="9" height="18" fill="#1c1d29"/>
+<rect x="9" y="306" width="36" height="18" fill="#1c1d29"/>
 <rect x="45" y="306" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="320" fill="#3d405a">││</text>
 <rect x="63" y="306" width="378" height="18" fill="#1c1d29"/>
@@ -274,10 +268,7 @@
 <text x="711" y="338" fill="#3d405a">│</text>
 <rect x="0" y="342" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="356" fill="#3d405a">│</text>
-<rect x="9" y="342" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="342" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="356" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
-<rect x="36" y="342" width="9" height="18" fill="#1c1d29"/>
+<rect x="9" y="342" width="36" height="18" fill="#1c1d29"/>
 <rect x="45" y="342" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="356" fill="#3d405a">││</text>
 <rect x="63" y="342" width="378" height="18" fill="#1c1d29"/>
@@ -299,10 +290,7 @@
 <text x="711" y="374" fill="#3d405a">│</text>
 <rect x="0" y="378" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="392" fill="#3d405a">│</text>
-<rect x="9" y="378" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="378" width="18" height="18" fill="#1c1d29"/>
-<text x="18" y="392" fill="#585b75" font-family="'Symbols Nerd Font Mono', Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace"></text>
-<rect x="36" y="378" width="9" height="18" fill="#1c1d29"/>
+<rect x="9" y="378" width="36" height="18" fill="#1c1d29"/>
 <rect x="45" y="378" width="18" height="18" fill="#1c1d29"/>
 <text x="45 54" y="392" fill="#3d405a">││</text>
 <rect x="63" y="378" width="378" height="18" fill="#1c1d29"/>

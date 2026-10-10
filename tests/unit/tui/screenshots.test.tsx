@@ -8,6 +8,10 @@ import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
 import { err, ok } from "../../../src/domain/shared/result";
 import type { Timestamp } from "../../../src/domain/shared/time";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
+import type { GitStatus } from "../../../src/plugins/git/domain/status";
+import { gitPlugin } from "../../../src/plugins/git/plugin";
+import { gitView } from "../../../src/plugins/git/tui/git-view";
+import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeTabs } from "../../support/fake-tabs";
@@ -29,6 +33,52 @@ const VIEWS = [
   view("auth-service", "Auth Service", "Platform"),
 ];
 
+/** A working tree mid-change, as git status would read it. */
+const DIRTY: GitStatus = {
+  branch: "feature/MOB-2841-biometric-login",
+  commit: "8c41f2e9d0a7b6c5",
+  upstream: "origin/feature/MOB-2841-biometric-login",
+  ahead: 2,
+  behind: 1,
+  changes: [
+    {
+      path: "app/src/main/java/com/bank/auth/BiometricPrompt.kt",
+      from: null,
+      staged: "added",
+      unstaged: "unchanged",
+    },
+    {
+      path: "app/src/main/java/com/bank/auth/LoginViewModel.kt",
+      from: null,
+      staged: "modified",
+      unstaged: "modified",
+    },
+    {
+      path: "app/src/main/res/values/strings.xml",
+      from: null,
+      staged: "unchanged",
+      unstaged: "modified",
+    },
+    {
+      path: "docs/auth/biometrics.md",
+      from: "docs/auth/fingerprint.md",
+      staged: "renamed",
+      unstaged: "unchanged",
+    },
+  ],
+  conflicts: [],
+  untracked: ["app/src/test/java/com/bank/auth/BiometricPromptTest.kt"],
+  stashes: 1,
+};
+
+/** The Git section as the git plugin draws it, reading `status` from a stand-in client. */
+const gitSection = (status: GitStatus | null): Section => ({
+  id: gitPlugin.id,
+  label: gitPlugin.label,
+  icons: gitPlugin.icons,
+  view: gitView({ status: () => Promise.resolve(ok(status)) }, 60_000),
+});
+
 let setup: TestRendererSetup | undefined;
 afterEach(() => {
   setup?.renderer.destroy();
@@ -40,6 +90,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
   setup = await testRender(
     () => (
       <Shell
+        sections={cockpitSections([gitSection(DIRTY)])}
         clock={new ManualClock(Date.UTC(2026, 9, 6, 13, 59, 41))}
         timeZone="UTC"
         icons="unicode"
@@ -395,6 +446,24 @@ describe("screenshots", () => {
     await Bun.sleep(30);
     await screen.waitForFrame((f) => f.includes("Unsaved changes"));
     expectScreenshot("note-editor-unsaved", screen.captureSpans());
+  });
+
+  test("git status", async () => {
+    const screen = await shell({ navigation: new Map([["mobile-banking", "git"]]) });
+    await screen.waitForFrame((f) => f.includes("Untracked (1)"));
+    expectScreenshot("git", screen.captureSpans());
+  });
+
+  test("git, not a repository, at 80 columns", async () => {
+    const screen = await shell(
+      {
+        sections: cockpitSections([gitSection(null)]),
+        navigation: new Map([["mobile-banking", "git"]]),
+      },
+      { width: 80, height: 24 },
+    );
+    await screen.waitForFrame((f) => f.includes("is not a git repository"));
+    expectScreenshot("git-not-a-repository", screen.captureSpans());
   });
 
   test("palette", async () => {

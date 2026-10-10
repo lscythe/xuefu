@@ -79,13 +79,14 @@ const RULES: Readonly<Record<Layer, LayerRule>> = {
     ],
     packages: [ANY_PACKAGE],
   },
+  // solid-js for lazy(), so a plugin's view loads only when the cockpit draws it.
   "plugin-api": {
     layers: ["domain", "application", "tui", "cli", "plugin-api"],
-    packages: ["zod"],
+    packages: ["zod", "solid-js"],
   },
   plugin: {
     layers: ["domain", "application", "integrations", "tui", "cli", "plugin-api", "plugin"],
-    packages: ["zod"],
+    packages: ["zod", "solid-js"],
   },
 };
 

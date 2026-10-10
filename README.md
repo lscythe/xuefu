@@ -92,12 +92,17 @@ plugin XueFu does not have are an error, so a typo does not go unnoticed.
 version: 1
 plugins:
   git:
-    enabled: false   # no `xuefu git`
+    enabled: false     # no `xuefu git` and no Git section
+    refreshSeconds: 3  # how often the Git section reads status while open (1 to 300)
 ```
 
 | Plugin | Adds |
 |--------|------|
-| `git`  | `xuefu git status`: the branch, how it compares with its upstream, and changed files |
+| `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files |
+
+A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
+The Git section reads the front workspace's status when it opens and again every few seconds while
+it stays open, with the branch and how far it is ahead or behind in the panel's frame.
 
 Git runs as the installed `git`, with your own config, hooks and credential helpers. XueFu reads
 status without taking git's index lock, so it never blocks your own git commands.

@@ -12,17 +12,11 @@ import { useNow } from "../use-now";
 import { ActivityPanel } from "./activity-panel";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { noteKeys, panelKeys, sectionStatus } from "./panel-status";
-import type { Section } from "./sections";
 import { TodayPanel, todayTotal } from "./today-panel";
 import { WorkPanel } from "./work-panel";
 
 /** The dashboard's panels in focus order; each opens its own section. */
-export const DASHBOARD_PANELS: readonly Section["id"][] = [
-  "work",
-  "timesheet",
-  "notes",
-  "activity",
-];
+export const DASHBOARD_PANELS: readonly string[] = ["work", "timesheet", "notes", "activity"];
 
 export interface DashboardProps {
   readonly clock: Clock;
@@ -65,10 +59,10 @@ export function Dashboard(props: DashboardProps) {
   const now = useNow(props.clock, props.tickMs);
   const top = () => (props.rows >= TALL_BELOW ? TALL_WORK : SHORT_WORK);
   const side = () => sideWidth(props.width);
-  const focused = (id: Section["id"]) => DASHBOARD_PANELS[props.focused] === id;
-  const number = (id: Section["id"]) => DASHBOARD_PANELS.indexOf(id) + 1;
+  const focused = (id: string) => DASHBOARD_PANELS[props.focused] === id;
+  const number = (id: string) => DASHBOARD_PANELS.indexOf(id) + 1;
   const open = () => (props.ascii ? "enter open" : "⏎ open");
-  const status = (id: Section["id"]) =>
+  const status = (id: string) =>
     sectionStatus(id, {
       work: props.work,
       timer: props.timer,

@@ -2,9 +2,10 @@ import { For } from "solid-js";
 import { Panel } from "../panel";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
-import { SECTIONS, sectionIcon } from "./sections";
+import { type Section, sectionIcon } from "./sections";
 
 export interface NavProps {
+  readonly sections: readonly Section[];
   readonly selected: number;
   readonly icons: IconSet;
   /** Columns the panel takes; see navWidth. */
@@ -15,7 +16,6 @@ export interface NavProps {
 const FOLD_BELOW = 100;
 /** Border and padding on both sides. */
 const CHROME = 4;
-const LONGEST_LABEL = Math.max(...SECTIONS.map((section) => section.label.length));
 
 /**
  * The marker block: terminals draw a Nerd Font glyph two cells wide, spilling right, so it gets
@@ -27,8 +27,9 @@ function block(icon: string, icons: IconSet): string {
 
 const foldedWidth = (icons: IconSet) => CHROME + (icons === "nerd" ? 2 : 3);
 
-export function navWidth(columns: number, icons: IconSet): number {
-  return columns < FOLD_BELOW ? foldedWidth(icons) : foldedWidth(icons) + 1 + LONGEST_LABEL;
+export function navWidth(columns: number, icons: IconSet, sections: readonly Section[]): number {
+  if (columns < FOLD_BELOW) return foldedWidth(icons);
+  return foldedWidth(icons) + 1 + Math.max(...sections.map((section) => section.label.length));
 }
 
 /** The sections, the one in front marked with a lavender block; ↑↓ move between them. */
@@ -36,7 +37,7 @@ export function Nav(props: NavProps) {
   const folded = () => props.width === foldedWidth(props.icons);
   return (
     <Panel title="Go" focused={false} width={props.width}>
-      <For each={SECTIONS}>
+      <For each={props.sections}>
         {(section, index) => {
           const active = () => index() === props.selected;
           return (

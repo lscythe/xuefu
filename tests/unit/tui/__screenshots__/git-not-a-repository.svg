@@ -1,20 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="432" viewBox="0 0 720 432" font-family="Menlo, 'DejaVu Sans Mono', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'PingFang SC', monospace" font-size="15">
-<title>XueFu: activity-all</title>
+<title>XueFu: git-not-a-repository</title>
 <rect x="0" y="0" width="9" height="18" fill="#1c1d29"/>
 <rect x="9" y="0" width="36" height="18" fill="#1c1d29"/>
 <text x="9 27" y="14" fill="#e8685c" font-weight="bold">血符</text>
 <rect x="45" y="0" width="18" height="18" fill="#1c1d29"/>
-<rect x="63" y="0" width="153" height="18" fill="#1c1d29"/>
-<text x="63 72 90 99 108 117 126 135 144 153 162 180 189 198 207" y="14" fill="#9a9db6">Noworkspaceopen</text>
-<rect x="216" y="0" width="450" height="18" fill="#1c1d29"/>
+<rect x="63" y="0" width="162" height="18" fill="#b8a6f6"/>
+<text x="72 90 99 108 117 126 135 153 162 171 180 189 198 207" y="14" fill="#1c1d29" font-weight="bold">1MobileBanking</text>
+<rect x="225" y="0" width="441" height="18" fill="#1c1d29"/>
 <rect x="666" y="0" width="45" height="18" fill="#1c1d29"/>
 <text x="666 675 684 693 702" y="14" fill="#9a9db6">13:59</text>
 <rect x="711" y="0" width="9" height="18" fill="#1c1d29"/>
-<rect x="0" y="18" width="720" height="18" fill="#1c1d29"/>
+<rect x="0" y="18" width="9" height="18" fill="#1c1d29"/>
+<rect x="9" y="18" width="216" height="18" fill="#1c1d29"/>
+<text x="63 72 81 90 99 108 117 126 135 144 153 162 171 180 189 198 207 216" y="32" fill="#b8a6f6">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text>
+<rect x="225" y="18" width="495" height="18" fill="#1c1d29"/>
 <rect x="0" y="36" width="63" height="18" fill="#1c1d29"/>
 <text x="0 9 18 27 36 45 54" y="50" fill="#3d405a">╭─────╮</text>
 <rect x="63" y="36" width="657" height="18" fill="#1c1d29"/>
-<text x="63 72 90 99 108 117 126 135 144 153 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 603 612 621 630 639 648 657 666 675 684 702 711" y="50" fill="#f2a774">╭─Activity───────────────────────────────────────────────everywhere─╮</text>
+<text x="63 72 90 99 108 126 135 144 153 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711" y="50" fill="#f2a774">╭─Git─────────────────────────────────────────────────────────────────╮</text>
 <rect x="0" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="68" fill="#3d405a">│</text>
 <rect x="9" y="54" width="9" height="18" fill="#1c1d29"/>
@@ -26,9 +29,9 @@
 <rect x="63" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="68" fill="#f2a774">│</text>
 <rect x="72" y="54" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="54" width="45" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117" y="68" fill="#f2a774" font-weight="bold">Today</text>
-<rect x="126" y="54" width="585" height="18" fill="#1c1d29"/>
+<rect x="81" y="54" width="351" height="18" fill="#1c1d29"/>
+<text x="81 90 99 108 117 126 144 153 162 171 180 189 198 216 225 243 252 261 279 297 306 315 333 342 351 360 369 378 387 396 405 414 423" y="68" fill="#9a9db6">MobileBankingisnotagitrepository.</text>
+<rect x="432" y="54" width="279" height="18" fill="#1c1d29"/>
 <rect x="711" y="54" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="68" fill="#f2a774">│</text>
 <rect x="0" y="72" width="9" height="18" fill="#1c1d29"/>
@@ -38,14 +41,7 @@
 <text x="54" y="86" fill="#3d405a">│</text>
 <rect x="63" y="72" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="86" fill="#f2a774">│</text>
-<rect x="72" y="72" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="72" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="86" fill="#9a9db6">13:58MobileBanking</text>
-<rect x="288" y="72" width="144" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 351 360 369 387 396 405 414 423" y="86" fill="#dadcea">Pausedthetimer</text>
-<rect x="432" y="72" width="90" height="18" fill="#1c1d29"/>
-<text x="450 459 468 477 486 495 504 513" y="86" fill="#9a9db6">01:42:18</text>
-<rect x="522" y="72" width="189" height="18" fill="#1c1d29"/>
+<rect x="72" y="72" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="72" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="86" fill="#f2a774">│</text>
 <rect x="0" y="90" width="9" height="18" fill="#1c1d29"/>
@@ -58,12 +54,7 @@
 <text x="54" y="104" fill="#3d405a">│</text>
 <rect x="63" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="104" fill="#f2a774">│</text>
-<rect x="72" y="90" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="90" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 189 198 207 216 225 234 243" y="104" fill="#9a9db6">13:31AuthService</text>
-<rect x="288" y="90" width="207" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 342 351 369 378 387 396 405 423 432 441 450 459 468 477 486" y="104" fill="#dadcea">MovedtogroupPlatform</text>
-<rect x="495" y="90" width="216" height="18" fill="#1c1d29"/>
+<rect x="72" y="90" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="104" fill="#f2a774">│</text>
 <rect x="0" y="108" width="9" height="18" fill="#1c1d29"/>
@@ -73,32 +64,20 @@
 <text x="54" y="122" fill="#3d405a">│</text>
 <rect x="63" y="108" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="122" fill="#f2a774">│</text>
-<rect x="72" y="108" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="108" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="122" fill="#9a9db6">12:20MobileBanking</text>
-<rect x="288" y="108" width="153" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 396 405 414 423 432" y="122" fill="#dadcea">Resumedthetimer</text>
-<rect x="441" y="108" width="270" height="18" fill="#1c1d29"/>
+<rect x="72" y="108" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="108" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="122" fill="#f2a774">│</text>
 <rect x="0" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="140" fill="#3d405a">│</text>
 <rect x="9" y="126" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="126" width="27" height="18" fill="#1c1d29"/>
-<text x="27" y="140" fill="#585b75">G</text>
+<rect x="18" y="126" width="27" height="18" fill="#b8a6f6"/>
+<text x="27" y="140" fill="#1c1d29">G</text>
 <rect x="45" y="126" width="9" height="18" fill="#1c1d29"/>
 <rect x="54" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="54" y="140" fill="#3d405a">│</text>
 <rect x="63" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="140" fill="#f2a774">│</text>
-<rect x="72" y="126" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="126" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="140" fill="#9a9db6">11:47MobileBanking</text>
-<rect x="288" y="126" width="144" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 351 360 369 387 396 405 414 423" y="140" fill="#dadcea">Pausedthetimer</text>
-<rect x="432" y="126" width="90" height="18" fill="#1c1d29"/>
-<text x="450 459 468 477 486 495 504 513" y="140" fill="#9a9db6">01:01:13</text>
-<rect x="522" y="126" width="189" height="18" fill="#1c1d29"/>
+<rect x="72" y="126" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="126" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="140" fill="#f2a774">│</text>
 <rect x="0" y="144" width="9" height="18" fill="#1c1d29"/>
@@ -108,14 +87,7 @@
 <text x="54" y="158" fill="#3d405a">│</text>
 <rect x="63" y="144" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="158" fill="#f2a774">│</text>
-<rect x="72" y="144" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="144" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="158" fill="#9a9db6">10:46MobileBanking</text>
-<rect x="288" y="144" width="189" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 396 405 414 423 432 450 459 468" y="158" fill="#dadcea">Startedthetimerfor</text>
-<rect x="477" y="144" width="81" height="18" fill="#1c1d29"/>
-<text x="486 495 504 513 522 531 540 549" y="158" fill="#b8a6f6" font-weight="bold">MOB-2841</text>
-<rect x="558" y="144" width="153" height="18" fill="#1c1d29"/>
+<rect x="72" y="144" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="144" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="158" fill="#f2a774">│</text>
 <rect x="0" y="162" width="9" height="18" fill="#1c1d29"/>
@@ -128,16 +100,7 @@
 <text x="54" y="176" fill="#3d405a">│</text>
 <rect x="63" y="162" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="176" fill="#f2a774">│</text>
-<rect x="72" y="162" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="162" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="176" fill="#9a9db6">10:46MobileBanking</text>
-<rect x="288" y="162" width="135" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 387 405 414" y="176" fill="#dadcea">Startedworkon</text>
-<rect x="423" y="162" width="81" height="18" fill="#1c1d29"/>
-<text x="432 441 450 459 468 477 486 495" y="176" fill="#b8a6f6" font-weight="bold">MOB-2841</text>
-<rect x="504" y="162" width="198" height="18" fill="#1c1d29"/>
-<text x="522 531 540 558 567 576 585 594 603 612 621 630 648 657 666 675 684 693" y="176" fill="#9a9db6">Addbiometricauthe…</text>
-<rect x="702" y="162" width="9" height="18" fill="#1c1d29"/>
+<rect x="72" y="162" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="162" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="176" fill="#f2a774">│</text>
 <rect x="0" y="180" width="9" height="18" fill="#1c1d29"/>
@@ -147,32 +110,20 @@
 <text x="54" y="194" fill="#3d405a">│</text>
 <rect x="63" y="180" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="194" fill="#f2a774">│</text>
-<rect x="72" y="180" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="180" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 198" y="194" fill="#9a9db6">10:45deployd</text>
-<rect x="288" y="180" width="153" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 396 405 414 423 432" y="194" fill="#dadcea">Stoppedthetimer</text>
-<rect x="441" y="180" width="90" height="18" fill="#1c1d29"/>
-<text x="459 468 477 486 495 504 513 522" y="194" fill="#9a9db6">00:38:02</text>
-<rect x="531" y="180" width="180" height="18" fill="#1c1d29"/>
+<rect x="72" y="180" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="180" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="194" fill="#f2a774">│</text>
 <rect x="0" y="198" width="9" height="18" fill="#1c1d29"/>
 <text x="0" y="212" fill="#3d405a">│</text>
 <rect x="9" y="198" width="9" height="18" fill="#1c1d29"/>
-<rect x="18" y="198" width="27" height="18" fill="#b8a6f6"/>
-<text x="27" y="212" fill="#1c1d29">L</text>
+<rect x="18" y="198" width="27" height="18" fill="#1c1d29"/>
+<text x="27" y="212" fill="#585b75">L</text>
 <rect x="45" y="198" width="9" height="18" fill="#1c1d29"/>
 <rect x="54" y="198" width="9" height="18" fill="#1c1d29"/>
 <text x="54" y="212" fill="#3d405a">│</text>
 <rect x="63" y="198" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="212" fill="#f2a774">│</text>
-<rect x="72" y="198" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="198" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 198" y="212" fill="#9a9db6">10:07deployd</text>
-<rect x="288" y="198" width="153" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 396 405 414 423 432" y="212" fill="#dadcea">Startedthetimer</text>
-<rect x="441" y="198" width="270" height="18" fill="#1c1d29"/>
+<rect x="72" y="198" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="198" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="212" fill="#f2a774">│</text>
 <rect x="0" y="216" width="9" height="18" fill="#1c1d29"/>
@@ -182,12 +133,7 @@
 <text x="54" y="230" fill="#3d405a">│</text>
 <rect x="63" y="216" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="230" fill="#f2a774">│</text>
-<rect x="72" y="216" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="216" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="230" fill="#9a9db6">09:02MobileBanking</text>
-<rect x="288" y="216" width="54" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333" y="230" fill="#dadcea">Opened</text>
-<rect x="342" y="216" width="369" height="18" fill="#1c1d29"/>
+<rect x="72" y="216" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="216" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="230" fill="#f2a774">│</text>
 <rect x="0" y="234" width="9" height="18" fill="#1c1d29"/>
@@ -200,10 +146,7 @@
 <text x="54" y="248" fill="#3d405a">│</text>
 <rect x="63" y="234" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="248" fill="#f2a774">│</text>
-<rect x="72" y="234" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="234" width="81" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 126 135 144 153" y="248" fill="#f2a774" font-weight="bold">Yesterday</text>
-<rect x="162" y="234" width="549" height="18" fill="#1c1d29"/>
+<rect x="72" y="234" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="234" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="248" fill="#f2a774">│</text>
 <rect x="0" y="252" width="9" height="18" fill="#1c1d29"/>
@@ -213,14 +156,7 @@
 <text x="54" y="266" fill="#3d405a">│</text>
 <rect x="63" y="252" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="266" fill="#f2a774">│</text>
-<rect x="72" y="252" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="252" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="266" fill="#9a9db6">18:12MobileBanking</text>
-<rect x="288" y="252" width="153" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 360 369 378 396 405 414 423 432" y="266" fill="#dadcea">Stoppedthetimer</text>
-<rect x="441" y="252" width="90" height="18" fill="#1c1d29"/>
-<text x="459 468 477 486 495 504 513 522" y="266" fill="#9a9db6">03:12:40</text>
-<rect x="531" y="252" width="180" height="18" fill="#1c1d29"/>
+<rect x="72" y="252" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="252" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="266" fill="#f2a774">│</text>
 <rect x="0" y="270" width="9" height="18" fill="#1c1d29"/>
@@ -230,14 +166,7 @@
 <text x="54" y="284" fill="#3d405a">│</text>
 <rect x="63" y="270" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="284" fill="#f2a774">│</text>
-<rect x="72" y="270" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="270" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="284" fill="#9a9db6">18:12MobileBanking</text>
-<rect x="288" y="270" width="144" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 351 369 378 387 396 414 423" y="284" fill="#dadcea">Finishedworkon</text>
-<rect x="432" y="270" width="81" height="18" fill="#1c1d29"/>
-<text x="441 450 459 468 477 486 495 504" y="284" fill="#b8a6f6" font-weight="bold">MOB-2799</text>
-<rect x="513" y="270" width="198" height="18" fill="#1c1d29"/>
+<rect x="72" y="270" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="270" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="284" fill="#f2a774">│</text>
 <rect x="0" y="288" width="9" height="18" fill="#1c1d29"/>
@@ -247,12 +176,7 @@
 <text x="54" y="302" fill="#3d405a">│</text>
 <rect x="63" y="288" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="302" fill="#f2a774">│</text>
-<rect x="72" y="288" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="288" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144" y="302" fill="#9a9db6">17:05-</text>
-<rect x="288" y="288" width="288" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324 333 342 351 360 369 378 387 405 414 423 432 441 459 468 477 486 495 504 513 522 531 540 558 567" y="302" fill="#dadcea">UnrecognisedeventReleaseCutv2</text>
-<rect x="576" y="288" width="135" height="18" fill="#1c1d29"/>
+<rect x="72" y="288" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="288" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="302" fill="#f2a774">│</text>
 <rect x="0" y="306" width="9" height="18" fill="#1c1d29"/>
@@ -262,14 +186,7 @@
 <text x="54" y="320" fill="#3d405a">│</text>
 <rect x="63" y="306" width="9" height="18" fill="#1c1d29"/>
 <text x="63" y="320" fill="#f2a774">│</text>
-<rect x="72" y="306" width="9" height="18" fill="#1c1d29"/>
-<rect x="81" y="306" width="207" height="18" fill="#1c1d29"/>
-<text x="81 90 99 108 117 144 153 162 171 180 189 207 216 225 234 243 252 261" y="320" fill="#9a9db6">15:00MobileBanking</text>
-<rect x="288" y="306" width="45" height="18" fill="#1c1d29"/>
-<text x="288 297 306 315 324" y="320" fill="#dadcea">Added</text>
-<rect x="333" y="306" width="198" height="18" fill="#1c1d29"/>
-<text x="351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522" y="320" fill="#9a9db6">/work/mobile-banking</text>
-<rect x="531" y="306" width="180" height="18" fill="#1c1d29"/>
+<rect x="72" y="306" width="639" height="18" fill="#1c1d29"/>
 <rect x="711" y="306" width="9" height="18" fill="#1c1d29"/>
 <text x="711" y="320" fill="#f2a774">│</text>
 <rect x="0" y="324" width="9" height="18" fill="#1c1d29"/>
@@ -324,11 +241,19 @@
 <text x="126 135" y="428" fill="#f2a774">^W</text>
 <rect x="144" y="414" width="108" height="18" fill="#272939"/>
 <text x="153 162 171 180 189 198 207 216 225 234" y="428" fill="#dadcea">workspaces</text>
-<rect x="252" y="414" width="18" height="18" fill="#272939"/>
-<text x="261" y="428" fill="#f2a774">q</text>
-<rect x="270" y="414" width="54" height="18" fill="#272939"/>
-<text x="279 288 297 306" y="428" fill="#dadcea">quit</text>
-<rect x="324" y="414" width="279" height="18" fill="#272939"/>
+<rect x="252" y="414" width="72" height="18" fill="#272939"/>
+<text x="261 270 279 288 297 306 315" y="428" fill="#f2a774">alt+1-9</text>
+<rect x="324" y="414" width="54" height="18" fill="#272939"/>
+<text x="333 342 351 360" y="428" fill="#dadcea">tabs</text>
+<rect x="378" y="414" width="18" height="18" fill="#272939"/>
+<text x="387" y="428" fill="#f2a774">t</text>
+<rect x="396" y="414" width="63" height="18" fill="#272939"/>
+<text x="405 414 423 432 441" y="428" fill="#dadcea">timer</text>
+<rect x="459" y="414" width="18" height="18" fill="#272939"/>
+<text x="468" y="428" fill="#f2a774">q</text>
+<rect x="477" y="414" width="54" height="18" fill="#272939"/>
+<text x="486 495 504 513" y="428" fill="#dadcea">quit</text>
+<rect x="531" y="414" width="72" height="18" fill="#272939"/>
 <rect x="603" y="414" width="18" height="18" fill="#272939"/>
 <text x="603" y="428" fill="#585b75">│</text>
 <rect x="621" y="414" width="9" height="18" fill="#272939"/>

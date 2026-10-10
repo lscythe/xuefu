@@ -2,6 +2,7 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import {
   type Accessor,
   batch,
+  type Component,
   createMemo,
   createSignal,
   Match,
@@ -43,7 +44,8 @@ import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
 import { noteKeys, sectionStatus, timerKeys } from "./panel-status";
-import { SECTIONS } from "./sections";
+import type { SectionProps } from "./section-props";
+import type { Section } from "./sections";
 import { fitsTerminal } from "./terminal-size";
 import { TodayPanel, todayTotal } from "./today-panel";
 import { TooSmall } from "./too-small";
@@ -58,6 +60,8 @@ export interface CockpitSnapshot {
 }
 
 export interface ShellProps {
+  /** The navigation, in order: the core's sections and the plugins'. */
+  readonly sections: readonly Section[];
   readonly clock: Clock;
   readonly icons: IconSet;
   /** Tabs to start with; the header shows the one in front. */
@@ -143,13 +147,15 @@ export function Shell(props: ShellProps) {
   // Which of the dashboard's panels has focus; kept while away from the dashboard.
   const [panel, setPanel] = createSignal(0);
   const [notice, setNotice] = createSignal<AppError | null>(null);
+  // What a plugin's section sets into its frame; cleared when the section changes.
+  const [pluginStatus, setPluginStatus] = createSignal<string | null>(null);
   const [timer, setTimer] = createSignal(props.timer);
   const [allWork, setAllWork] = createSignal(props.work);
   // Each workspace keeps its own place in the navigation; "" is the no-workspace screen.
   const [sections, setSections] = createSignal<ReadonlyMap<string, number>>(
     new Map(
       [...props.navigation].flatMap(([id, key]) => {
-        const index = SECTIONS.findIndex((section) => section.id === key);
+        const index = props.sections.findIndex((section) => section.id === key);
         return index === -1 ? [] : [[id, index] as const];
       }),
     ),
@@ -162,11 +168,12 @@ export function Shell(props: ShellProps) {
   const workspace = () => tabs().active;
   const work = () => allWork().get(workspace()?.id ?? "") ?? null;
   const selected = () => sections().get(workspace()?.id ?? "") ?? 0;
-  const section = () => SECTIONS[selected()] ?? SECTIONS[0];
+  const section = () => props.sections[selected()] ?? props.sections[0];
   const select = (index: number) => {
     const current = workspace();
     setSections((all) => new Map(all).set(current?.id ?? "", index));
-    const target = SECTIONS[index];
+    const target = props.sections[index];
+    setPluginStatus(null);
     if (current === null || target === undefined) return;
     void props.saveNavigation(current, target.id).then((saved) => {
       if (!saved.ok) setNotice(saved.error);
@@ -218,7 +225,7 @@ export function Shell(props: ShellProps) {
   const panelRows = () => dimensions().height - PANEL_CHROME_ROWS - (notice() ? 1 : 0);
   /** Columns right of the sections, where a section or the dashboard is drawn. */
   const areaWidth = () => dimensions().width - nav();
-  const nav = () => navWidth(dimensions().width, props.icons);
+  const nav = () => navWidth(dimensions().width, props.icons, props.sections);
   const toggle = () => timerToggle(timer()?.timer ?? null, workspace()?.id ?? null);
 
   /** Shows a failure above the key bar; for actions started by a key rather than the palette. */
@@ -297,13 +304,13 @@ export function Shell(props: ShellProps) {
   const move = (to: "previous" | "next" | "first" | "last") => {
     switch (to) {
       case "previous":
-        return select(cycle(selected(), -1, SECTIONS.length));
+        return select(cycle(selected(), -1, props.sections.length));
       case "next":
-        return select(cycle(selected(), 1, SECTIONS.length));
+        return select(cycle(selected(), 1, props.sections.length));
       case "first":
         return select(0);
       case "last":
-        return select(SECTIONS.length - 1);
+        return select(props.sections.length - 1);
       default:
         return assertNever(to);
     }
@@ -348,7 +355,7 @@ export function Shell(props: ShellProps) {
         }
         return;
       case "panel.open": {
-        const target = SECTIONS.findIndex((s) => s.id === DASHBOARD_PANELS[panel()]);
+        const target = props.sections.findIndex((s) => s.id === DASHBOARD_PANELS[panel()]);
         if (showing("dashboard") && target !== -1) select(target);
         return;
       }
@@ -390,7 +397,7 @@ export function Shell(props: ShellProps) {
           width={dimensions().width}
         />
         <box flexDirection="row" flexGrow={1}>
-          <Nav selected={selected()} icons={props.icons} width={nav()} />
+          <Nav sections={props.sections} selected={selected()} icons={props.icons} width={nav()} />
           <Show
             when={!showing("dashboard")}
             fallback={
@@ -417,12 +424,16 @@ export function Shell(props: ShellProps) {
               title={section()?.label ?? ""}
               focused
               flexGrow={1}
-              status={sectionStatus(section()?.id, {
-                work: work(),
-                timer: timer(),
-                workspace: workspace(),
-                today: todayTotal(tracked(), since(), now()),
-              })}
+              status={
+                section()?.view === undefined
+                  ? sectionStatus(section()?.id, {
+                      work: work(),
+                      timer: timer(),
+                      workspace: workspace(),
+                      today: todayTotal(tracked(), since(), now()),
+                    })
+                  : pluginStatus()
+              }
               keys={
                 section()?.id === "work"
                   ? timerKeys(toggle(), props.icons === "ascii")
@@ -432,6 +443,17 @@ export function Shell(props: ShellProps) {
               }
             >
               <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
+                <Match when={section()?.view} keyed>
+                  {(View: Component<SectionProps>) => (
+                    <View
+                      workspace={workspace()}
+                      width={areaWidth() - PANEL_CHROME_COLUMNS}
+                      rows={panelRows()}
+                      icons={props.icons}
+                      setStatus={setPluginStatus}
+                    />
+                  )}
+                </Match>
                 <Match when={section()?.id === "work"}>
                   <WorkPanel
                     clock={props.clock}
