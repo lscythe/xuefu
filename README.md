@@ -12,8 +12,8 @@ A terminal-native developer cockpit: Jira, git, pull requests, CI, Android tooli
 around a single **Work Context**.
 
 > Status: **early development.** The cockpit opens, switches workspaces, keeps them in tabs,
-> tracks the issue you are working on and times it, works with git, and lists your Jira issues;
-> the PR, Jenkins and Android plugins are not built yet.
+> tracks the issue you are working on and times it, works with git and Jira, and lists your pull
+> requests on Bitbucket; the Jenkins and Android plugins are not built yet.
 
 ## Usage
 
@@ -38,6 +38,9 @@ xuefu git                                                      # branch and chan
 xuefu jira                                                     # your open Jira issues
 xuefu jira show MOB-2841                                       # one issue, with its description
 xuefu jira start MOB-2841 --yes                                # work on it here, and move it to in progress
+xuefu pr                                                       # your open pull requests, and those to review
+xuefu pr show                                                  # this branch's, with its reviews and builds
+xuefu pr show MOB/mobile-banking#42                            # any other
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
@@ -47,7 +50,7 @@ credentials, `78` configuration.
 `workspace which` exits `1` outside every workspace, and `work` and `timer` exit `1` when nothing
 is in progress, which makes them usable in shell prompts. `activity` and `note` exit `1` when
 there is nothing to show, `git` exits `1` when the workspace is not a git repository, and `jira`
-exits `1` when no issue matches.
+exits `1` when no issue matches, and `pr` when no pull request is yours or waits on your review.
 The cockpit needs an interactive terminal of at least 80×24; piped or scripted runs exit `64`.
 It opens on the workspace containing the current folder, alongside the tabs you left open.
 
@@ -70,6 +73,9 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `c`            | in Git: write a commit of what is staged |
 | `b`            | in Git: find a branch to switch to, create one, or delete one with `Ctrl+D` |
 | `f`, `p`, `P`  | in Git: fetch, pull, or push the branch (publishing it if it has no upstream) |
+| `Enter`        | in Jira or PRs, with the keyboard: show the issue or pull request under the cursor |
+| `s`            | in Jira: start work on the issue under the cursor, offering to move it to in progress |
+| `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
 
 Each workspace has at most one piece of work in progress; starting another issue there finishes
@@ -113,12 +119,18 @@ plugins:
     jql: project = MOB AND assignee = currentUser()  # optional; your open issues by default
     maxResults: 50              # how many to list (1 to 100)
     refreshSeconds: 120         # how often the Jira section reads them while open (30 to 3600)
+  pr:
+    url: https://bitbucket.example.com
+    token: { env: BITBUCKET_TOKEN }  # or { keychain: { service: bitbucket, account: you } }
+    maxResults: 25                   # how many of each list to read (1 to 100)
+    refreshSeconds: 60               # how often the PRs section reads them while open (30 to 3600)
 ```
 
 | Plugin | Adds |
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
 | `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
+| `pr`   | `xuefu pr list` and `xuefu pr show [PROJECT/repository#id]`, and a PRs section, for Bitbucket Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -151,6 +163,13 @@ issue to in progress in Jira, and `r` reads the list again.
 `xuefu jira start` works on the issue in this workspace, titled with its summary, and times it, as
 `xuefu work start` does. When the issue is still to do, `--yes` also moves it to in progress in
 Jira; without it, the command says how.
+
+The pull requests plugin takes an HTTP access token with read access (in Bitbucket: Manage account,
+HTTP access tokens), kept as Jira's token is. Without a pull request named, `xuefu pr show` finds the
+one from the branch checked out in this workspace, in the repository its `origin` remote clones
+from, and exits `1` when there is none. The PRs section shows that one first, then yours, then those
+waiting on your review, with how many wait on you in the panel's frame; `Enter` shows one with its
+reviewers, builds and description.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret

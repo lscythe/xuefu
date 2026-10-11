@@ -1,0 +1,305 @@
+import { useKeyboard } from "@opentui/solid";
+import {
+  type Accessor,
+  type Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  Show,
+  Switch,
+} from "solid-js";
+import type { AppError } from "../../../application/errors";
+import { ErrorLine } from "../../../tui/error-line";
+import { cycle, scrollOffset } from "../../../tui/list-navigation";
+import { fitHints } from "../../../tui/shell/panel-status";
+import type { SectionProps } from "../../../tui/shell/section-props";
+import { truncateToWidth } from "../../../tui/shell/tab-labels";
+import { PALETTE } from "../../../tui/theme/palette";
+import {
+  type BranchPullRequestDependencies,
+  branchPullRequest,
+  whyNoPullRequest,
+} from "../application/branch-pull-request";
+import type { PullRequest } from "../domain/pull-request";
+import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
+import { PullRequestDialog } from "./pull-request-dialog";
+
+/** Everything the section needs from the pull requests plugin. */
+export interface PrSection extends BranchPullRequestDependencies {
+  readonly maxResults: number;
+  readonly refreshMs: number;
+  /** The time zone dates are shown in; the host's unless given. */
+  readonly timeZone?: string;
+}
+
+interface Lists {
+  readonly yours: readonly PullRequest[];
+  readonly toReview: readonly PullRequest[];
+}
+
+const padded = (text: string, width: number) =>
+  text + " ".repeat(Math.max(0, width - Bun.stringWidth(text)));
+
+/**
+ * The pull requests section: the one from the front workspace's branch, then yours, then those
+ * waiting on your review, read when it opens and every `refreshMs` while it stays open. Reads
+ * never overlap, and one still running when the section closes is stopped. A failed refresh keeps
+ * what was last read and says why above it. With the keyboard, Enter shows the pull request under
+ * the cursor and `r` reads everything again.
+ */
+export function prView(section: PrSection): Component<SectionProps> {
+  const { client, maxResults, refreshMs, timeZone } = section;
+  // The lists last read, so the section opens on them while it reads again.
+  let last: Lists | null = null;
+
+  return (props) => {
+    const [lists, setLists] = createSignal<Lists | null>(last);
+    const [failure, setFailure] = createSignal<AppError | null>(null);
+    const [branch, setBranch] = createSignal<{
+      readonly workspace: string;
+      readonly shown: PullRequest | string;
+    } | null>(null);
+    const [cursor, setCursor] = createSignal(0);
+    const [opened, setOpened] = createSignal<PullRequest | null>(null);
+    const ascii = () => props.icons === "ascii";
+
+    let running: AbortController | null = null;
+    let stopped = false;
+    const load = async () => {
+      if (running !== null) return;
+      const reading = new AbortController();
+      running = reading;
+      const workspace = props.workspace;
+      const [yours, toReview, fromBranch] = await Promise.all([
+        client.mine("author", maxResults, reading.signal),
+        client.mine("reviewer", maxResults, reading.signal),
+        workspace === null ? null : branchPullRequest(section, workspace.path, reading.signal),
+      ]);
+      // A read stopped for another workspace's leaves the one that replaced it alone.
+      if (running === reading) running = null;
+      if (stopped || reading.signal.aborted) return;
+      if (yours.ok && toReview.ok) {
+        last = { yours: yours.value.pullRequests, toReview: toReview.value.pullRequests };
+        setLists(last);
+        setFailure(null);
+      } else {
+        setFailure(yours.ok ? (toReview.ok ? null : toReview.error) : yours.error);
+      }
+      if (workspace !== null && fromBranch !== null) {
+        setBranch({
+          workspace: workspace.id,
+          shown: !fromBranch.ok
+            ? `Could not look: ${fromBranch.error.message}`
+            : fromBranch.value.kind === "found"
+              ? fromBranch.value.pullRequest
+              : whyNoPullRequest(fromBranch.value, workspace.name, section.host),
+        });
+      }
+    };
+    const timer = setInterval(() => void load(), refreshMs);
+    onCleanup(() => {
+      stopped = true;
+      clearInterval(timer);
+      running?.abort();
+    });
+    // Read again whenever another workspace comes to the front, for its branch.
+    createEffect(
+      on(
+        () => props.workspace?.id,
+        () => {
+          running?.abort();
+          running = null;
+          setCursor(0);
+          void load();
+        },
+      ),
+    );
+
+    // The dialog has every key while it is open.
+    const modal = () => opened() !== null;
+    createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
+    onCleanup(() => {
+      if (modal()) props.setModal(false);
+    });
+
+    const rows = createMemo(() => {
+      const read = lists();
+      const workspace = props.workspace;
+      const fromBranch = branch();
+      const shown: PrLists = {
+        branch:
+          workspace === null
+            ? "No workspace is open"
+            : fromBranch?.workspace === workspace.id
+              ? fromBranch.shown
+              : null,
+        yours: read?.yours ?? null,
+        toReview: read?.toReview ?? null,
+      };
+      return prRows(shown);
+    });
+    const pulls = createMemo(() => rows().filter((row): row is PullRow => row.kind === "pull"));
+    /** The pull request under the cursor, kept in range as the lists change. */
+    const selected = () => {
+      const all = pulls();
+      return all.length === 0 ? null : (all[Math.min(cursor(), all.length - 1)] ?? null);
+    };
+
+    createEffect(() => {
+      const read = lists();
+      props.setStatus(
+        read === null
+          ? null
+          : read.toReview.length > 0
+            ? `${read.toReview.length} to review`
+            : `${read.yours.length} yours`,
+      );
+    });
+
+    createEffect(() => {
+      if (!props.focused) {
+        props.setKeys(null);
+        return;
+      }
+      props.setKeys(
+        fitHints(
+          [
+            ...(pulls().length > 0 ? [{ text: "enter details", rank: 0 }] : []),
+            { text: "r refresh", rank: 1 },
+          ],
+          props.width - 2,
+          ascii(),
+        ),
+      );
+    });
+
+    useKeyboard((key) => {
+      if (!props.focused || modal()) return;
+      const count = pulls().length;
+      const at = Math.min(cursor(), Math.max(0, count - 1));
+      switch (key.name) {
+        case "up":
+        case "k":
+          if (count > 0) setCursor(cycle(at, -1, count));
+          return;
+        case "down":
+        case "j":
+          if (count > 0) setCursor(cycle(at, 1, count));
+          return;
+        case "home":
+          setCursor(0);
+          return;
+        case "end":
+          setCursor(Math.max(0, count - 1));
+          return;
+        case "return": {
+          const row = selected();
+          if (row !== null) setOpened(row.pull);
+          return;
+        }
+        case "r":
+          void load();
+          return;
+        default:
+          return;
+      }
+    });
+
+    /** Rows for the list: one less when a failed refresh is said above it. */
+    const listRows = () => Math.max(1, props.rows - (failure() === null ? 0 : 1));
+    const drawn = () => {
+      const all = rows();
+      const chosen = props.focused ? selected() : null;
+      const at = chosen === null ? 0 : all.indexOf(chosen);
+      const top = scrollOffset(at, all.length, listRows());
+      return all.slice(top, top + listRows()).map((row) => ({ row, chosen: row === chosen }));
+    };
+    const columns = () => prColumns(rows());
+    const titleWidth = () => Math.max(1, props.width - columns().ref - columns().reviews - 4);
+
+    return (
+      <>
+        <Switch>
+          <Match when={lists() === null && failure()}>
+            {(error: Accessor<AppError>) => (
+              <>
+                <ErrorLine error={error()} ascii={ascii()} />
+                <Show when={error().hint}>
+                  {(hint: Accessor<string>) => <text fg={PALETTE.textMuted}>{hint()}</text>}
+                </Show>
+              </>
+            )}
+          </Match>
+          <Match when={lists() === null}>
+            <text fg={PALETTE.textMuted}>Reading your pull requests...</text>
+          </Match>
+          <Match when={true}>
+            <Show when={failure()}>
+              {(error: Accessor<AppError>) => (
+                <text>
+                  <span style={{ fg: PALETTE.warning }}>{ascii() ? "[!] " : "⚠ "}</span>
+                  <span style={{ fg: PALETTE.textMuted }}>
+                    {truncateToWidth(`Could not refresh: ${error().message}`, props.width - 2)}
+                  </span>
+                </text>
+              )}
+            </Show>
+            <For each={drawn()}>
+              {({ row, chosen }) => {
+                if (row.kind === "heading") {
+                  return (
+                    <text fg={PALETTE.accentTertiary} flexShrink={0}>
+                      <b>{row.text}</b>
+                    </text>
+                  );
+                }
+                if (row.kind === "note") {
+                  return (
+                    <text fg={PALETTE[row.tone]} flexShrink={0}>
+                      {truncateToWidth(row.text, props.width) || " "}
+                    </text>
+                  );
+                }
+                const bg = chosen ? PALETTE.selectionBg : PALETTE.bg;
+                const review = reviewBadge(row.pull);
+                return (
+                  <text flexShrink={0}>
+                    <span style={{ fg: PALETTE.accentSecondary, bg }}>
+                      {padded(shortRef(row.pull), columns().ref)}
+                    </span>
+                    <span style={{ bg }}>{"  "}</span>
+                    <span style={{ fg: PALETTE[review.tone], bg }}>
+                      {padded(review.text, columns().reviews)}
+                    </span>
+                    <span style={{ bg }}>{"  "}</span>
+                    <span style={{ fg: chosen ? PALETTE.selectionFg : PALETTE.text, bg }}>
+                      {padded(
+                        truncateToWidth(row.pull.title, titleWidth()),
+                        chosen ? titleWidth() : 0,
+                      )}
+                    </span>
+                  </text>
+                );
+              }}
+            </For>
+          </Match>
+        </Switch>
+        <Show when={opened()}>
+          {(pull: Accessor<PullRequest>) => (
+            <PullRequestDialog
+              pull={pull()}
+              builds={(signal) => client.builds(pull().commit, signal)}
+              icons={props.icons}
+              timeZone={timeZone}
+              onClose={() => setOpened(null)}
+            />
+          )}
+        </Show>
+      </>
+    );
+  };
+}

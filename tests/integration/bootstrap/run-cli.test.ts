@@ -966,11 +966,18 @@ describe("runCli: plugins", () => {
     expect(shown.stderr).toContain("plugins.jira.url");
   });
 
+  test("the pull requests plugin, too, says what to set", async () => {
+    const shown = await run(["pr"]);
+    expect(shown.code).toBe(EXIT.config);
+    expect(shown.stderr).toContain("The pull requests plugin is not set up");
+    expect(shown.stderr).toContain("plugins.pr.url");
+  });
+
   test("settings for an unknown plugin, or invalid ones, stop XueFu from starting", async () => {
     config("plugins:\n  gti:\n    enabled: true\n");
     const typo = await run(["diagnostics"]);
     expect(typo.code).toBe(EXIT.config);
-    expect(typo.stderr).toContain('no plugin named "gti"; plugins: git, jira');
+    expect(typo.stderr).toContain('no plugin named "gti"; plugins: git, jira, pr');
 
     config("plugins:\n  git:\n    enabled: sometimes\n");
     const invalid = await run(["diagnostics"]);

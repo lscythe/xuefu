@@ -14,11 +14,14 @@ import { gitPlugin } from "../../../src/plugins/git/plugin";
 import { gitView } from "../../../src/plugins/git/tui/git-view";
 import { jiraPlugin } from "../../../src/plugins/jira/plugin";
 import { jiraView } from "../../../src/plugins/jira/tui/jira-view";
+import { prPlugin } from "../../../src/plugins/pr/plugin";
+import { prView } from "../../../src/plugins/pr/tui/pr-view";
 import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
 import { fakeJira, jiraChangesFor, jiraIssue } from "../../support/fake-jira";
+import { fakeCheckouts, fakePullRequests, pullRequest } from "../../support/fake-pull-requests";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { gitSectionFor } from "../../support/git-section";
@@ -179,6 +182,69 @@ const jiraSection: Section = {
     changes: jiraChangesFor(fakeJira(MY_ISSUES, 9)).changes,
     jql: "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
     maxResults: 6,
+    refreshMs: 60_000,
+    timeZone: "UTC",
+  }),
+};
+
+/** Pull requests on a busy Bitbucket, as its dashboard would list them. */
+const YOUR_PULLS = [
+  pullRequest(42, {
+    title: "MOB-2841 Add biometric login",
+    from: "feature/MOB-2841-biometric-login",
+    reviewers: [
+      { name: "Fox Mulder", status: "approved" },
+      { name: "Walter Skinner", status: "unapproved" },
+    ],
+    comments: 3,
+    openTodos: 1,
+    description: [
+      "Adds Face ID and fingerprint unlock to the login screen.",
+      "",
+      "- Falls back to the PIN after three failed attempts",
+      "- Behind the `biometrics` feature flag, off by default",
+      "- The keystore entry is removed when it is turned off",
+    ].join("\n"),
+  }),
+  pullRequest(37, {
+    title: "MOB-2755 Upgrade the networking stack to OkHttp 5",
+    reviewers: [
+      { name: "Fox Mulder", status: "approved" },
+      { name: "Monica Reyes", status: "approved" },
+    ],
+  }),
+];
+const TO_REVIEW = [
+  pullRequest(40, {
+    title: "MOB-2790 Fix crash when rotating the transfer screen",
+    author: "Fox Mulder",
+    reviewers: [{ name: "Dana Scully", status: "needs-work" }],
+    conflicted: true,
+  }),
+  pullRequest(12, {
+    repository: { project: "SDK", slug: "shared-sdk" },
+    title: "SDK-412 Expose the session refresh callback",
+    author: "Monica Reyes",
+    reviewers: [
+      { name: "Dana Scully", status: "unapproved" },
+      { name: "John Doggett", status: "unapproved" },
+    ],
+  }),
+];
+
+/** The pull requests section as the pr plugin draws it, over a stand-in Bitbucket. */
+const prSection: Section = {
+  id: prPlugin.id,
+  label: prPlugin.label,
+  icons: prPlugin.icons,
+  view: prView({
+    client: fakePullRequests(
+      { yours: YOUR_PULLS, toReview: TO_REVIEW },
+      { successful: 2, failed: 0, inProgress: 1 },
+    ),
+    checkouts: fakeCheckouts(),
+    host: "bitbucket.example.com",
+    maxResults: 25,
     refreshMs: 60_000,
     timeZone: "UTC",
   }),
@@ -663,6 +729,32 @@ describe("screenshots", () => {
       await screen.renderOnce();
     }
     expectScreenshot("jira-move", screen.captureSpans());
+  });
+
+  test("pull requests", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    await screen.waitForFrame((f) => f.includes("enter details"));
+    expectScreenshot("pr", screen.captureSpans());
+  });
+
+  test("pull requests, one's details", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("1 running"));
+    expectScreenshot("pr-details", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

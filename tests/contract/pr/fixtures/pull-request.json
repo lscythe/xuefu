@@ -1,0 +1,188 @@
+{
+  "id": 42,
+  "version": 3,
+  "title": "MOB-2841 Add biometric login",
+  "state": "OPEN",
+  "open": true,
+  "closed": false,
+  "createdDate": 1759744000000,
+  "updatedDate": 1759759181000,
+  "fromRef": {
+    "id": "refs/heads/feature/MOB-2841-biometric-login",
+    "displayId": "feature/MOB-2841-biometric-login",
+    "latestCommit": "4b8e2c9f1d7a6b3e5c0f9a8d7e6b5c4a3f2e1d0c",
+    "type": "BRANCH",
+    "repository": {
+      "slug": "mobile-banking",
+      "id": 12,
+      "name": "Mobile Banking",
+      "scmId": "git",
+      "state": "AVAILABLE",
+      "forkable": true,
+      "project": {
+        "key": "MOB",
+        "id": 3,
+        "name": "Mobile",
+        "public": false,
+        "type": "NORMAL",
+        "links": {
+          "self": [
+            {
+              "href": "https://bitbucket.example.com/projects/MOB"
+            }
+          ]
+        }
+      },
+      "public": false,
+      "links": {
+        "clone": [
+          {
+            "href": "https://bitbucket.example.com/scm/mob/mobile-banking.git",
+            "name": "http"
+          },
+          {
+            "href": "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
+            "name": "ssh"
+          }
+        ],
+        "self": [
+          {
+            "href": "https://bitbucket.example.com/projects/MOB/repos/mobile-banking/browse"
+          }
+        ]
+      }
+    }
+  },
+  "toRef": {
+    "id": "refs/heads/main",
+    "displayId": "main",
+    "latestCommit": "8d51122def5632836d1cb1026e879069e10a1e13",
+    "type": "BRANCH",
+    "repository": {
+      "slug": "mobile-banking",
+      "id": 12,
+      "name": "Mobile Banking",
+      "scmId": "git",
+      "state": "AVAILABLE",
+      "forkable": true,
+      "project": {
+        "key": "MOB",
+        "id": 3,
+        "name": "Mobile",
+        "public": false,
+        "type": "NORMAL",
+        "links": {
+          "self": [
+            {
+              "href": "https://bitbucket.example.com/projects/MOB"
+            }
+          ]
+        }
+      },
+      "public": false,
+      "links": {
+        "clone": [
+          {
+            "href": "https://bitbucket.example.com/scm/mob/mobile-banking.git",
+            "name": "http"
+          },
+          {
+            "href": "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
+            "name": "ssh"
+          }
+        ],
+        "self": [
+          {
+            "href": "https://bitbucket.example.com/projects/MOB/repos/mobile-banking/browse"
+          }
+        ]
+      }
+    }
+  },
+  "locked": false,
+  "author": {
+    "user": {
+      "name": "dscully",
+      "emailAddress": "dscully@example.com",
+      "id": 101,
+      "displayName": "Dana Scully",
+      "active": true,
+      "slug": "dscully",
+      "type": "NORMAL",
+      "links": {
+        "self": [
+          {
+            "href": "https://bitbucket.example.com/users/dscully"
+          }
+        ]
+      }
+    },
+    "role": "AUTHOR",
+    "approved": false,
+    "status": "UNAPPROVED"
+  },
+  "reviewers": [
+    {
+      "user": {
+        "name": "fmulder",
+        "emailAddress": "fmulder@example.com",
+        "id": 102,
+        "displayName": "Fox Mulder",
+        "active": true,
+        "slug": "fmulder",
+        "type": "NORMAL",
+        "links": {
+          "self": [
+            {
+              "href": "https://bitbucket.example.com/users/fmulder"
+            }
+          ]
+        }
+      },
+      "lastReviewedCommit": "e3f1a2b",
+      "role": "REVIEWER",
+      "approved": true,
+      "status": "APPROVED"
+    },
+    {
+      "user": {
+        "name": "wskinner",
+        "emailAddress": "wskinner@example.com",
+        "id": 103,
+        "displayName": "Walter Skinner",
+        "active": true,
+        "slug": "wskinner",
+        "type": "NORMAL",
+        "links": {
+          "self": [
+            {
+              "href": "https://bitbucket.example.com/users/wskinner"
+            }
+          ]
+        }
+      },
+      "lastReviewedCommit": "e3f1a2b",
+      "role": "REVIEWER",
+      "approved": false,
+      "status": "UNAPPROVED"
+    }
+  ],
+  "participants": [],
+  "links": {
+    "self": [
+      {
+        "href": "https://bitbucket.example.com/projects/MOB/repos/mobile-banking/pull-requests/42"
+      }
+    ]
+  },
+  "description": "Adds Face ID and fingerprint unlock.\n\n- Falls back to the PIN\n- Behind the `biometrics` flag",
+  "properties": {
+    "mergeResult": {
+      "outcome": "CLEAN",
+      "current": true
+    },
+    "resolvedTaskCount": 1,
+    "commentCount": 3,
+    "openTaskCount": 1
+  }
+}
