@@ -1,14 +1,13 @@
 import type { AppError } from "../../../application/errors";
 import { table } from "../../../cli/format";
 import type { PluginCommandRunner, PluginCommandSpec } from "../../../cli/plugin-command";
-import { assertNever } from "../../../domain/shared/assert-never";
 import { ok, type Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
 import {
-  type BranchPullRequest,
   type BranchPullRequestDependencies,
   branchPullRequest,
+  whyNoPullRequest,
 } from "../application/branch-pull-request";
 import {
   type BuildSummary,
@@ -110,29 +109,6 @@ function formatPullRequest(pull: PullRequest, builds: Result<BuildSummary, AppEr
   ].join("\n");
 }
 
-/** Why a workspace's branch has no pull request to show. */
-function noPullRequest(
-  found: Exclude<BranchPullRequest, { kind: "found" }>,
-  workspace: string,
-  host: string,
-): string {
-  const name = "name one, as PROJECT/repository#42";
-  switch (found.kind) {
-    case "not-a-repository":
-      return `${workspace} is not a git repository; ${name}.`;
-    case "elsewhere":
-      return found.origin === null
-        ? `${workspace} has no origin remote; ${name}.`
-        : `${workspace}'s origin is not on ${host}; ${name}.`;
-    case "detached":
-      return `HEAD is detached in ${workspace}; switch to a branch, or ${name}.`;
-    case "none":
-      return `No open pull request from ${found.branch} in ${found.repository.project}/${found.repository.slug}.`;
-    default:
-      return assertNever(found);
-  }
-}
-
 /** Runs `xuefu pr list` and `show`; each exits 1 when there is nothing to show. */
 export function prCommands(
   deps: BranchPullRequestDependencies,
@@ -151,7 +127,15 @@ export function prCommands(
         const branch = await branchPullRequest(deps, workspace.value.path);
         if (!branch.ok) return branch;
         if (branch.value.kind !== "found") {
-          io.stderr(`${noPullRequest(branch.value, workspace.value.name, deps.host)}\n`);
+          const why = whyNoPullRequest(branch.value, workspace.value.name, deps.host);
+          const name = "name one, as PROJECT/repository#42";
+          const fix =
+            branch.value.kind === "none"
+              ? ""
+              : branch.value.kind === "detached"
+                ? `; switch to a branch, or ${name}`
+                : `; ${name}`;
+          io.stderr(`${why}${fix}.\n`);
           return ok(1);
         }
         found = branch.value.pullRequest;

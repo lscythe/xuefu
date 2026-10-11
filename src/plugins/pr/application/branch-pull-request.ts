@@ -1,4 +1,5 @@
 import type { AppError } from "../../../application/errors";
+import { assertNever } from "../../../domain/shared/assert-never";
 import type { AbsolutePath } from "../../../domain/shared/path";
 import { ok, type Result } from "../../../domain/shared/result";
 import { type PullRequest, type Repository, repositoryFromRemote } from "../domain/pull-request";
@@ -46,4 +47,26 @@ export async function branchPullRequest(
       ? { kind: "none", repository, branch }
       : { kind: "found", repository, branch, pullRequest: found.value },
   );
+}
+
+/** Why a workspace's branch has no pull request to show, as "HEAD is detached in Mobile". */
+export function whyNoPullRequest(
+  found: Exclude<BranchPullRequest, { kind: "found" }>,
+  workspace: string,
+  host: string,
+): string {
+  switch (found.kind) {
+    case "not-a-repository":
+      return `${workspace} is not a git repository`;
+    case "elsewhere":
+      return found.origin === null
+        ? `${workspace} has no origin remote`
+        : `${workspace}'s origin is not on ${host}`;
+    case "detached":
+      return `HEAD is detached in ${workspace}`;
+    case "none":
+      return `No open pull request from ${found.branch} in ${found.repository.project}/${found.repository.slug}`;
+    default:
+      return assertNever(found);
+  }
 }

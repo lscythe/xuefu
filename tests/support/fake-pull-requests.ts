@@ -1,5 +1,6 @@
 import { notFound } from "../../src/domain/shared/errors";
 import { err, ok } from "../../src/domain/shared/result";
+import type { Checkout, CheckoutReader } from "../../src/plugins/pr/application/checkout";
 import type {
   PullRequestClient,
   PullRequestPage,
@@ -72,4 +73,14 @@ export function fakePullRequests(
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };
+}
+
+/** Every folder has `checkout`, by default a branch on MOB/mobile-banking. */
+export function fakeCheckouts(
+  checkout: Checkout | null = {
+    branch: "feature/MOB-2841-biometric-login",
+    origin: "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
+  },
+): CheckoutReader {
+  return { read: () => Promise.resolve(ok(checkout)) };
 }

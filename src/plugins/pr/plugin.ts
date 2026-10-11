@@ -1,3 +1,4 @@
+import { lazy } from "solid-js";
 import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
 import { serviceUrlSchema } from "../../application/security/service-url";
@@ -66,6 +67,18 @@ export const prPlugin = definePlugin({
       checkouts: gitCheckout(context.processes),
       host: new URL(settings.url).hostname,
     };
-    return { commands: prCommands(deps, settings.maxResults) };
+    return {
+      commands: prCommands(deps, settings.maxResults),
+      view: lazy(async () => {
+        const { prView } = await import("./tui/pr-view");
+        return {
+          default: prView({
+            ...deps,
+            maxResults: settings.maxResults,
+            refreshMs: settings.refreshSeconds * 1000,
+          }),
+        };
+      }),
+    };
   },
 });
