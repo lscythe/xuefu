@@ -58,6 +58,17 @@ export function fakePullRequests(
           : ok(found),
       );
     },
+    forBranch: (repository, branch) =>
+      Promise.resolve(
+        ok(
+          [...yours, ...toReview].find(
+            (pull) =>
+              pull.from === branch &&
+              pull.repository.project === repository.project &&
+              pull.repository.slug === repository.slug,
+          ) ?? null,
+        ),
+      ),
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };

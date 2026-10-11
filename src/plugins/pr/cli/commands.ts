@@ -1,10 +1,15 @@
 import type { AppError } from "../../../application/errors";
 import { table } from "../../../cli/format";
 import type { PluginCommandRunner, PluginCommandSpec } from "../../../cli/plugin-command";
+import { assertNever } from "../../../domain/shared/assert-never";
 import { ok, type Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
-import type { PullRequestClient } from "../application/pull-request-client";
+import {
+  type BranchPullRequest,
+  type BranchPullRequestDependencies,
+  branchPullRequest,
+} from "../application/branch-pull-request";
 import {
   type BuildSummary,
   type PullRequest,
@@ -29,11 +34,19 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
   {
     group: "pr",
     name: "show",
-    usage: "<PROJECT/repository#id>",
-    minArgs: 1,
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
     maxArgs: 1,
-    flags: { json },
-    summary: "Show a pull request, with its reviews and builds",
+    flags: {
+      workspace: {
+        type: "string",
+        short: "w",
+        value: "<id>",
+        description: "another workspace than this folder's",
+      },
+      json,
+    },
+    summary: "Show a pull request, by default this branch's, with its reviews and builds",
   },
 ];
 
@@ -97,20 +110,63 @@ function formatPullRequest(pull: PullRequest, builds: Result<BuildSummary, AppEr
   ].join("\n");
 }
 
-/** Runs `xuefu pr list` and `show`; list exits 1 when there is none. */
-export function prCommands(client: PullRequestClient, maxResults: number): PluginCommandRunner {
+/** Why a workspace's branch has no pull request to show. */
+function noPullRequest(
+  found: Exclude<BranchPullRequest, { kind: "found" }>,
+  workspace: string,
+  host: string,
+): string {
+  const name = "name one, as PROJECT/repository#42";
+  switch (found.kind) {
+    case "not-a-repository":
+      return `${workspace} is not a git repository; ${name}.`;
+    case "elsewhere":
+      return found.origin === null
+        ? `${workspace} has no origin remote; ${name}.`
+        : `${workspace}'s origin is not on ${host}; ${name}.`;
+    case "detached":
+      return `HEAD is detached in ${workspace}; switch to a branch, or ${name}.`;
+    case "none":
+      return `No open pull request from ${found.branch} in ${found.repository.project}/${found.repository.slug}.`;
+    default:
+      return assertNever(found);
+  }
+}
+
+/** Runs `xuefu pr list` and `show`; each exits 1 when there is nothing to show. */
+export function prCommands(
+  deps: BranchPullRequestDependencies,
+  maxResults: number,
+): PluginCommandRunner {
+  const { client } = deps;
   return async (invocation, io) => {
     const asJson = invocation.flags["json"] === true;
     if (invocation.name === "show") {
-      const ref = parsePullRequestRef(invocation.args[0] ?? "");
-      if (!ref.ok) return ref;
-      const found = await client.pullRequest(ref.value.repository, ref.value.id);
-      if (!found.ok) return found;
-      const builds = await client.builds(found.value.commit);
+      let found: PullRequest;
+      const raw = invocation.args[0];
+      if (raw === undefined) {
+        const id = invocation.flags["workspace"];
+        const workspace = await io.workspace(typeof id === "string" ? id : null);
+        if (!workspace.ok) return workspace;
+        const branch = await branchPullRequest(deps, workspace.value.path);
+        if (!branch.ok) return branch;
+        if (branch.value.kind !== "found") {
+          io.stderr(`${noPullRequest(branch.value, workspace.value.name, deps.host)}\n`);
+          return ok(1);
+        }
+        found = branch.value.pullRequest;
+      } else {
+        const ref = parsePullRequestRef(raw);
+        if (!ref.ok) return ref;
+        const read = await client.pullRequest(ref.value.repository, ref.value.id);
+        if (!read.ok) return read;
+        found = read.value;
+      }
+      const builds = await client.builds(found.commit);
       io.stdout(
         asJson
-          ? `${JSON.stringify({ ...pullJson(found.value), builds: builds.ok ? builds.value : null }, null, 2)}\n`
-          : formatPullRequest(found.value, builds),
+          ? `${JSON.stringify({ ...pullJson(found), builds: builds.ok ? builds.value : null }, null, 2)}\n`
+          : formatPullRequest(found, builds),
       );
       return ok(0);
     }

@@ -43,6 +43,40 @@ export interface PullRequest {
   readonly url: string;
 }
 
+/** Bitbucket's project keys are upper case; a personal one, "~user", keeps its case. */
+const projectKey = (raw: string) => (raw.startsWith("~") ? raw : raw.toUpperCase());
+
+/**
+ * The repository a clone address points at on the Bitbucket at `host`, read from HTTPS
+ * ("https://host/scm/mob/app.git") or SSH ("ssh://git@host:7999/mob/app.git", "git@host:mob/app")
+ * addresses. Null for one on another host, or not shaped like Bitbucket's.
+ */
+export function repositoryFromRemote(remote: string, host: string): Repository | null {
+  const scp = /^[^@/\s]+@([^:/\s]+):(?!\/)(.+)$/.exec(remote.trim());
+  let hostname: string;
+  let path: string;
+  if (scp !== null) {
+    hostname = scp[1] ?? "";
+    path = scp[2] ?? "";
+  } else if (URL.canParse(remote.trim())) {
+    const url = new URL(remote.trim());
+    hostname = url.hostname;
+    path = decodeURIComponent(url.pathname);
+  } else {
+    return null;
+  }
+  if (hostname.toLowerCase() !== host.toLowerCase()) return null;
+  // HTTPS clones go through /scm/, after any context path Bitbucket is served under.
+  const parts = path
+    .replace(/\.git$/, "")
+    .split("/")
+    .filter((part) => part !== "");
+  const scm = parts.lastIndexOf("scm");
+  const [project, slug, ...rest] = scm === -1 ? parts : parts.slice(scm + 1);
+  if (project === undefined || slug === undefined || rest.length > 0) return null;
+  return { project: projectKey(project), slug: slug.toLowerCase() };
+}
+
 /** "MOB/mobile-banking#42": names a pull request anywhere on the server. */
 export function pullRequestRef(pull: Pick<PullRequest, "repository" | "id">): string {
   return `${pull.repository.project}/${pull.repository.slug}#${pull.id}`;
@@ -63,9 +97,7 @@ export function parsePullRequestRef(
     );
   }
   const [, project = "", slug = "", id = ""] = match;
-  // A personal repository's project is "~user", which keeps its case.
-  const key = project.startsWith("~") ? project : project.toUpperCase();
-  return ok({ repository: { project: key, slug }, id: Number(id) });
+  return ok({ repository: { project: projectKey(project), slug }, id: Number(id) });
 }
 
 /** How the reviews stand: how many approved of how many reviewers, and who wants changes. */

@@ -217,6 +217,19 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       return ok(toPullRequest(found.value));
     },
 
+    async forBranch(repository, branch, signal) {
+      const query = new URLSearchParams({
+        at: `refs/heads/${branch}`,
+        direction: "OUTGOING",
+        state: "OPEN",
+        limit: "1",
+      });
+      const found = await get(`${repoPath(repository)}/pull-requests?${query}`, PageSchema, signal);
+      if (!found.ok) return found;
+      const first = found.value.values[0];
+      return ok(first === undefined ? null : toPullRequest(first));
+    },
+
     builds(commit, signal) {
       return get(
         `/rest/build-status/1.0/commits/stats/${encodeURIComponent(commit)}`,

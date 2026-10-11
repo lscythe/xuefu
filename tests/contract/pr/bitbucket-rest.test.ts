@@ -121,6 +121,23 @@ describe("bitbucket REST 1.0: one pull request", () => {
     });
   });
 
+  test("the open one from a branch, or none", async () => {
+    requests.length = 0;
+    answer = () => new Response(fixture("dashboard"));
+    const found = await client().forBranch(REPO, "fix/MOB-2790-rotate-crash");
+    const sent = new URL(requests[0]?.url ?? "");
+    expect(sent.pathname).toBe("/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests");
+    expect(Object.fromEntries(sent.searchParams)).toEqual({
+      at: "refs/heads/fix/MOB-2790-rotate-crash",
+      direction: "OUTGOING",
+      state: "OPEN",
+      limit: "1",
+    });
+    expect(found.ok && found.value?.id).toBe(40);
+    answer = () => Response.json({ values: [], isLastPage: true });
+    expect(await client().forBranch(REPO, "spike")).toEqual(ok(null));
+  });
+
   test("its builds, by how they ended", async () => {
     requests.length = 0;
     answer = () => new Response(fixture("build-stats"));

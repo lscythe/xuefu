@@ -4,6 +4,7 @@ import { serviceUrlSchema } from "../../application/security/service-url";
 import { definePlugin } from "../plugin";
 import { PR_COMMANDS, prCommands } from "./cli/commands";
 import { bitbucketRest } from "./integrations/bitbucket-rest";
+import { gitCheckout } from "./integrations/git-checkout";
 
 const PrSettings = z
   .strictObject({
@@ -60,6 +61,11 @@ export const prPlugin = definePlugin({
       url: settings.url,
       token: () => context.secrets.resolve(settings.token),
     });
-    return { commands: prCommands(client, settings.maxResults) };
+    const deps = {
+      client,
+      checkouts: gitCheckout(context.processes),
+      host: new URL(settings.url).hostname,
+    };
+    return { commands: prCommands(deps, settings.maxResults) };
   },
 });

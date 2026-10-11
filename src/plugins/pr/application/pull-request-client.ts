@@ -30,6 +30,12 @@ export interface PullRequestClient {
     id: number,
     signal?: AbortSignal,
   ): Promise<Result<PullRequest, PullRequestFailure>>;
+  /** The open pull request from a branch of the repository; null when there is none. */
+  forBranch(
+    repository: Repository,
+    branch: string,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequest | null, PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
 }

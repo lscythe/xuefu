@@ -1,25 +1,57 @@
 import { describe, expect, test } from "bun:test";
 import type { AppError } from "../../../../src/application/errors";
 import type { PluginInvocation } from "../../../../src/cli/plugin-command";
-import { remoteError } from "../../../../src/domain/shared/errors";
+import { notFound, remoteError } from "../../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
+import type { Checkout, CheckoutReader } from "../../../../src/plugins/pr/application/checkout";
 import type { PullRequestClient } from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
 import { fakePullRequests, pullRequest } from "../../../support/fake-pull-requests";
+
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/work/mobile" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
+
+const ON_BITBUCKET: Checkout = {
+  branch: "feature/change-42",
+  origin: "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
+};
 
 async function run(
   client: PullRequestClient,
   name: string,
   args: string[] = [],
   flags: PluginInvocation["flags"] = {},
-  max = 25,
+  options: { max?: number; checkout?: Checkout | null } = {},
 ) {
   let stdout = "";
   let stderr = "";
-  const code: Result<number, AppError> = await prCommands(client, max)(
+  const read: string[] = [];
+  const checkouts: CheckoutReader = {
+    read: (folder) => {
+      read.push(folder);
+      return Promise.resolve(ok(options.checkout === undefined ? ON_BITBUCKET : options.checkout));
+    },
+  };
+  const code: Result<number, AppError> = await prCommands(
+    { client, checkouts, host: "bitbucket.example.com" },
+    options.max ?? 25,
+  )(
     { group: "pr", name, args, flags },
     {
-      workspace: () => Promise.reject(new Error("not used")),
+      workspace: (id) =>
+        Promise.resolve(
+          id === null || id === "mobile" ? ok(MOBILE) : err(notFound("workspace", id)),
+        ),
       stdout: (text) => {
         stdout += text;
       },
@@ -28,7 +60,7 @@ async function run(
       },
     },
   );
-  return { code, stdout, stderr };
+  return { code, stdout, stderr, read };
 }
 
 describe("xuefu pr list", () => {
@@ -65,7 +97,7 @@ describe("xuefu pr list", () => {
       "list",
       [],
       {},
-      1,
+      { max: 1 },
     );
     expect(shown.stdout).not.toContain("Yours");
     expect(shown.stderr).toBe("To review: more than 1 are open; only 1 are shown.\n");
@@ -153,6 +185,40 @@ describe("xuefu pr show", () => {
       ref: "MOB/mobile-banking#42",
       builds: { successful: 1, failed: 0, inProgress: 0 },
     });
+  });
+
+  test("without a ref, the pull request from this workspace's branch", async () => {
+    const shown = await run(fakePullRequests({ yours: [pullRequest(42)] }), "show");
+    expect(shown.code).toEqual(ok(0));
+    expect(shown.read).toEqual(["/work/mobile"]);
+    expect(shown.stdout.split("\n")[0]).toBe("MOB/mobile-banking#42  Change 42");
+    const elsewhere = await run(fakePullRequests({ yours: [pullRequest(42)] }), "show", [], {
+      workspace: "nowhere",
+    });
+    expect(elsewhere.code.ok ? null : elsewhere.code.error.kind).toBe("not-found");
+  });
+
+  test("without a ref, says why there is none to show, exiting 1", async () => {
+    const why = async (checkout: Checkout | null) => {
+      const shown = await run(fakePullRequests(), "show", [], {}, { checkout });
+      expect(shown.code).toEqual(ok(1));
+      return shown.stderr;
+    };
+    expect(await why(ON_BITBUCKET)).toBe(
+      "No open pull request from feature/change-42 in MOB/mobile-banking.\n",
+    );
+    expect(await why({ ...ON_BITBUCKET, branch: null })).toBe(
+      "HEAD is detached in Mobile; switch to a branch, or name one, as PROJECT/repository#42.\n",
+    );
+    expect(await why({ ...ON_BITBUCKET, origin: "https://github.com/mob/app.git" })).toBe(
+      "Mobile's origin is not on bitbucket.example.com; name one, as PROJECT/repository#42.\n",
+    );
+    expect(await why({ ...ON_BITBUCKET, origin: null })).toBe(
+      "Mobile has no origin remote; name one, as PROJECT/repository#42.\n",
+    );
+    expect(await why(null)).toBe(
+      "Mobile is not a git repository; name one, as PROJECT/repository#42.\n",
+    );
   });
 
   test("not a ref, or not found", async () => {
