@@ -13,7 +13,7 @@ import type { AppError } from "../../../application/errors";
 import type { Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
-import { Dialog, dialogWidth } from "../../../tui/dialog";
+import { Dialog, readingWidth } from "../../../tui/dialog";
 import { ErrorLine } from "../../../tui/error-line";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
@@ -61,7 +61,7 @@ export function IssueDialog(props: IssueDialogProps) {
     return result?.ok === false ? result.error : null;
   };
 
-  const width = () => dialogWidth(dimensions().width);
+  const width = () => readingWidth(dimensions().width);
   // Inside the frame and its padding.
   const inner = () => width() - 4;
   const when = (at: number) => {
