@@ -110,6 +110,25 @@ export function fakePullRequests(
       const found = find(repository, id);
       return Promise.resolve(found.ok ? ok([]) : found);
     },
+    comment: (repository, id, draft) => {
+      const found = find(repository, id);
+      return Promise.resolve(
+        found.ok
+          ? ok({
+              id: 900,
+              version: 0,
+              author: "You",
+              text: draft.text,
+              created: 0,
+              updated: 0,
+              anchor: draft.anchor === null ? null : { ...draft.anchor, outdated: false },
+              todo: null,
+              resolved: false,
+              replies: [],
+            })
+          : found,
+      );
+    },
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };
@@ -134,6 +153,7 @@ export function prChanges(
   const actions = prActions(client);
   bus.register(actions.review);
   bus.register(actions.merge);
+  bus.register(actions.comment);
   return {
     client,
     checkouts,

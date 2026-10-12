@@ -466,6 +466,75 @@ describe("bitbucket REST 1.0: comments", () => {
     const missing = await client().comments(REPO, 9);
     expect(missing.ok ? null : missing.error.kind).toBe("not-found");
   });
+
+  /** Bitbucket's answer to a new comment: the comment, with its anchor when on a line. */
+  const created =
+    (extra: Record<string, unknown> = {}) =>
+    () =>
+      Response.json(
+        {
+          id: 120,
+          version: 0,
+          text: "Fall back to the PIN?",
+          author: { name: "dscully", displayName: "Dana Scully" },
+          createdDate: 1759770000000,
+          updatedDate: 1759770000000,
+          comments: [],
+          ...extra,
+        },
+        { status: 201 },
+      );
+
+  test("posts one on the pull request, answering with it", async () => {
+    requests.length = 0;
+    answer = created();
+    const posted = await client().comment(REPO, 42, {
+      text: "Fall back to the PIN?",
+      anchor: null,
+      replyTo: null,
+    });
+    expect(`${requests[0]?.method} ${new URL(requests[0]?.url ?? "").pathname}`).toBe(
+      "POST /rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42/comments",
+    );
+    expect(JSON.parse(requests[0]?.body ?? "")).toEqual({ text: "Fall back to the PIN?" });
+    expect(posted.ok && posted.value).toMatchObject({
+      id: 120,
+      author: "Dana Scully",
+      anchor: null,
+    });
+  });
+
+  test("on a line, placed by its number, kind and side; and a reply, by its parent", async () => {
+    requests.length = 0;
+    const anchor = { path: "app/src/Login.kt", line: 11, lineType: "REMOVED", fileType: "FROM" };
+    answer = created({ anchor });
+    const posted = await client().comment(REPO, 42, {
+      text: "Why?",
+      anchor: { path: "app/src/Login.kt", line: 11, side: "old", lineKind: "removed" },
+      replyTo: null,
+    });
+    expect(posted.ok && posted.value.anchor).toEqual({
+      path: "app/src/Login.kt",
+      line: 11,
+      side: "old",
+      lineKind: "removed",
+      outdated: false,
+    });
+    answer = created();
+    await client().comment(REPO, 42, { text: "Agreed.", anchor: null, replyTo: 105 });
+    expect(requests.map((sent) => JSON.parse(sent.body))).toEqual([
+      { text: "Why?", anchor },
+      { text: "Agreed.", parent: { id: 105 } },
+    ]);
+  });
+
+  test("a refusal says what Bitbucket said", async () => {
+    answer = status(400, { errors: [{ message: "The comment text must not be empty." }] });
+    const refused = await client().comment(REPO, 42, { text: " ", anchor: null, replyTo: null });
+    expect(refused.ok ? null : refused.error.message).toBe(
+      "Bitbucket answered 400: The comment text must not be empty.",
+    );
+  });
 });
 
 describe("bitbucket REST 1.0: refusals", () => {

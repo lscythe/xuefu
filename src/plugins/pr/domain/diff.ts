@@ -1,3 +1,5 @@
+import type { CommentAnchor } from "./comment";
+
 /** A line of a diff, with its number in the file before and after; null where it is not in one. */
 interface DiffLine {
   readonly kind: "added" | "removed" | "context";
@@ -29,6 +31,26 @@ export interface DiffFile {
 
 /** The path a file is known by: where it ends up, or where it was when deleted. */
 export const filePath = (file: Pick<DiffFile, "from" | "to">): string => file.to ?? file.from ?? "";
+
+/**
+ * Where a comment on line `line` of `path` goes: in the file after, or with `side` "old" on a
+ * removed line of the file before. Null when the diff does not show that line.
+ */
+export function lineAnchor(
+  files: readonly DiffFile[],
+  path: string,
+  line: number,
+  side: "old" | "new",
+): Omit<CommentAnchor, "outdated"> | null {
+  const file = files.find((candidate) => filePath(candidate) === path || candidate.from === path);
+  const lines = file?.hunks.flatMap((hunk) => hunk.lines) ?? [];
+  const found =
+    side === "old"
+      ? lines.find((shown) => shown.kind === "removed" && shown.old === line)
+      : lines.find((shown) => shown.kind !== "removed" && shown.new === line);
+  if (file === undefined || found === undefined) return null;
+  return { path: filePath(file), line, side, lineKind: found.kind };
+}
 
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 

@@ -486,6 +486,41 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       return ok([...threads.values()].sort((a, b) => a.created - b.created || a.id - b.id));
     },
 
+    async comment(repository, id, draft, signal) {
+      const { anchor } = draft;
+      const answered = await send(
+        "POST",
+        `${repoPath(repository)}/pull-requests/${id}/comments`,
+        signal,
+        {
+          body: {
+            text: draft.text,
+            ...(draft.replyTo === null ? {} : { parent: { id: draft.replyTo } }),
+            // Without hashes, Bitbucket places it on the diff as it is now.
+            ...(anchor === null
+              ? {}
+              : {
+                  anchor: {
+                    path: anchor.path,
+                    ...(anchor.line === null
+                      ? {}
+                      : {
+                          line: anchor.line,
+                          lineType: (anchor.lineKind ?? "context").toUpperCase(),
+                          fileType: anchor.side === "old" ? "FROM" : "TO",
+                        }),
+                  },
+                }),
+          },
+        },
+      );
+      if (!answered.ok) return answered;
+      const posted = decode(answered.value, CommentSchema);
+      return posted.ok
+        ? ok(toComment(posted.value, posted.value.anchor))
+        : gone(posted, repository, id);
+    },
+
     builds(commit, signal) {
       return get(
         `/rest/build-status/1.0/commits/stats/${encodeURIComponent(commit)}`,

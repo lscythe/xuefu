@@ -29,8 +29,17 @@ export interface PullRequestComment {
   readonly replies: readonly PullRequestComment[];
 }
 
+/** A comment to post: on the pull request, on a line of its diff, or in reply to another. */
+export interface CommentDraft {
+  readonly text: string;
+  /** The line it is on; null for the pull request as a whole, or a reply. */
+  readonly anchor: Omit<CommentAnchor, "outdated"> | null;
+  /** The comment it answers; null for one that starts a thread. */
+  readonly replyTo: number | null;
+}
+
 /** "app/src/Login.kt, line 11", "…, old line 11", or the path alone for a file comment. */
-export function anchorText(anchor: CommentAnchor): string {
+export function anchorText(anchor: Pick<CommentAnchor, "path" | "line" | "side">): string {
   if (anchor.line === null) return anchor.path;
   return `${anchor.path}, ${anchor.side === "old" ? "old line" : "line"} ${anchor.line}`;
 }

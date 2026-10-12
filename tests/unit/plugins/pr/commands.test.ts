@@ -14,7 +14,7 @@ import type {
 } from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
 import { diffStat } from "../../../../src/plugins/pr/cli/diff-stat";
-import type { PullRequestComment } from "../../../../src/plugins/pr/domain/comment";
+import type { CommentDraft, PullRequestComment } from "../../../../src/plugins/pr/domain/comment";
 import {
   fakePullRequests,
   prChanges,
@@ -518,6 +518,115 @@ describe("xuefu pr comments", () => {
       created: "2026-10-06T09:00:00.000Z",
       replies: [{ id: 105, created: "2026-10-06T09:00:00.000Z" }],
     });
+  });
+});
+
+describe("xuefu pr comment", () => {
+  /** A server that records each comment it is sent. */
+  const commenting = () => {
+    const sent: CommentDraft[] = [];
+    const base = fakePullRequests({ toReview: [pullRequest(42)] });
+    const client: PullRequestClient = {
+      ...base,
+      comment: (repository, id, draft) => {
+        sent.push(draft);
+        return base.comment(repository, id, draft);
+      },
+    };
+    return { client, sent };
+  };
+  const post = (client: PullRequestClient, flags: PluginInvocation["flags"]) =>
+    run(client, "comment", ["MOB/mobile-banking#42"], { yes: true, ...flags });
+
+  test("on the pull request as a whole", async () => {
+    const { client, sent } = commenting();
+    const done = await post(client, { message: "  Looks good.  " });
+    expect(done.code).toEqual(ok(0));
+    expect(done.stdout).toBe("✓ Posted #900 on MOB/mobile-banking#42\n");
+    expect(sent).toEqual([{ text: "Looks good.", anchor: null, replyTo: null }]);
+  });
+
+  test("on a line of the diff: added or kept as numbered after, removed with --old", async () => {
+    const { client, sent } = commenting();
+    const file = "app/src/Login.kt";
+    expect((await post(client, { message: "a", file, line: "11" })).code).toEqual(ok(0));
+    expect((await post(client, { message: "b", file, line: "13" })).code).toEqual(ok(0));
+    expect((await post(client, { message: "c", file, line: "11", old: true })).code).toEqual(ok(0));
+    expect(sent.map((draft) => draft.anchor)).toEqual([
+      { path: file, line: 11, side: "new", lineKind: "added" },
+      { path: file, line: 13, side: "new", lineKind: "context" },
+      { path: file, line: 11, side: "old", lineKind: "removed" },
+    ]);
+  });
+
+  test("a line the diff does not show is refused before anything is posted", async () => {
+    const { client, sent } = commenting();
+    const off = await post(client, { message: "a", file: "app/src/Login.kt", line: "99" });
+    expect(off.code.ok ? null : off.code.error).toMatchObject({
+      kind: "validation",
+      issues: [
+        {
+          path: "line",
+          message: "line 99 of app/src/Login.kt is not in the diff; for a removed line, add --old",
+        },
+      ],
+    });
+    const kept = await post(client, {
+      message: "a",
+      file: "app/src/Login.kt",
+      line: "10",
+      old: true,
+    });
+    expect(kept.code.ok ? null : kept.code.error.kind).toBe("validation");
+    expect(sent).toEqual([]);
+  });
+
+  test("a reply, by the id pr comments shows", async () => {
+    const { client, sent } = commenting();
+    expect((await post(client, { message: "Agreed.", reply: "#105" })).code).toEqual(ok(0));
+    expect(sent).toEqual([{ text: "Agreed.", anchor: null, replyTo: 105 }]);
+  });
+
+  test.each([
+    [{}, "message", "say what to post, with -m"],
+    [{ message: "a", line: "3" }, "file", "say which file the line is in, with --file"],
+    [{ message: "a", file: "a.kt" }, "line", "say which line, with --line"],
+    [{ message: "a", file: "a.kt", line: "0" }, "line", "must be a line number, from 1"],
+    [
+      { message: "a", reply: "105", file: "a.kt", line: "3" },
+      "reply",
+      "a reply goes in its thread; leave out --file and --line",
+    ],
+    [{ message: "a", reply: "x" }, "reply", "must be a comment's id, as pr comments shows"],
+  ])("%o is refused", async (flags, path, message) => {
+    const { client, sent } = commenting();
+    const refused = await post(client, flags);
+    expect(refused.code.ok ? null : refused.code.error).toMatchObject({
+      kind: "validation",
+      issues: [{ path, message }],
+    });
+    expect(sent).toEqual([]);
+  });
+
+  test("without --yes, asks first, showing where it goes and what it says", async () => {
+    const { client, sent } = commenting();
+    const asked = await run(client, "comment", ["MOB/mobile-banking#42"], {
+      message: `Fall back to the PIN?\n${"x".repeat(300)}`,
+      file: "app/src/Login.kt",
+      line: "11",
+    });
+    const error = asked.code.ok ? null : asked.code.error;
+    const prompt = error?.kind === "confirmation-required" ? error.prompt : null;
+    expect(prompt).toMatchObject({
+      title: "Comment on MOB/mobile-banking#42",
+      details: [
+        { label: "Pull request", value: "MOB/mobile-banking#42" },
+        { label: "On", value: "app/src/Login.kt, line 11" },
+        { label: "Comment", value: `Fall back to the PIN? ${"x".repeat(177)}…` },
+      ],
+      confirmLabel: "Post",
+    });
+    expect(sent).toEqual([]);
   });
 });
 
