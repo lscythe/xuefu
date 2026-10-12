@@ -26,4 +26,16 @@ export interface SectionProps {
   readonly setModal: (modal: boolean) => void;
   /** Shows a failure above the key bar, as for the cockpit's own actions. */
   readonly report: (error: AppError) => void;
+  /**
+   * Opens a conversation with the coding agent about something in the section, in the workspace
+   * in front. Absent when no agent is installed or no workspace is open.
+   */
+  readonly askAgent?: ((question: AgentQuestionAbout) => void) | null;
+}
+
+/** What a section asks the agent: the first message, and what it is about, for the title. */
+export interface AgentQuestionAbout {
+  /** A few words, such as "Review MOB/app#42". */
+  readonly title: string;
+  readonly prompt: string;
 }

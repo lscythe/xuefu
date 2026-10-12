@@ -28,6 +28,7 @@ import type { PullRequest, ReviewStatus } from "../domain/pull-request";
 import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
 import { PullRequestDialog } from "./pull-request-dialog";
 import { ReviewDialog } from "./review-dialog";
+import { reviewQuestion } from "./review-question";
 
 /** Everything the section needs from the pull requests plugin. */
 export interface PrSection extends PrChanges {
@@ -189,6 +190,7 @@ export function prView(section: PrSection): Component<SectionProps> {
                   { text: "n needs work", rank: 3 },
                   { text: "m merge", rank: 4 },
                   { text: "u withdraw", rank: 6 },
+                  ...(props.askAgent == null ? [] : [{ text: "A ask claude", rank: 7 }]),
                 ]
               : []),
             { text: "r refresh", rank: 5 },
@@ -241,10 +243,21 @@ export function prView(section: PrSection): Component<SectionProps> {
       void load();
     };
 
+    /** Opens a conversation with the agent on reviewing the pull request. */
+    const askReview = (pull: PullRequest) => {
+      setOpened(null);
+      props.askAgent?.(reviewQuestion(pull));
+    };
+
     useKeyboard((key) => {
       if (!props.focused || modal() || busy()) return;
       const count = pulls().length;
       const at = Math.min(cursor(), Math.max(0, count - 1));
+      if (key.shift && key.name === "a") {
+        const row = selected();
+        if (row !== null) askReview(row.pull);
+        return;
+      }
       switch (key.name) {
         case "up":
         case "k":
@@ -388,6 +401,7 @@ export function prView(section: PrSection): Component<SectionProps> {
                 setReviewing(pull());
                 setOpened(null);
               }}
+              onAsk={props.askAgent == null ? null : () => askReview(pull())}
               onClose={() => setOpened(null)}
             />
           )}

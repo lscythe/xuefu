@@ -22,11 +22,17 @@ export interface CommandRun {
   readonly stderr: string;
 }
 
-export interface McpServer {
+/** What answers MCP's messages, whatever carries them. */
+export interface McpTools {
   readonly version: string;
   readonly tools: readonly McpTool[];
   /** Runs a XueFu command line, as the tools build it. */
   run(argv: readonly string[]): Promise<CommandRun>;
+  /** What the client is told about XueFu as it connects; a general account when left out. */
+  readonly instructions?: string;
+}
+
+export interface McpServer extends McpTools {
   /** Writes text to the client: whole messages, each a line. */
   write(text: string): void;
 }
@@ -93,7 +99,7 @@ function toolResult(run: CommandRun) {
   };
 }
 
-async function callTool(server: McpServer, params: unknown): Promise<Answer> {
+async function callTool(server: McpTools, params: unknown): Promise<Answer> {
   const { name, arguments: given } = (params ?? {}) as Record<string, unknown>;
   const tool = server.tools.find((candidate) => candidate.name === name);
   if (tool === undefined) return failure(INVALID_PARAMS, `Unknown tool: ${String(name)}`);
@@ -110,7 +116,7 @@ async function callTool(server: McpServer, params: unknown): Promise<Answer> {
   }
 }
 
-function answer(server: McpServer, request: Request): Promise<Answer> | Answer {
+function answer(server: McpTools, request: Request): Promise<Answer> | Answer {
   switch (request.method) {
     case "initialize": {
       const asked = (request.params as Record<string, unknown> | undefined)?.["protocolVersion"];
@@ -122,7 +128,7 @@ function answer(server: McpServer, request: Request): Promise<Answer> | Answer {
               : PROTOCOL_VERSIONS[0],
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "xuefu", title: "XueFu", version: server.version },
-          instructions: INSTRUCTIONS,
+          instructions: server.instructions ?? INSTRUCTIONS,
         },
       };
     }
@@ -137,11 +143,14 @@ function answer(server: McpServer, request: Request): Promise<Answer> | Answer {
   }
 }
 
-/** The reply to one line from the client, or null when it needs none. */
-async function reply(server: McpServer, line: string): Promise<object | null> {
+/**
+ * The reply to one message from the client, as JSON text, or null when it needs none. Shared by
+ * every transport: stdio here, and HTTP where the cockpit serves the agents it starts.
+ */
+export async function mcpReply(server: McpTools, text: string): Promise<object | null> {
   let message: unknown;
   try {
-    message = JSON.parse(line);
+    message = JSON.parse(text);
   } catch {
     return { jsonrpc: "2.0", id: null, ...failure(PARSE_ERROR, "Parse error") };
   }
@@ -165,7 +174,7 @@ export async function serveMcp(
   const pending = new Set<Promise<void>>();
   const take = (line: string) => {
     if (line.trim() === "") return;
-    const replied = reply(server, line).then((message) => {
+    const replied = mcpReply(server, line).then((message) => {
       if (message !== null) server.write(`${JSON.stringify(message)}\n`);
       pending.delete(replied);
     });

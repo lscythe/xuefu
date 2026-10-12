@@ -13,6 +13,7 @@ import {
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { SavedNote } from "../../application/notes/commands";
+import type { AgentHost } from "../../application/ports/agent";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
@@ -26,6 +27,7 @@ import { timerToggle } from "../../domain/timesheet/timer";
 import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
+import { AgentDialog } from "../agent/agent-dialog";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
 import { NoteEditor } from "../note-editor/note-editor";
@@ -44,7 +46,7 @@ import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
 import { paletteEntries } from "./palette-entries";
 import { noteKeys, sectionStatus, timerKeys } from "./panel-status";
-import type { SectionProps } from "./section-props";
+import type { AgentQuestionAbout, SectionProps } from "./section-props";
 import type { Section } from "./sections";
 import { fitsTerminal } from "./terminal-size";
 import { TodayPanel, todayTotal } from "./today-panel";
@@ -121,6 +123,8 @@ export interface ShellProps {
   /** Calls `listener` when another process, such as a CLI command, changes what is stored. */
   readonly onExternalChange: (listener: () => void) => () => void;
   readonly onQuit: () => void;
+  /** A coding agent to ask about the workspace in front; none when it is not installed. */
+  readonly agent?: AgentHost | null;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
   readonly tickMs?: number;
@@ -131,6 +135,12 @@ interface EditingNote {
   readonly workspace: Workspace;
   readonly issue: IssueKey | null;
   readonly text: string;
+}
+
+/** A conversation with the agent on screen. */
+interface AskingAgent extends AgentQuestionAbout {
+  readonly agent: AgentHost;
+  readonly workspace: Workspace;
 }
 
 /** The header's two rows, the panel's frame and the key bar. */
@@ -144,6 +154,8 @@ export function Shell(props: ShellProps) {
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [editing, setEditing] = createSignal<EditingNote | null>(null);
+  // A conversation with the agent, about the workspace it was started in.
+  const [asking, setAsking] = createSignal<AskingAgent | null>(null);
   // Which of the dashboard's panels has focus; kept while away from the dashboard.
   const [panel, setPanel] = createSignal(0);
   const [notice, setNotice] = createSignal<AppError | null>(null);
@@ -299,6 +311,14 @@ export function Shell(props: ShellProps) {
     return finished;
   };
 
+  /** Asks the agent about the workspace in front; null when there is no agent or no workspace. */
+  const askAgent = createMemo(() => {
+    const agent = props.agent ?? null;
+    const current = workspace();
+    if (agent === null || current === null) return null;
+    return (question: AgentQuestionAbout) => setAsking({ ...question, agent, workspace: current });
+  });
+
   /** Opens the editor on the front workspace's note, or on the note on its work in progress. */
   const editNote = (on: "workspace" | "issue") => {
     const current = workspace();
@@ -331,7 +351,7 @@ export function Shell(props: ShellProps) {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
     // note editor, which asks before Ctrl+C drops unsaved text.
-    if (editing() !== null || modal()) return;
+    if (editing() !== null || asking() !== null || modal()) return;
     const overlay = switcherOpen() || paletteOpen();
     if (action === null || (overlay && action.kind !== "interrupt")) return;
     // In a section, the arrows, j and k, digits and Enter are its own.
@@ -482,11 +502,12 @@ export function Shell(props: ShellProps) {
                       width={areaWidth() - PANEL_CHROME_COLUMNS}
                       rows={panelRows()}
                       icons={props.icons}
-                      focused={inSection()}
+                      focused={inSection() && asking() === null}
                       setStatus={setPluginStatus}
                       setKeys={setPluginKeys}
                       setModal={setModal}
                       report={setNotice}
+                      askAgent={askAgent()}
                     />
                   )}
                 </Match>
@@ -593,6 +614,16 @@ export function Shell(props: ShellProps) {
                   setPaletteOpen(false);
                   editNote(on);
                 },
+                askAgent:
+                  askAgent() === null
+                    ? null
+                    : {
+                        name: props.agent?.name ?? "",
+                        ask: (question) => {
+                          setPaletteOpen(false);
+                          askAgent()?.({ title: "Question", prompt: question });
+                        },
+                      },
                 quit: props.onQuit,
               },
             )}
@@ -608,6 +639,18 @@ export function Shell(props: ShellProps) {
               icons={props.icons}
               save={(text) => props.saveNote(note().workspace, note().issue, text)}
               onClose={() => setEditing(null)}
+            />
+          )}
+        </Show>
+        <Show when={asking()} keyed>
+          {(question: AskingAgent) => (
+            <AgentDialog
+              agent={question.agent}
+              title={question.title}
+              cwd={question.workspace.path}
+              prompt={question.prompt}
+              icons={props.icons}
+              onClose={() => setAsking(null)}
             />
           )}
         </Show>

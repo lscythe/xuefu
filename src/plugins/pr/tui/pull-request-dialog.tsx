@@ -21,6 +21,8 @@ export interface PullRequestDialogProps {
   readonly timeZone?: string | undefined;
   /** Opens the review: the diff and its comments. */
   readonly onReview: () => void;
+  /** Asks the coding agent to review it; null when there is no agent. */
+  readonly onAsk?: (() => void) | null;
   readonly onClose: () => void;
 }
 
@@ -130,6 +132,10 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
   const scroll = (to: number) => setTop(Math.max(0, Math.min(lastTop(), to)));
 
   useKeyboard((key) => {
+    if (key.shift && key.name === "a") {
+      props.onAsk?.();
+      return;
+    }
     switch (key.name) {
       case "escape":
       case "q":
@@ -170,7 +176,8 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
     const at = more
       ? `  ${Math.min(description().length, top() + room())}/${description().length}`
       : "";
-    return `${more ? (ascii() ? "j/k scroll  " : "↑↓ scroll  ") : ""}d diff  esc close${at}`;
+    const ask = props.onAsk == null ? "" : "A ask claude  ";
+    return `${more ? (ascii() ? "j/k scroll  " : "↑↓ scroll  ") : ""}d diff  ${ask}esc close${at}`;
   };
 
   return (
