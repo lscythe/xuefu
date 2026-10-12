@@ -19,6 +19,7 @@ import type {
 import type { CommentDraft, PullRequestComment } from "../../../../src/plugins/pr/domain/comment";
 import { prPlugin } from "../../../../src/plugins/pr/plugin";
 import { prView } from "../../../../src/plugins/pr/tui/pr-view";
+import type { AgentQuestionAbout } from "../../../../src/tui/shell/section-props";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
 import { fakeSecrets } from "../../../support/fake-secrets";
@@ -61,8 +62,11 @@ async function render(
     workspace?: Workspace | null;
     checkouts?: Record<string, Checkout | null>;
     refreshMs?: number;
+    /** Gives the view an agent to ask, recording what it asks. */
+    agent?: boolean;
   } = {},
 ) {
+  const asked: AgentQuestionAbout[] = [];
   const statuses: (string | null)[] = [];
   const keys: (string | null)[] = [];
   const modal: boolean[] = [];
@@ -99,6 +103,7 @@ async function render(
             setKeys={(next) => keys.push(next)}
             setModal={(open) => modal.push(open)}
             report={(error) => reported.push(error)}
+            askAgent={options.agent === true ? (question) => asked.push(question) : null}
           />
         </Show>
       </box>
@@ -107,6 +112,7 @@ async function render(
   );
   await setup.renderOnce();
   return Object.assign(setup, {
+    asked,
     statuses,
     keys,
     modal,
@@ -299,6 +305,52 @@ describe("prView", () => {
     expect(frame).toContain("No description.");
     view.mockInput.pressKey("q");
     await until(view, (f) => !f.includes("No description."));
+  });
+
+  test("A asks the agent to review the one under the cursor, from the list or its details", async () => {
+    const sent: unknown[] = [];
+    const view = await render(
+      fakePullRequests({ yours: YOURS, toReview: TO_REVIEW }, undefined, {
+        review: (...args) => {
+          sent.push(args);
+          return Promise.resolve(ok(undefined));
+        },
+      }),
+      { focused: true, agent: true },
+    );
+    await until(view, (f) => f.includes("To review (1)") && f.includes("This branch"));
+    view.mockInput.pressArrow("up");
+    await until(view, () => lit(view).startsWith("mobile-banking#40"));
+    view.mockInput.pressKey("A");
+    await view.renderOnce();
+    expect(view.asked).toHaveLength(1);
+    expect(view.asked[0]?.title).toBe("Review MOB/mobile-banking#40");
+    expect(view.asked[0]?.prompt).toContain('pullRequest "MOB/mobile-banking#40"');
+    expect(view.asked[0]?.prompt).toContain("Do not comment on, approve or merge it");
+    // Shift+a is not a: nothing was approved.
+    expect(sent).toEqual([]);
+
+    view.mockInput.pressEnter();
+    const details = await until(view, (f) => f.includes("A ask claude"));
+    expect(details).toContain(" MOB/mobile-banking#40 ");
+    view.mockInput.pressKey("A");
+    await until(view, (f) => !f.includes("A ask claude"));
+    expect(view.asked).toHaveLength(2);
+    expect(view.modal.at(-1)).toBe(false);
+  });
+
+  test("without an agent, A does nothing and is not offered", async () => {
+    const view = await render(fakePullRequests({ yours: YOURS }), { focused: true });
+    await until(view, (f) => f.includes("Yours (2)"));
+    expect(view.keys.at(-1)).not.toContain("ask claude");
+    view.mockInput.pressKey("A");
+    view.mockInput.pressEnter();
+    const details = await until(view, (f) => f.includes("d diff"));
+    expect(details).not.toContain("ask claude");
+    view.mockInput.pressKey("A");
+    await view.renderOnce();
+    expect(view.captureCharFrame()).toContain("d diff");
+    expect(view.asked).toEqual([]);
   });
 
   test("a approves the one under the cursor once confirmed, and says so", async () => {

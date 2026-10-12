@@ -1,7 +1,11 @@
 import { afterEach, describe, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import type { AgentHost } from "../../../src/application/ports/agent";
 import type { TrackedTime } from "../../../src/application/timesheet/queries";
+import { approvalPrompt } from "../../../src/bootstrap/agent-host";
+import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
+import { mcpTools } from "../../../src/cli/mcp-tools";
 import type { Note, NoteBody } from "../../../src/domain/notes/note";
 import { storageError } from "../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
@@ -826,6 +830,83 @@ describe("screenshots", () => {
     screen.mockInput.pressArrow("down");
     await screen.waitForFrame((f) => f.includes("c comment"));
     expectScreenshot("pr-review", screen.captureSpans());
+  });
+
+  /** Claude reviewing a pull request: it reads, answers, then asks to post a comment if `asks`. */
+  const reviewer = (asks: boolean): AgentHost => ({
+    name: "Claude",
+    ask: (_question, { onEvent, approve }) => {
+      queueMicrotask(() => {
+        onEvent({ kind: "ready", model: "claude-opus-5-5" });
+        onEvent({
+          kind: "tool",
+          name: "pr_diff",
+          input: { pullRequest: "MOB/mobile-banking#42" },
+        });
+        onEvent({
+          kind: "tool",
+          name: "pr_comments",
+          input: { pullRequest: "MOB/mobile-banking#42" },
+        });
+        onEvent({
+          kind: "tool",
+          name: "Read",
+          input: { file_path: "/work/mobile-banking/app/src/Login.kt" },
+        });
+        onEvent({
+          kind: "text",
+          text:
+            "One risk, two smaller points.\n\n" +
+            "1. app/src/Login.kt:11: prompt() is called before the biometric check is " +
+            "awaited, so a cancelled prompt still signs in. Await authenticate() first.\n" +
+            "2. app/src/Login.kt:12: the PIN fallback has no attempt limit.\n" +
+            "3. docs/login.md is new but not linked from the README.\n\n" +
+            "Fox's thread on line 11 asks the same; it is still open.",
+        });
+        onEvent({ kind: "turn", costUsd: 0.0731, failed: null });
+        if (asks) {
+          const input = {
+            pullRequest: "MOB/mobile-banking#42",
+            file: "app/src/Login.kt",
+            line: 11,
+            message: "Await authenticate() before prompt(), or a cancelled prompt signs in.",
+            yes: true,
+          };
+          onEvent({ kind: "tool", name: "pr_comment", input });
+          // Asked as the cockpit asks, from XueFu's own tools.
+          void approve(
+            approvalPrompt("Claude", mcpTools(PLUGIN_COMMANDS), "mcp__xuefu__pr_comment", input),
+          );
+        }
+      });
+      return ok({ send: () => undefined, stop: () => undefined });
+    },
+  });
+
+  test("pull requests, Claude reviewing one", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent: reviewer(false),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("A");
+    await screen.waitForFrame((f) => f.includes("Ask Claude more"));
+    expectScreenshot("pr-agent", screen.captureSpans());
+  });
+
+  test("pull requests, Claude asking before it comments", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent: reviewer(true),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("A");
+    await screen.waitForFrame((f) => f.includes("enter allow"));
+    expectScreenshot("pr-agent-approval", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

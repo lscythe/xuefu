@@ -84,6 +84,7 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `a` `n` `u`    | in PRs: approve the pull request under the cursor, ask for changes, or withdraw either |
 | `m`            | in PRs: merge the pull request under the cursor, once Bitbucket allows |
 | `d`            | in PRs: review the pull request under the cursor, its diff with the comments on it |
+| `A`            | in PRs: ask Claude to review the pull request under the cursor (with Claude Code installed) |
 | `c` `C`        | in a review: comment on the line under the cursor or reply, or comment on the whole |
 | `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
@@ -232,6 +233,21 @@ a workspace. Plugins that are off or not set up add no tools. Reads, such as `pr
 change something are marked too, so the harness asks you first. Those that ask first on the command
 line also ask the agent: without `yes`, the tool answers with what it would do, and the agent is
 told to show you and call again with `yes` only once you agree.
+
+### Claude in the cockpit
+
+With [Claude Code](https://claude.com/claude-code) on your PATH, the cockpit asks it directly, as
+you are signed in to it, with nothing to set up. In PRs, `A` asks Claude to review the pull request
+under the cursor; from the palette, "Ask Claude" takes any question about the workspace in front.
+The conversation opens in a dialog: what Claude says and each tool it uses show as it works, and
+once it has answered, Enter sends a follow-up. Esc closes it and stops Claude.
+
+Claude runs headless in the workspace's folder, with XueFu's tools served to it alone over a local
+endpoint for as long as the conversation lasts, and no other MCP servers. It may read the folder's
+files and run XueFu's reads freely; it cannot edit files or run commands. Anything else, such as
+commenting on or approving a pull request, is put to you in XueFu first, showing the command and
+exactly what it would be passed, and runs only if you allow it. The conversation is not saved to
+Claude Code's history.
 
 ## Development
 
