@@ -54,8 +54,18 @@ const BuildStatsSchema = z.object({
   failed: z.number().int().default(0),
   inProgress: z.number().int().default(0),
 });
-const ErrorsSchema = z.object({ errors: z.array(z.object({ message: z.string() })).optional() });
+const VetoSchema = z.object({ summaryMessage: z.string() });
+const ErrorsSchema = z.object({
+  errors: z
+    .array(z.object({ message: z.string(), vetoes: z.array(VetoSchema).optional() }))
+    .optional(),
+});
 const UsersSchema = z.object({ values: z.array(z.object({ name: z.string(), slug: z.string() })) });
+const MergeabilitySchema = z.object({
+  canMerge: z.boolean(),
+  conflicted: z.boolean().default(false),
+  vetoes: z.array(VetoSchema).default([]),
+});
 
 const STATES: Readonly<Record<string, PullRequestState>> = {
   OPEN: "open",
@@ -72,11 +82,17 @@ const REVIEW_STATUSES: Readonly<Record<ReviewStatus, string>> = {
   unapproved: "UNAPPROVED",
 };
 
-/** The first thing the server said was wrong, when it said anything. */
+/**
+ * The first thing the server said was wrong, when it said anything, with what each merge check
+ * that vetoed it says.
+ */
 function bitbucketSays(response: HttpResponse): string | null {
   try {
     const parsed = ErrorsSchema.safeParse(JSON.parse(response.body));
-    return parsed.success ? (parsed.data.errors?.[0]?.message ?? null) : null;
+    const first = parsed.success ? parsed.data.errors?.[0] : undefined;
+    if (first === undefined) return null;
+    const vetoes = (first.vetoes ?? []).map((veto) => veto.summaryMessage);
+    return vetoes.length === 0 ? first.message : `${first.message} (${vetoes.join("; ")})`;
   } catch {
     return null;
   }
@@ -138,7 +154,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         return remoteError("Bitbucket refused the request", host, 403, {
           hint:
             response.headers["x-authentication-denied-reason"] === undefined
-              ? "The token may not be allowed to read this; it needs read access to the repositories."
+              ? "The token may not be allowed to do this: reading and reviewing take read access to the repository, merging takes write access."
               : "Bitbucket wants a CAPTCHA after failed logins: log in once in a browser, then try again.",
         });
       case 429:
@@ -301,6 +317,33 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       const reviewed = decode(answered.value, z.unknown());
       if (!reviewed.ok) return gone(reviewed, repository, id);
       return ok(undefined);
+    },
+
+    async mergeability(repository, id, signal) {
+      const found = await get(
+        `${repoPath(repository)}/pull-requests/${id}/merge`,
+        MergeabilitySchema,
+        signal,
+      );
+      if (!found.ok) return gone(found, repository, id);
+      return ok({
+        canMerge: found.value.canMerge,
+        conflicted: found.value.conflicted,
+        vetoes: found.value.vetoes.map((veto) => veto.summaryMessage),
+      });
+    },
+
+    async merge(repository, id, version, signal) {
+      const query = new URLSearchParams({ version: String(version) });
+      const answered = await send(
+        "POST",
+        `${repoPath(repository)}/pull-requests/${id}/merge?${query}`,
+        signal,
+        {},
+      );
+      if (!answered.ok) return answered;
+      const merged = decode(answered.value, PullRequestSchema);
+      return merged.ok ? ok(toPullRequest(merged.value)) : gone(merged, repository, id);
     },
 
     builds(commit, signal) {

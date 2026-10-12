@@ -255,9 +255,8 @@ describe("prView", () => {
       { focused: true },
     );
     await until(view, (f) => f.includes("To review (1)") && f.includes("This branch"));
-    expect(view.keys.at(-1)).toBe(
-      "enter details · a approve · n needs work · u withdraw · r refresh",
-    );
+    // Too narrow for every key: the least used, u, is left out.
+    expect(view.keys.at(-1)).toBe("enter details · a approve · n needs work · m merge · r refresh");
     await until(view, () => lit(view).startsWith("mobile-banking#42"));
     view.mockInput.pressArrow("up");
     await until(view, () => lit(view).startsWith("mobile-banking#40"));
@@ -356,6 +355,53 @@ describe("prView", () => {
       [42, "unapproved"],
     ]);
     expect(view.reported).toEqual([refused]);
+  });
+
+  test("m merges once Bitbucket says it can, asking first, of the version that was read", async () => {
+    const merged: unknown[][] = [];
+    const base = fakePullRequests({ yours: [pullRequest(42, { version: 7 })] });
+    const view = await render(
+      {
+        ...base,
+        merge: (repository, id, version) => {
+          merged.push([id, version]);
+          return base.merge(repository, id, version);
+        },
+      },
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressKey("m");
+    const frame = await until(view, (f) => f.includes("Merge MOB/mobile-banking#42"));
+    expect(frame).toContain("feature/change-42 → main");
+    expect(frame).toContain("Merges feature/change-42 into main on Bitbucket");
+    view.mockInput.pressKey("y");
+    await until(view, (f) => f.includes("✓ Merged mobile-banking#42 into main."));
+    expect(merged).toEqual([[42, 7]]);
+  });
+
+  test("m on one that cannot be merged yet says why, and asks nothing", async () => {
+    let merges = 0;
+    const view = await render(
+      fakePullRequests({ yours: YOURS }, undefined, {
+        mergeability: () =>
+          Promise.resolve(
+            ok({ canMerge: false, conflicted: true, vetoes: ["Requires 2 approvals"] }),
+          ),
+        merge: () => {
+          merges += 1;
+          return new Promise(() => undefined);
+        },
+      }),
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("Yours (2)") && f.includes("This branch"));
+    view.mockInput.pressKey("m");
+    await until(view, (f) =>
+      f.includes("⚠ MOB/mobile-banking#42 cannot be merged yet: it conflicts"),
+    );
+    expect(view.modal).toEqual([]);
+    expect(merges).toBe(0);
   });
 
   test("closing the section with the dialog open hands the keys back", async () => {

@@ -79,7 +79,55 @@ export function prActions(client: PullRequestClient) {
       ),
   });
 
-  return { review };
+  const merge = defineCommand({
+    name: "pr.merge",
+    title: "Merge pull request",
+    category: "Pull requests",
+    safety: "confirm",
+    input: z.strictObject({
+      ...PullRequestInput,
+      /** Its version when it was looked at; the merge is of it. */
+      version: z.int().min(0),
+      from: z.string().min(1).max(255),
+      to: z.string().min(1).max(255),
+    }),
+    describe: (input) => {
+      const ref = pullRequestRef({ repository: input, id: input.id });
+      return {
+        title: `Merge ${ref}`,
+        severity: "confirm",
+        details: [
+          { label: "Pull request", value: ref },
+          { label: "Title", value: input.title },
+          { label: "Branches", value: `${input.from} → ${input.to}` },
+        ],
+        consequence: `Merges ${input.from} into ${input.to} on Bitbucket, for everyone; it is not undone by XueFu.`,
+        confirmLabel: "Merge",
+      };
+    },
+    handler: (input, context) =>
+      client.merge(
+        { project: input.project, slug: input.slug },
+        input.id,
+        input.version,
+        context.signal,
+      ),
+  });
+
+  return { review, merge };
+}
+
+/** What `pr.merge` takes for a pull request. */
+export function mergeInput(pull: PullRequest) {
+  return {
+    project: pull.repository.project,
+    slug: pull.repository.slug,
+    id: pull.id,
+    title: pull.title,
+    version: pull.version,
+    from: pull.from,
+    to: pull.to,
+  };
 }
 
 type PrActions = ReturnType<typeof prActions>;

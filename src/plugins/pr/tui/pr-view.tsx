@@ -21,8 +21,9 @@ import { fitHints } from "../../../tui/shell/panel-status";
 import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
-import { type PrChanges, reviewInput } from "../application/actions";
+import { mergeInput, type PrChanges, reviewInput } from "../application/actions";
 import { branchPullRequest, whyNoPullRequest } from "../application/branch-pull-request";
+import { readyToMerge } from "../application/merge";
 import type { PullRequest, ReviewStatus } from "../domain/pull-request";
 import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
 import { PullRequestDialog } from "./pull-request-dialog";
@@ -55,8 +56,8 @@ const REVIEWED: Readonly<Record<ReviewStatus, string>> = {
  * waiting on your review, read when it opens and every `refreshMs` while it stays open. Reads
  * never overlap, and one still running when the section closes is stopped. A failed refresh keeps
  * what was last read and says why above it. With the keyboard, Enter shows the pull request under
- * the cursor; `a` approves it, `n` asks for changes and `u` withdraws either, each asking first;
- * and `r` reads everything again.
+ * the cursor; `a` approves it, `n` asks for changes, `u` withdraws either, and `m` merges it once
+ * Bitbucket says it can be, each asking first; and `r` reads everything again.
  */
 export function prView(section: PrSection): Component<SectionProps> {
   const { client, invoke, actions, maxResults, refreshMs, timeZone } = section;
@@ -183,10 +184,11 @@ export function prView(section: PrSection): Component<SectionProps> {
                   { text: "enter details", rank: 0 },
                   { text: "a approve", rank: 1 },
                   { text: "n needs work", rank: 2 },
-                  { text: "u withdraw", rank: 4 },
+                  { text: "m merge", rank: 3 },
+                  { text: "u withdraw", rank: 5 },
                 ]
               : []),
-            { text: "r refresh", rank: 3 },
+            { text: "r refresh", rank: 4 },
           ],
           props.width - 2,
           ascii(),
@@ -207,6 +209,32 @@ export function prView(section: PrSection): Component<SectionProps> {
         return;
       }
       setBanner({ kind: "success", text: `${REVIEWED[status]} ${shortRef(pull)}.` });
+      void load();
+    };
+
+    /**
+     * Merges the pull request once Bitbucket says it can be, asking first, then reads the lists
+     * again. When it cannot be merged yet, why is said above the list.
+     */
+    const merge = async (pull: PullRequest) => {
+      setBusy(true);
+      setBanner({ kind: "running", text: `Checking ${shortRef(pull)} can be merged...` });
+      const ready = await readyToMerge(client, pull);
+      if (!ready.ok) {
+        setBusy(false);
+        const { message, hint } = ready.error;
+        setBanner({ kind: "warning", text: hint === undefined ? message : `${message}: ${hint}` });
+        return;
+      }
+      setBanner(null);
+      const merged = await confirmed((options) => invoke(actions.merge, mergeInput(pull), options));
+      setBusy(false);
+      if (merged === null) return;
+      if (!merged.ok) {
+        props.report(merged.error);
+        return;
+      }
+      setBanner({ kind: "success", text: `Merged ${shortRef(pull)} into ${pull.to}.` });
       void load();
     };
 
@@ -241,6 +269,11 @@ export function prView(section: PrSection): Component<SectionProps> {
           const status =
             key.name === "a" ? "approved" : key.name === "n" ? "needs-work" : "unapproved";
           if (row !== null) void review(row.pull, status);
+          return;
+        }
+        case "m": {
+          const row = selected();
+          if (row !== null) void merge(row.pull);
           return;
         }
         case "r":

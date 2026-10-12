@@ -8,7 +8,10 @@ import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import type { Checkout, CheckoutReader } from "../../../../src/plugins/pr/application/checkout";
-import type { PullRequestClient } from "../../../../src/plugins/pr/application/pull-request-client";
+import type {
+  Mergeability,
+  PullRequestClient,
+} from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
 import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
 
@@ -307,6 +310,76 @@ describe("xuefu pr approve, needs-work and unapprove", () => {
     );
     expect(shown.code).toEqual(err(refused));
     expect(shown.stdout).toBe("");
+  });
+});
+
+describe("xuefu pr merge", () => {
+  const PULL = pullRequest(42, { version: 7, from: "feature/MOB-2841", title: "Add login" });
+  /** A server that records each merge it is sent, answering mergeability as `can`. */
+  const merging = (can: Partial<Mergeability> = {}, pull = PULL) => {
+    const sent: unknown[][] = [];
+    const base = fakePullRequests({ yours: [pull] });
+    const client: PullRequestClient = {
+      ...base,
+      mergeability: () =>
+        Promise.resolve(ok({ canMerge: true, conflicted: false, vetoes: [], ...can })),
+      merge: (repository, id, version) => {
+        sent.push([id, version]);
+        return base.merge(repository, id, version);
+      },
+    };
+    return { client, sent };
+  };
+
+  test("--yes merges it, of the version that was read", async () => {
+    const { client, sent } = merging();
+    const done = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code).toEqual(ok(0));
+    expect(sent).toEqual([[42, 7]]);
+    expect(done.stdout).toBe("✓ Merged MOB/mobile-banking#42 (Add login) into main\n");
+  });
+
+  test("without --yes, asks first, naming the branches", async () => {
+    const { client, sent } = merging();
+    const asked = await run(client, "merge", ["MOB/mobile-banking#42"]);
+    const error = asked.code.ok ? null : asked.code.error;
+    expect(error?.kind === "confirmation-required" ? error.prompt : null).toMatchObject({
+      title: "Merge MOB/mobile-banking#42",
+      details: [
+        { label: "Pull request", value: "MOB/mobile-banking#42" },
+        { label: "Title", value: "Add login" },
+        { label: "Branches", value: "feature/MOB-2841 → main" },
+      ],
+      consequence:
+        "Merges feature/MOB-2841 into main on Bitbucket, for everyone; it is not undone by XueFu.",
+    });
+    expect(sent).toEqual([]);
+  });
+
+  test("one Bitbucket will not merge yet says why, before asking anything", async () => {
+    const { client, sent } = merging({
+      canMerge: false,
+      conflicted: true,
+      vetoes: ["Requires 2 approvals", "Not all required builds are successful yet"],
+    });
+    const refused = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(refused.code.ok ? null : refused.code.error).toMatchObject({
+      kind: "conflict",
+      message: "MOB/mobile-banking#42 cannot be merged yet",
+      hint: "it conflicts with main; merge main into feature/MOB-2841 first; Requires 2 approvals; Not all required builds are successful yet.",
+    });
+    expect(sent).toEqual([]);
+    const silent = await run(merging({ canMerge: false }).client, "merge", [
+      "MOB/mobile-banking#42",
+    ]);
+    expect(silent.code.ok ? null : silent.code.error.hint).toBe("Bitbucket did not say why.");
+  });
+
+  test("one already merged or declined is not offered", async () => {
+    const { client, sent } = merging({}, { ...PULL, state: "merged" });
+    const done = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code.ok ? null : done.code.error.message).toBe("MOB/mobile-banking#42 is merged");
+    expect(sent).toEqual([]);
   });
 });
 

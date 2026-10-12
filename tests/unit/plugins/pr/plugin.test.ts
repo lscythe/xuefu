@@ -100,6 +100,7 @@ describe("prPlugin settings", () => {
     expect(registerPluginActions(context.bus, [{ plugin: prPlugin, parts }]).ok).toBe(true);
     expect(parts.actions?.map((action) => [action.name, action.safety])).toEqual([
       ["pr.review", "confirm"],
+      ["pr.merge", "confirm"],
     ]);
   });
 

@@ -757,6 +757,18 @@ describe("screenshots", () => {
     expectScreenshot("pr-details", screen.captureSpans());
   });
 
+  test("pull requests, asking before a merge", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("m");
+    await screen.waitForFrame((f) => f.includes("enter merge"));
+    expectScreenshot("pr-merge", screen.captureSpans());
+  });
+
   test("git, not a repository, at 80 columns", async () => {
     const screen = await shell(
       {

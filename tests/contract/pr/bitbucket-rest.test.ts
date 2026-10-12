@@ -255,6 +255,76 @@ describe("bitbucket REST 1.0: reviews", () => {
   });
 });
 
+describe("bitbucket REST 1.0: merging", () => {
+  const MERGE = "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42/merge";
+
+  test("whether it can be merged, and what stands in the way", async () => {
+    requests.length = 0;
+    answer = () =>
+      Response.json({
+        canMerge: false,
+        conflicted: true,
+        outcome: "CONFLICTED",
+        vetoes: [
+          {
+            summaryMessage: "Requires 2 approvals",
+            detailedMessage: "You need 2 approvals before this pull request can be merged.",
+          },
+        ],
+      });
+    expect(await client().mergeability(REPO, 42)).toEqual(
+      ok({ canMerge: false, conflicted: true, vetoes: ["Requires 2 approvals"] }),
+    );
+    expect(`${requests[0]?.method} ${new URL(requests[0]?.url ?? "").pathname}`).toBe(
+      `GET ${MERGE}`,
+    );
+    answer = () =>
+      Response.json({ canMerge: true, conflicted: false, outcome: "CLEAN", vetoes: [] });
+    expect(await client().mergeability(REPO, 42)).toEqual(
+      ok({ canMerge: true, conflicted: false, vetoes: [] }),
+    );
+  });
+
+  test("merges it at the version that was read, answering with the merged pull request", async () => {
+    requests.length = 0;
+    const merged = { ...(await fixture("pull-request").json()), state: "MERGED" };
+    answer = () => Response.json(merged);
+    const done = await client().merge(REPO, 42, 3);
+    const sent = new URL(requests[0]?.url ?? "");
+    expect(`${requests[0]?.method} ${sent.pathname}`).toBe(`POST ${MERGE}`);
+    expect(sent.searchParams.get("version")).toBe("3");
+    expect(JSON.parse(requests[0]?.body ?? "")).toEqual({});
+    expect(done.ok && done.value.state).toBe("merged");
+  });
+
+  test("a refused merge says what Bitbucket and its merge checks said", async () => {
+    answer = status(409, {
+      errors: [
+        {
+          message: "Merging the pull request has been vetoed.",
+          vetoes: [
+            { summaryMessage: "Requires 2 approvals", detailedMessage: "..." },
+            {
+              summaryMessage: "Not all required builds are successful yet",
+              detailedMessage: "...",
+            },
+          ],
+        },
+      ],
+    });
+    const refused = await client().merge(REPO, 42, 3);
+    expect(refused.ok ? null : refused.error).toMatchObject({
+      kind: "remote",
+      status: 409,
+      message:
+        "Bitbucket answered 409: Merging the pull request has been vetoed. (Requires 2 approvals; Not all required builds are successful yet)",
+    });
+    answer = status(404);
+    const missing = await client().mergeability(REPO, 42);
+    expect(missing.ok ? null : missing.error.kind).toBe("not-found");
+  });
+});
+
 describe("bitbucket REST 1.0: refusals", () => {
   test.each([
     [401, {}, "Bitbucket did not accept the token", "HTTP access token"],

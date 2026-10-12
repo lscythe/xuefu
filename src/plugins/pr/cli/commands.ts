@@ -10,12 +10,13 @@ import type {
 import { ok, type Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
-import { type PrChanges, reviewInput } from "../application/actions";
+import { mergeInput, type PrChanges, reviewInput } from "../application/actions";
 import {
   type BranchPullRequestDependencies,
   branchPullRequest,
   whyNoPullRequest,
 } from "../application/branch-pull-request";
+import { readyToMerge } from "../application/merge";
 import {
   type BuildSummary,
   type PullRequest,
@@ -68,6 +69,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
   change("approve", "Approve a pull request"),
   change("needs-work", "Ask for changes on a pull request"),
   change("unapprove", "Withdraw your approval of, or request for changes on, a pull request"),
+  change("merge", "Merge a pull request, once Bitbucket says it can be"),
 ];
 
 const REVIEWED: Readonly<Record<string, readonly [ReviewStatus, string]>> = {
@@ -204,6 +206,20 @@ export function prCommands(changes: PrChanges, maxResults: number): PluginComman
       );
       if (!sent.ok) return sent;
       io.stdout(`✓ ${done} ${pullRequestRef(pull)} (${pull.title})\n`);
+      return ok(0);
+    }
+    if (invocation.name === "merge") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const pull = found.value;
+      const ready = await readyToMerge(client, pull);
+      if (!ready.ok) return ready;
+      const merged = await confirmed(
+        (options) => invoke(actions.merge, mergeInput(pull), options),
+        invocation,
+      );
+      if (!merged.ok) return merged;
+      io.stdout(`✓ Merged ${pullRequestRef(pull)} (${pull.title}) into ${pull.to}\n`);
       return ok(0);
     }
     if (invocation.name === "show") {

@@ -73,7 +73,7 @@ export const prPlugin = definePlugin({
     };
     return {
       commands: prCommands(changes, settings.maxResults),
-      actions: [actions.review],
+      actions: [actions.review, actions.merge],
       view: lazy(async () => {
         const { prView } = await import("./tui/pr-view");
         return {

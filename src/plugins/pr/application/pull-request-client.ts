@@ -47,6 +47,30 @@ export interface PullRequestClient {
     commit: string,
     signal?: AbortSignal,
   ): Promise<Result<void, PullRequestFailure>>;
+  /** Whether it can be merged now, and if not, why not. */
+  mergeability(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<Mergeability, PullRequestFailure>>;
+  /**
+   * Merges it as the repository merges by default. It is of `version`, the one that was read, so a
+   * pull request that has changed since is refused.
+   */
+  merge(
+    repository: Repository,
+    id: number,
+    version: number,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequest, PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
+}
+
+export interface Mergeability {
+  readonly canMerge: boolean;
+  /** Whether merging would conflict. */
+  readonly conflicted: boolean;
+  /** What the repository's merge checks say stands in the way, such as approvals still wanted. */
+  readonly vetoes: readonly string[];
 }

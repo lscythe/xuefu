@@ -10,6 +10,7 @@ import {
   type BuildSummary,
   type PullRequest,
   pullRequestRef,
+  type Repository,
 } from "../../src/plugins/pr/domain/pull-request";
 import { pluginContext } from "./plugin-context";
 
@@ -50,18 +51,17 @@ export function fakePullRequests(
     pullRequests: pulls.slice(0, max),
     more: pulls.length > max,
   });
+  const find = (repository: Repository, id: number) => {
+    const found = [...yours, ...toReview].find(
+      (pull) => pullRequestRef(pull) === pullRequestRef({ repository, id }),
+    );
+    return found === undefined
+      ? err(notFound("pull request", pullRequestRef({ repository, id })))
+      : ok(found);
+  };
   return {
     mine: (role, max) => Promise.resolve(ok(page(role === "author" ? yours : toReview, max))),
-    pullRequest: (repository, id) => {
-      const found = [...yours, ...toReview].find(
-        (pull) => pullRequestRef(pull) === pullRequestRef({ repository, id }),
-      );
-      return Promise.resolve(
-        found === undefined
-          ? err(notFound("pull request", pullRequestRef({ repository, id })))
-          : ok(found),
-      );
-    },
+    pullRequest: (repository, id) => Promise.resolve(find(repository, id)),
     forBranch: (repository, branch) =>
       Promise.resolve(
         ok(
@@ -74,6 +74,11 @@ export function fakePullRequests(
         ),
       ),
     review: () => Promise.resolve(ok(undefined)),
+    mergeability: () => Promise.resolve(ok({ canMerge: true, conflicted: false, vetoes: [] })),
+    merge: (repository, id) => {
+      const found = find(repository, id);
+      return Promise.resolve(found.ok ? ok({ ...found.value, state: "merged" as const }) : found);
+    },
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };
@@ -96,7 +101,8 @@ export function prChanges(
 ): PrChanges {
   const { bus } = pluginContext();
   const actions = prActions(client);
-  for (const action of Object.values(actions)) bus.register(action);
+  bus.register(actions.review);
+  bus.register(actions.merge);
   return {
     client,
     checkouts,
