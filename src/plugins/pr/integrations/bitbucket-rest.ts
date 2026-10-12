@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HttpClient, HttpResponse } from "../../../application/ports/http-client";
+import type { HttpClient, HttpRequest, HttpResponse } from "../../../application/ports/http-client";
 import type { SecretFailure } from "../../../application/ports/secret-provider";
 import { notFound, type RemoteError, remoteError } from "../../../domain/shared/errors";
 import { err, ok, type Result } from "../../../domain/shared/result";
@@ -28,6 +28,7 @@ const ParticipantSchema = z.object({
 /** A pull request as REST 1.0 sends it; only what XueFu shows is read, the rest is ignored. */
 const PullRequestSchema = z.object({
   id: z.number().int(),
+  version: z.number().int(),
   title: z.string(),
   description: z.string().nullish(),
   state: z.string(),
@@ -53,7 +54,18 @@ const BuildStatsSchema = z.object({
   failed: z.number().int().default(0),
   inProgress: z.number().int().default(0),
 });
-const ErrorsSchema = z.object({ errors: z.array(z.object({ message: z.string() })).optional() });
+const VetoSchema = z.object({ summaryMessage: z.string() });
+const ErrorsSchema = z.object({
+  errors: z
+    .array(z.object({ message: z.string(), vetoes: z.array(VetoSchema).optional() }))
+    .optional(),
+});
+const UsersSchema = z.object({ values: z.array(z.object({ name: z.string(), slug: z.string() })) });
+const MergeabilitySchema = z.object({
+  canMerge: z.boolean(),
+  conflicted: z.boolean().default(false),
+  vetoes: z.array(VetoSchema).default([]),
+});
 
 const STATES: Readonly<Record<string, PullRequestState>> = {
   OPEN: "open",
@@ -64,12 +76,23 @@ const REVIEWS: Readonly<Record<string, ReviewStatus>> = {
   APPROVED: "approved",
   NEEDS_WORK: "needs-work",
 };
+const REVIEW_STATUSES: Readonly<Record<ReviewStatus, string>> = {
+  approved: "APPROVED",
+  "needs-work": "NEEDS_WORK",
+  unapproved: "UNAPPROVED",
+};
 
-/** The first thing the server said was wrong, when it said anything. */
+/**
+ * The first thing the server said was wrong, when it said anything, with what each merge check
+ * that vetoed it says.
+ */
 function bitbucketSays(response: HttpResponse): string | null {
   try {
     const parsed = ErrorsSchema.safeParse(JSON.parse(response.body));
-    return parsed.success ? (parsed.data.errors?.[0]?.message ?? null) : null;
+    const first = parsed.success ? parsed.data.errors?.[0] : undefined;
+    if (first === undefined) return null;
+    const vetoes = (first.vetoes ?? []).map((veto) => veto.summaryMessage);
+    return vetoes.length === 0 ? first.message : `${first.message} (${vetoes.join("; ")})`;
   } catch {
     return null;
   }
@@ -97,6 +120,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
     return {
       repository,
       id: raw.id,
+      version: raw.version,
       title: raw.title,
       description: raw.description ?? null,
       state: STATES[raw.state] ?? "open",
@@ -130,7 +154,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         return remoteError("Bitbucket refused the request", host, 403, {
           hint:
             response.headers["x-authentication-denied-reason"] === undefined
-              ? "The token may not be allowed to read this; it needs read access to the repositories."
+              ? "The token may not be allowed to do this: reading and reviewing take read access to the repository, merging takes write access."
               : "Bitbucket wants a CAPTCHA after failed logins: log in once in a browser, then try again.",
         });
       case 429:
@@ -146,25 +170,32 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
     }
   };
 
-  /** GETs a path, decoding a 200 with `schema`. */
-  const get = async <T>(
+  /** Sends a request with the token; any answer is returned, whatever its status. */
+  const send = async (
+    method: HttpRequest["method"],
     path: string,
-    schema: z.ZodType<T>,
     signal: AbortSignal | undefined,
-  ): Promise<Result<T, PullRequestFailure>> => {
+    body?: unknown,
+  ): Promise<Result<HttpResponse, PullRequestFailure>> => {
     const token = await options.token();
     if (!token.ok) return token;
-    const answered = await http.request(
+    return http.request(
       {
-        method: "GET",
+        method,
         url: `${url}${path}`,
         headers: { Authorization: `Bearer ${token.value.reveal()}` },
+        ...(body === undefined ? {} : { body }),
       },
       { timeoutMs: TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) },
     );
-    if (!answered.ok) return answered;
-    const response = answered.value;
-    if (response.status !== 200) return err(refused(response));
+  };
+
+  /** Decodes a successful answer with `schema`; any other is a refusal. */
+  const decode = <T>(
+    response: HttpResponse,
+    schema: z.ZodType<T>,
+  ): Result<T, PullRequestFailure> => {
+    if (response.status < 200 || response.status > 299) return err(refused(response));
     let json: unknown;
     try {
       json = JSON.parse(response.body);
@@ -175,11 +206,62 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
     return parsed.success
       ? ok(parsed.data)
       : err(
-          remoteError("Bitbucket's answer was not what XueFu expects", host, 200, {
+          remoteError("Bitbucket's answer was not what XueFu expects", host, response.status, {
             hint: "Is plugins.pr.url the address of Bitbucket Data Center itself?",
           }),
         );
   };
+
+  /** GETs a path, decoding the answer with `schema`. */
+  const get = async <T>(
+    path: string,
+    schema: z.ZodType<T>,
+    signal: AbortSignal | undefined,
+  ): Promise<Result<T, PullRequestFailure>> => {
+    const answered = await send("GET", path, signal);
+    return answered.ok ? decode(answered.value, schema) : answered;
+  };
+
+  // The token's user, as the slug Bitbucket's addresses name users by; read once.
+  let me: string | null = null;
+  const whoAmI = async (
+    signal: AbortSignal | undefined,
+  ): Promise<Result<string, PullRequestFailure>> => {
+    if (me !== null) return ok(me);
+    // Bitbucket names the user it signed in in a header of each answer.
+    const answered = await send("GET", "/rest/api/1.0/application-properties", signal);
+    if (!answered.ok) return answered;
+    if (answered.value.status !== 200) return err(refused(answered.value));
+    const name = answered.value.headers["x-ausername"];
+    if (name === undefined || name === "") {
+      return err(
+        remoteError("Bitbucket did not say whose the token is", host, answered.value.status, {
+          hint: "Is plugins.pr.url the address of Bitbucket Data Center itself?",
+        }),
+      );
+    }
+    const query = new URLSearchParams({ filter: name, limit: "100" });
+    const users = await get(`/rest/api/1.0/users?${query}`, UsersSchema, signal);
+    if (!users.ok) return users;
+    const found = users.value.values.find((user) => user.name === name);
+    if (found === undefined) return err(notFound("user", name));
+    me = found.slug;
+    return ok(me);
+  };
+
+  /** A failure about one pull request, where a 404 means it is not there to read. */
+  const gone = (
+    failed: { readonly error: PullRequestFailure },
+    repository: Repository,
+    id: number,
+  ): Result<never, PullRequestFailure> =>
+    err(
+      failed.error.kind === "remote" && failed.error.status === 404
+        ? notFound("pull request", pullRequestRef({ repository, id }), {
+            hint: "Check the project, repository and number, and that your token can read it.",
+          })
+        : failed.error,
+    );
 
   const repoPath = (repository: Repository) =>
     `/rest/api/1.0/projects/${encodeURIComponent(repository.project)}/repos/${encodeURIComponent(repository.slug)}`;
@@ -205,16 +287,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         PullRequestSchema,
         signal,
       );
-      if (!found.ok) {
-        return found.error.kind === "remote" && found.error.status === 404
-          ? err(
-              notFound("pull request", pullRequestRef({ repository, id }), {
-                hint: "Check the project, repository and number, and that your token can read it.",
-              }),
-            )
-          : found;
-      }
-      return ok(toPullRequest(found.value));
+      return found.ok ? ok(toPullRequest(found.value)) : gone(found, repository, id);
     },
 
     async forBranch(repository, branch, signal) {
@@ -228,6 +301,49 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       if (!found.ok) return found;
       const first = found.value.values[0];
       return ok(first === undefined ? null : toPullRequest(first));
+    },
+
+    async review(repository, id, status, commit, signal) {
+      const slug = await whoAmI(signal);
+      if (!slug.ok) return slug;
+      const answered = await send(
+        "PUT",
+        `${repoPath(repository)}/pull-requests/${id}/participants/${encodeURIComponent(slug.value)}`,
+        signal,
+        // Bound to the commit that was seen: a branch that moved since is refused.
+        { status: REVIEW_STATUSES[status], lastReviewedCommit: commit },
+      );
+      if (!answered.ok) return answered;
+      const reviewed = decode(answered.value, z.unknown());
+      if (!reviewed.ok) return gone(reviewed, repository, id);
+      return ok(undefined);
+    },
+
+    async mergeability(repository, id, signal) {
+      const found = await get(
+        `${repoPath(repository)}/pull-requests/${id}/merge`,
+        MergeabilitySchema,
+        signal,
+      );
+      if (!found.ok) return gone(found, repository, id);
+      return ok({
+        canMerge: found.value.canMerge,
+        conflicted: found.value.conflicted,
+        vetoes: found.value.vetoes.map((veto) => veto.summaryMessage),
+      });
+    },
+
+    async merge(repository, id, version, signal) {
+      const query = new URLSearchParams({ version: String(version) });
+      const answered = await send(
+        "POST",
+        `${repoPath(repository)}/pull-requests/${id}/merge?${query}`,
+        signal,
+        {},
+      );
+      if (!answered.ok) return answered;
+      const merged = decode(answered.value, PullRequestSchema);
+      return merged.ok ? ok(toPullRequest(merged.value)) : gone(merged, repository, id);
     },
 
     builds(commit, signal) {

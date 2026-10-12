@@ -2,7 +2,7 @@ import type { HttpFailure } from "../../../application/ports/http-client";
 import type { SecretFailure } from "../../../application/ports/secret-provider";
 import type { ConfigurationError, NotFoundError, RemoteError } from "../../../domain/shared/errors";
 import type { Result } from "../../../domain/shared/result";
-import type { BuildSummary, PullRequest, Repository } from "../domain/pull-request";
+import type { BuildSummary, PullRequest, Repository, ReviewStatus } from "../domain/pull-request";
 
 export type PullRequestFailure =
   | HttpFailure
@@ -17,7 +17,7 @@ export interface PullRequestPage {
   readonly more: boolean;
 }
 
-/** What XueFu reads from the server that hosts pull requests. */
+/** What XueFu reads from the server that hosts pull requests, and the changes it makes there. */
 export interface PullRequestClient {
   /** Open pull requests you wrote, or that ask for your review, newest first. */
   mine(
@@ -36,6 +36,41 @@ export interface PullRequestClient {
     branch: string,
     signal?: AbortSignal,
   ): Promise<Result<PullRequest | null, PullRequestFailure>>;
+  /**
+   * Sets your review: approved, asking for changes, or neither. It is of `commit`, the one that was
+   * looked at, so a branch that has moved since is refused.
+   */
+  review(
+    repository: Repository,
+    id: number,
+    status: ReviewStatus,
+    commit: string,
+    signal?: AbortSignal,
+  ): Promise<Result<void, PullRequestFailure>>;
+  /** Whether it can be merged now, and if not, why not. */
+  mergeability(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<Mergeability, PullRequestFailure>>;
+  /**
+   * Merges it as the repository merges by default. It is of `version`, the one that was read, so a
+   * pull request that has changed since is refused.
+   */
+  merge(
+    repository: Repository,
+    id: number,
+    version: number,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequest, PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
+}
+
+export interface Mergeability {
+  readonly canMerge: boolean;
+  /** Whether merging would conflict. */
+  readonly conflicted: boolean;
+  /** What the repository's merge checks say stands in the way, such as approvals still wanted. */
+  readonly vetoes: readonly string[];
 }

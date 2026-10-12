@@ -8,9 +8,12 @@ import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import type { Checkout, CheckoutReader } from "../../../../src/plugins/pr/application/checkout";
-import type { PullRequestClient } from "../../../../src/plugins/pr/application/pull-request-client";
+import type {
+  Mergeability,
+  PullRequestClient,
+} from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
-import { fakePullRequests, pullRequest } from "../../../support/fake-pull-requests";
+import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -43,7 +46,7 @@ async function run(
     },
   };
   const code: Result<number, AppError> = await prCommands(
-    { client, checkouts, host: "bitbucket.example.com" },
+    prChanges(client, checkouts),
     options.max ?? 25,
   )(
     { group: "pr", name, args, flags },
@@ -226,6 +229,157 @@ describe("xuefu pr show", () => {
     expect(bad.code.ok ? null : bad.code.error.kind).toBe("validation");
     const missing = await run(fakePullRequests(), "show", ["MOB/mobile-banking#9"]);
     expect(missing.code.ok ? null : missing.code.error.kind).toBe("not-found");
+  });
+});
+
+describe("xuefu pr approve, needs-work and unapprove", () => {
+  /** A server that records each review it is sent. */
+  const reviewing = () => {
+    const sent: unknown[][] = [];
+    const client = fakePullRequests({ toReview: [pullRequest(42)] }, undefined, {
+      review: (repository, id, status, commit) => {
+        sent.push([repository, id, status, commit]);
+        return Promise.resolve(ok(undefined));
+      },
+    });
+    return { client, sent };
+  };
+
+  test("without --yes, asks first: nothing is sent, and the prompt says what would happen", async () => {
+    const { client, sent } = reviewing();
+    const asked = await run(client, "approve", ["MOB/mobile-banking#42"]);
+    expect(sent).toEqual([]);
+    const error = asked.code.ok ? null : asked.code.error;
+    expect(error?.kind).toBe("confirmation-required");
+    expect(error?.kind === "confirmation-required" ? error.prompt : null).toEqual({
+      title: "Approve MOB/mobile-banking#42",
+      severity: "confirm",
+      details: [
+        { label: "Pull request", value: "MOB/mobile-banking#42" },
+        { label: "Title", value: "Change 42" },
+        { label: "Commit", value: "c0ffee42" },
+      ],
+      consequence: "Approves it on Bitbucket, where its author and reviewers will see it.",
+      confirmLabel: "Approve",
+    });
+  });
+
+  test.each([
+    ["approve", "approved", "✓ Approved MOB/mobile-banking#42 (Change 42)\n"],
+    ["needs-work", "needs-work", "✓ Asked for changes on MOB/mobile-banking#42 (Change 42)\n"],
+    ["unapprove", "unapproved", "✓ Withdrew your review of MOB/mobile-banking#42 (Change 42)\n"],
+  ])("%s --yes sends it, of the commit that was read", async (name, status, said) => {
+    const { client, sent } = reviewing();
+    const done = await run(client, name, ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code).toEqual(ok(0));
+    expect(sent).toEqual([[{ project: "MOB", slug: "mobile-banking" }, 42, status, "c0ffee42"]]);
+    expect(done.stdout).toBe(said);
+  });
+
+  test("without a ref, this branch's; with none, says why and sends nothing", async () => {
+    const { client, sent } = reviewing();
+    expect((await run(client, "approve", [], { yes: true })).code).toEqual(ok(0));
+    expect(sent.map(([, id]) => id)).toEqual([42]);
+    const none = await run(
+      client,
+      "approve",
+      [],
+      { yes: true },
+      {
+        checkout: { ...ON_BITBUCKET, branch: "spike" },
+      },
+    );
+    expect(none.code).toEqual(ok(1));
+    expect(none.stderr).toBe("No open pull request from spike in MOB/mobile-banking.\n");
+    expect(sent).toHaveLength(1);
+  });
+
+  test("a review the server refuses is the failure", async () => {
+    const refused = remoteError(
+      "Bitbucket answered 409: You cannot approve your own pull request",
+      "bitbucket.example.com",
+      409,
+    );
+    const shown = await run(
+      fakePullRequests({ yours: [pullRequest(42)] }, undefined, {
+        review: () => Promise.resolve(err(refused)),
+      }),
+      "approve",
+      ["MOB/mobile-banking#42"],
+      { yes: true },
+    );
+    expect(shown.code).toEqual(err(refused));
+    expect(shown.stdout).toBe("");
+  });
+});
+
+describe("xuefu pr merge", () => {
+  const PULL = pullRequest(42, { version: 7, from: "feature/MOB-2841", title: "Add login" });
+  /** A server that records each merge it is sent, answering mergeability as `can`. */
+  const merging = (can: Partial<Mergeability> = {}, pull = PULL) => {
+    const sent: unknown[][] = [];
+    const base = fakePullRequests({ yours: [pull] });
+    const client: PullRequestClient = {
+      ...base,
+      mergeability: () =>
+        Promise.resolve(ok({ canMerge: true, conflicted: false, vetoes: [], ...can })),
+      merge: (repository, id, version) => {
+        sent.push([id, version]);
+        return base.merge(repository, id, version);
+      },
+    };
+    return { client, sent };
+  };
+
+  test("--yes merges it, of the version that was read", async () => {
+    const { client, sent } = merging();
+    const done = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code).toEqual(ok(0));
+    expect(sent).toEqual([[42, 7]]);
+    expect(done.stdout).toBe("✓ Merged MOB/mobile-banking#42 (Add login) into main\n");
+  });
+
+  test("without --yes, asks first, naming the branches", async () => {
+    const { client, sent } = merging();
+    const asked = await run(client, "merge", ["MOB/mobile-banking#42"]);
+    const error = asked.code.ok ? null : asked.code.error;
+    expect(error?.kind === "confirmation-required" ? error.prompt : null).toMatchObject({
+      title: "Merge MOB/mobile-banking#42",
+      details: [
+        { label: "Pull request", value: "MOB/mobile-banking#42" },
+        { label: "Title", value: "Add login" },
+        { label: "Branches", value: "feature/MOB-2841 → main" },
+      ],
+      consequence:
+        "Merges feature/MOB-2841 into main on Bitbucket, for everyone; it is not undone by XueFu.",
+    });
+    expect(sent).toEqual([]);
+  });
+
+  test("one Bitbucket will not merge yet says why, before asking anything", async () => {
+    const { client, sent } = merging({
+      canMerge: false,
+      conflicted: true,
+      vetoes: ["Requires 2 approvals", "Not all required builds are successful yet"],
+    });
+    const refused = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(refused.code.ok ? null : refused.code.error).toMatchObject({
+      kind: "conflict",
+      message: "MOB/mobile-banking#42 cannot be merged yet",
+      hint: "it conflicts with main; merge main into feature/MOB-2841 first; Requires 2 approvals; Not all required builds are successful yet.",
+    });
+    expect(sent).toEqual([]);
+    const silent = await run(merging({ canMerge: false }).client, "merge", [
+      "MOB/mobile-banking#42",
+    ]);
+    expect(silent.code.ok ? null : silent.code.error.hint).toBe("Bitbucket did not say why.");
+  });
+
+  test("one already merged or declined is not offered", async () => {
+    const { client, sent } = merging({}, { ...PULL, state: "merged" });
+    const done = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code.ok ? null : done.code.error.message).toBe("MOB/mobile-banking#42 is merged");
+    expect(sent).toEqual([]);
   });
 });
 

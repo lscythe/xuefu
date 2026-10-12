@@ -1,5 +1,6 @@
 import { notFound } from "../../src/domain/shared/errors";
 import { err, ok } from "../../src/domain/shared/result";
+import { type PrChanges, prActions } from "../../src/plugins/pr/application/actions";
 import type { Checkout, CheckoutReader } from "../../src/plugins/pr/application/checkout";
 import type {
   PullRequestClient,
@@ -9,12 +10,15 @@ import {
   type BuildSummary,
   type PullRequest,
   pullRequestRef,
+  type Repository,
 } from "../../src/plugins/pr/domain/pull-request";
+import { pluginContext } from "./plugin-context";
 
 /** An open pull request on MOB/mobile-banking, with what is not given filled in. */
 export const pullRequest = (id: number, extra: Partial<PullRequest> = {}): PullRequest => ({
   repository: { project: "MOB", slug: "mobile-banking" },
   id,
+  version: 0,
   title: `Change ${id}`,
   description: null,
   state: "open",
@@ -47,18 +51,17 @@ export function fakePullRequests(
     pullRequests: pulls.slice(0, max),
     more: pulls.length > max,
   });
+  const find = (repository: Repository, id: number) => {
+    const found = [...yours, ...toReview].find(
+      (pull) => pullRequestRef(pull) === pullRequestRef({ repository, id }),
+    );
+    return found === undefined
+      ? err(notFound("pull request", pullRequestRef({ repository, id })))
+      : ok(found);
+  };
   return {
     mine: (role, max) => Promise.resolve(ok(page(role === "author" ? yours : toReview, max))),
-    pullRequest: (repository, id) => {
-      const found = [...yours, ...toReview].find(
-        (pull) => pullRequestRef(pull) === pullRequestRef({ repository, id }),
-      );
-      return Promise.resolve(
-        found === undefined
-          ? err(notFound("pull request", pullRequestRef({ repository, id })))
-          : ok(found),
-      );
-    },
+    pullRequest: (repository, id) => Promise.resolve(find(repository, id)),
     forBranch: (repository, branch) =>
       Promise.resolve(
         ok(
@@ -70,17 +73,41 @@ export function fakePullRequests(
           ) ?? null,
         ),
       ),
+    review: () => Promise.resolve(ok(undefined)),
+    mergeability: () => Promise.resolve(ok({ canMerge: true, conflicted: false, vetoes: [] })),
+    merge: (repository, id) => {
+      const found = find(repository, id);
+      return Promise.resolve(found.ok ? ok({ ...found.value, state: "merged" as const }) : found);
+    },
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };
 }
 
 /** Every folder has `checkout`, by default a branch on MOB/mobile-banking. */
-export function fakeCheckouts(
+function fakeCheckouts(
   checkout: Checkout | null = {
     branch: "feature/MOB-2841-biometric-login",
     origin: "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
   },
 ): CheckoutReader {
   return { read: () => Promise.resolve(ok(checkout)) };
+}
+
+/** The plugin's changes over `client`, its actions on a real bus, reading `checkouts`. */
+export function prChanges(
+  client: PullRequestClient,
+  checkouts: CheckoutReader = fakeCheckouts(),
+): PrChanges {
+  const { bus } = pluginContext();
+  const actions = prActions(client);
+  bus.register(actions.review);
+  bus.register(actions.merge);
+  return {
+    client,
+    checkouts,
+    host: "bitbucket.example.com",
+    invoke: (command, input, options) => bus.invoke(command, input, options),
+    actions,
+  };
 }

@@ -41,6 +41,8 @@ xuefu jira start MOB-2841 --yes                                # work on it here
 xuefu pr                                                       # your open pull requests, and those to review
 xuefu pr show                                                  # this branch's, with its reviews and builds
 xuefu pr show MOB/mobile-banking#42                            # any other
+xuefu pr approve MOB/mobile-banking#42 --yes                   # approve it; needs-work and unapprove too
+xuefu pr merge --yes                                           # merge this branch's, once Bitbucket allows
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
@@ -75,6 +77,8 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `f`, `p`, `P`  | in Git: fetch, pull, or push the branch (publishing it if it has no upstream) |
 | `Enter`        | in Jira or PRs, with the keyboard: show the issue or pull request under the cursor |
 | `s`            | in Jira: start work on the issue under the cursor, offering to move it to in progress |
+| `a` `n` `u`    | in PRs: approve the pull request under the cursor, ask for changes, or withdraw either |
+| `m`            | in PRs: merge the pull request under the cursor, once Bitbucket allows |
 | `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
 
@@ -130,7 +134,7 @@ plugins:
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
 | `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
-| `pr`   | `xuefu pr list` and `xuefu pr show [PROJECT/repository#id]`, and a PRs section, for Bitbucket Data Center or Server |
+| `pr`   | `xuefu pr list`, `show`, `approve`, `needs-work`, `unapprove` and `merge`, and a PRs section, for Bitbucket Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -164,12 +168,23 @@ issue to in progress in Jira, and `r` reads the list again.
 `xuefu work start` does. When the issue is still to do, `--yes` also moves it to in progress in
 Jira; without it, the command says how.
 
-The pull requests plugin takes an HTTP access token with read access (in Bitbucket: Manage account,
-HTTP access tokens), kept as Jira's token is. Without a pull request named, `xuefu pr show` finds the
+The pull requests plugin takes an HTTP access token (in Bitbucket: Manage account, HTTP access
+tokens), kept as Jira's token is: read access lists, shows and reviews pull requests, and merging
+takes write access. Without a pull request named, `xuefu pr show` finds the
 one from the branch checked out in this workspace, in the repository its `origin` remote clones
 from, and exits `1` when there is none. The PRs section shows that one first, then yours, then those
 waiting on your review, with how many wait on you in the panel's frame; `Enter` shows one with its
 reviewers, builds and description.
+
+`xuefu pr approve`, `needs-work` and `unapprove` set your review of a pull request, by default this
+branch's, of the commit it is at when read: if the branch moves in the meantime, Bitbucket refuses.
+Each asks first; without `--yes`, the command prints what it would do and exits `64`. In the PRs
+section, `a`, `n` and `u` do the same for the pull request under the cursor, asking first.
+
+`xuefu pr merge` first asks Bitbucket whether the pull request can be merged, and if not, says why:
+conflicts, or what the repository's merge checks still want, such as approvals or passing builds.
+Then it asks first, and merges as the repository merges by default. The merge is of the pull
+request as read, so one changed in the meantime is refused. In the PRs section, `m` does the same.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret

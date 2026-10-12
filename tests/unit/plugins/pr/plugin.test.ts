@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import type { HttpRequest } from "../../../../src/application/ports/http-client";
+import { registerPluginActions } from "../../../../src/bootstrap/plugins";
 import { ok } from "../../../../src/domain/shared/result";
 import { prPlugin } from "../../../../src/plugins/pr/plugin";
 import { fakeSecrets } from "../../../support/fake-secrets";
@@ -88,5 +90,48 @@ describe("prPlugin settings", () => {
       { Authorization: "Bearer bbdc-value" },
     ]);
     expect(new globalThis.URL(sent[0]?.url ?? "").searchParams.get("limit")).toBe("5");
+  });
+
+  test("its changes are commands on the bus, each asking first", () => {
+    const context = pluginContext();
+    const started = start({ url: URL, token: TOKEN }, context);
+    const parts = started.ok ? started.value : null;
+    if (parts === null) throw new Error("the plugin did not start");
+    expect(registerPluginActions(context.bus, [{ plugin: prPlugin, parts }]).ok).toBe(true);
+    expect(parts.actions?.map((action) => [action.name, action.safety])).toEqual([
+      ["pr.review", "confirm"],
+      ["pr.merge", "confirm"],
+    ]);
+  });
+
+  test("a change from the CLI goes through the bus, which asks first", async () => {
+    const pull = await Bun.file(
+      join(import.meta.dir, "../../../contract/pr/fixtures/pull-request.json"),
+    ).text();
+    const sent: HttpRequest[] = [];
+    const context = pluginContext({
+      secrets: fakeSecrets({ BITBUCKET_TOKEN: "bbdc-value" }),
+      http: {
+        request: (request) => {
+          sent.push(request);
+          return Promise.resolve(ok({ status: 200, headers: {}, body: pull }));
+        },
+      },
+    });
+    const started = start({ url: URL, token: TOKEN }, context);
+    const parts = started.ok ? started.value : null;
+    if (parts === null) throw new Error("the plugin did not start");
+    registerPluginActions(context.bus, [{ plugin: prPlugin, parts }]);
+    const asked = await parts.commands?.(
+      { group: "pr", name: "approve", args: ["MOB/mobile-banking#42"], flags: {} },
+      {
+        workspace: () => Promise.reject(new Error("not used")),
+        stdout: () => undefined,
+        stderr: () => undefined,
+      },
+    );
+    expect(asked?.ok ? null : asked?.error.kind).toBe("confirmation-required");
+    // Only the pull request was read; nothing was changed.
+    expect(sent.map((request) => request.method)).toEqual(["GET"]);
   });
 });

@@ -20,6 +20,8 @@ interface Reviewer {
 export interface PullRequest {
   readonly repository: Repository;
   readonly id: number;
+  /** Counts its changes; a merge names it, so one changed since it was read is refused. */
+  readonly version: number;
   readonly title: string;
   /** As written, in Markdown; null when there is none. */
   readonly description: string | null;
