@@ -141,7 +141,11 @@ function withHint(error: AppError): AppError {
 }
 
 function fail(out: Output, error: AppError): number {
-  out.runtime.stderr.write(`${formatError(withHint(error), out.redactor)}\n`);
+  out.runtime.stderr.write(
+    error.kind === "confirmation-required"
+      ? out.redactor.redactString(formatConfirmation(error.prompt, "Re-run with --yes to confirm."))
+      : `${formatError(withHint(error), out.redactor)}\n`,
+  );
   return exitCodeFor(error);
 }
 
@@ -254,15 +258,7 @@ async function removeWorkspace(
   const remove = app.workspaceCommands.remove;
   const input = { id: command.id };
   let removed = await app.commandBus.invoke(remove, input);
-  if (!removed.ok && removed.error.kind === "confirmation-required") {
-    if (!command.yes) {
-      out.runtime.stderr.write(
-        out.redactor.redactString(
-          formatConfirmation(removed.error.prompt, "Re-run with --yes to confirm."),
-        ),
-      );
-      return EXIT.usage;
-    }
+  if (!removed.ok && removed.error.kind === "confirmation-required" && command.yes) {
     removed = await app.commandBus.invoke(remove, input, {
       confirmation: confirmationTokenFor(removed.error),
     });
