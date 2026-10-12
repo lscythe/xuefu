@@ -61,6 +61,10 @@ describe("studyPrompt", () => {
 describe("instructionsFor", () => {
   test("where it runs, how to use the graph, and what it learned", () => {
     expect(instructionsFor(MOBILE, null, false, NOW)).toBe(INSTRUCTIONS);
+    const nowhere = instructionsFor(null, written(2), true, NOW);
+    expect(nowhere.startsWith(INSTRUCTIONS)).toBe(true);
+    expect(nowhere).toContain("No workspace of the user's holds the code");
+    expect(nowhere).not.toContain("graf");
     const all = instructionsFor(MOBILE, written(2), true, NOW);
     expect(all.startsWith(INSTRUCTIONS)).toBe(true);
     expect(all).toContain("use impact on the files and symbols it touches");

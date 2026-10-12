@@ -17,7 +17,9 @@ import type {
 import { type McpTools, mcpReply } from "../cli/mcp-server";
 import type { McpTool } from "../cli/mcp-tools";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
+import type { AbsolutePath } from "../domain/shared/path";
 import { briefAge, freshBrief, INSTRUCTIONS, instructionsFor, studyPrompt } from "./agent-context";
+import { canPost, draftReview, POST, POST_TOOL, postReview } from "./review-post";
 
 /** The tool Claude Code asks before using any other, as `--permission-prompt-tool`. */
 const APPROVAL = "approval";
@@ -100,6 +102,8 @@ export interface AgentHostOptions {
   readonly setup: CodeGraphSetup | null;
   /** What the agent learned of each workspace, kept between conversations. */
   readonly briefs: ProjectBriefs;
+  /** An empty folder the agent works in when no workspace holds the code it is asked about. */
+  readonly elsewhere: AbsolutePath;
   readonly clock: Clock;
 }
 
@@ -174,6 +178,22 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         result: { content: [{ type: "text", text: JSON.stringify(decision) }] },
       };
     }
+    if (message?.["method"] === "tools/call" && params?.["name"] === POST && canPost(tools)) {
+      // The user chooses what is posted in XueFu's own dialog, which is their approval of it.
+      const draft = draftReview(params["arguments"]);
+      const said =
+        typeof draft === "string"
+          ? draft
+          : await postReview(tools, draft, await handlers.review(draft));
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [{ type: "text", text: said }],
+          ...(typeof draft === "string" ? { isError: true } : {}),
+        },
+      };
+    }
     if (message?.["method"] === "tools/call") {
       const name = String(params?.["name"]);
       const input = record(params?.["arguments"]) ?? {};
@@ -191,7 +211,9 @@ export function agentHost(options: AgentHostOptions): AgentHost {
     }
     const reply = await mcpReply({ ...tools, instructions: INSTRUCTIONS }, text);
     const listed = record(record(reply)?.["result"])?.["tools"];
-    if (message?.["method"] === "tools/list" && Array.isArray(listed)) listed.push(APPROVAL_TOOL);
+    if (message?.["method"] === "tools/list" && Array.isArray(listed)) {
+      listed.push(APPROVAL_TOOL, ...(canPost(tools) ? [POST_TOOL] : []));
+    }
     return reply;
   };
 
@@ -246,11 +268,15 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       };
       const step = (text: string, failed = false) => tell({ kind: "step", text, failed });
       const launch = (prompt: string, instructions: string, servers: readonly AgentServer[]) => ({
-        cwd: workspace.path,
+        cwd: workspace?.path ?? options.elsewhere,
         prompt,
         instructions,
         mcp: endpoint.mcp,
-        readTools: tools.tools.filter((tool) => !tool.changes).map((tool) => tool.name),
+        // Posting a review needs no approval of Claude Code's: XueFu's dialog asks the user.
+        readTools: [
+          ...tools.tools.filter((tool) => !tool.changes).map((tool) => tool.name),
+          ...(canPost(tools) ? [POST] : []),
+        ],
         approvalTool: APPROVAL,
         servers,
       });
@@ -302,7 +328,28 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         return codeGraph;
       };
 
+      /** Starts the conversation itself, sending what the user said while it was prepared. */
+      const converse = (prompt: string, instructions: string, servers: readonly AgentServer[]) => {
+        const started = runner.start(launch(prompt, instructions, servers), (event) =>
+          event.kind === "exit" ? end(event.message) : tell(event),
+        );
+        if (!started.ok) {
+          end(started.error.message);
+          return;
+        }
+        current = conversation = started.value;
+        for (const text of waiting.splice(0)) conversation.send(text);
+      };
+
       void (async () => {
+        if (workspace === null) {
+          // Nothing to graph or study: the code is reached through XueFu's tools.
+          step(`No workspace holds this code, so ${runner.name} works from XueFu's tools alone.`);
+          if (question.prompt === null) end(null);
+          else
+            converse(question.prompt, instructionsFor(null, null, false, options.clock.now()), []);
+          return;
+        }
         const servers: AgentServer[] = [];
         const setup = options.setup;
         const graph =
@@ -365,20 +412,11 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         }
 
         const later = options.clock.now();
-        const started = runner.start(
-          launch(
-            question.prompt,
-            instructionsFor(workspace, freshBrief(brief, later) ? brief : null, withGraph, later),
-            servers,
-          ),
-          (event) => (event.kind === "exit" ? end(event.message) : tell(event)),
+        converse(
+          question.prompt,
+          instructionsFor(workspace, freshBrief(brief, later) ? brief : null, withGraph, later),
+          servers,
         );
-        if (!started.ok) {
-          end(started.error.message);
-          return;
-        }
-        current = conversation = started.value;
-        for (const text of waiting.splice(0)) conversation.send(text);
       })();
 
       return {

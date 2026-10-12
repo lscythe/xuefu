@@ -242,6 +242,12 @@ under the cursor; from the palette, "Ask Claude" takes any question about the wo
 The conversation opens in a dialog: what Claude says and each tool it uses show as it works, and
 once it has answered, Enter sends a follow-up. Esc closes it and stops Claude.
 
+A review is one you and Claude do together. Claude numbers its findings, each on a line of the
+diff with the fix it would suggest, and you go through them: drop some, reword others, add your
+own. When you tell it to post, XueFu shows the whole review, every comment on its line with its
+suggestion. Space leaves one out, and Enter posts the rest through Bitbucket's API, each on its
+line. A suggested fix goes in as a suggestion block, which Bitbucket can let the author apply.
+
 Before it answers, Claude gets to know the workspace. The first time you ask about one, Claude
 studies it: its README, CLAUDE.md or AGENTS.md, its lint, build and test configuration and its
 central files. It then writes itself a short brief of the project's architecture, conventions and

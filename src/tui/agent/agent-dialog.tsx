@@ -1,6 +1,12 @@
 import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/solid";
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import type { AgentEvent, AgentHost, AgentSession } from "../../application/ports/agent";
+import type {
+  AgentEvent,
+  AgentHost,
+  AgentSession,
+  DraftComment,
+  DraftReview,
+} from "../../application/ports/agent";
 import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ConfirmDialog } from "../confirm-dialog";
@@ -9,25 +15,35 @@ import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
 import { queryActionFor } from "../query-input/keys";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { PostDialog } from "./post-dialog";
 import { type TranscriptEntry, transcriptRows } from "./transcript";
 
 export interface AgentDialogProps {
   readonly agent: AgentHost;
   /** What the conversation is about, for the title, such as "Review MOB/app#42". */
   readonly title: string;
-  /** Where the agent works: the workspace in front. */
-  readonly workspace: Workspace;
+  /** Where the agent works; null when no workspace holds the code it is asked about. */
+  readonly workspace: Workspace | null;
   /** The first message, sent as the dialog opens; null has it study the workspace again. */
   readonly prompt: string | null;
   readonly icons: IconSet;
   readonly onClose: () => void;
 }
 
-/** A question the agent is waiting on the user to answer. */
-interface Approval {
-  readonly prompt: ConfirmationPrompt;
-  readonly answer: (approved: boolean) => void;
-}
+/** What the agent is waiting on the user for: whether it may act, or what of a review to post. */
+type Waiting =
+  | {
+      readonly kind: "approve";
+      readonly prompt: ConfirmationPrompt;
+      readonly answer: (approved: boolean) => void;
+      readonly decline: () => void;
+    }
+  | {
+      readonly kind: "review";
+      readonly draft: DraftReview;
+      readonly answer: (chosen: readonly DraftComment[]) => void;
+      readonly decline: () => void;
+    };
 
 /** The frame, the line under the transcript, the input, the keys, and the dialog's margin. */
 const CHROME_ROWS = 10;
@@ -59,7 +75,7 @@ export function AgentDialog(props: AgentDialogProps) {
   const [draft, setDraft] = createSignal("");
   // The first row shown; null keeps the newest in view as they come.
   const [top, setTop] = createSignal<number | null>(null);
-  const [approvals, setApprovals] = createSignal<readonly Approval[]>([]);
+  const [approvals, setApprovals] = createSignal<readonly Waiting[]>([]);
   const add = (entry: TranscriptEntry) => setEntries((all) => [...all, entry]);
   const name = props.agent.name;
 
@@ -89,25 +105,33 @@ export function AgentDialog(props: AgentDialogProps) {
     }
   };
 
+  const done = (waiting: Waiting) => setApprovals((all) => all.filter((each) => each !== waiting));
   const approve = (prompt: ConfirmationPrompt) =>
     new Promise<boolean>((resolve) => {
-      const approval: Approval = {
-        prompt,
-        answer: (approved) => {
-          setApprovals((all) => all.filter((each) => each !== approval));
-          resolve(approved);
-        },
+      const answer = (approved: boolean) => {
+        done(waiting);
+        resolve(approved);
       };
-      setApprovals((all) => [...all, approval]);
+      const waiting: Waiting = { kind: "approve", prompt, answer, decline: () => answer(false) };
+      setApprovals((all) => [...all, waiting]);
+    });
+  const review = (draft: DraftReview) =>
+    new Promise<readonly DraftComment[]>((resolve) => {
+      const answer = (chosen: readonly DraftComment[]) => {
+        done(waiting);
+        resolve(chosen);
+      };
+      const waiting: Waiting = { kind: "review", draft, answer, decline: () => answer([]) };
+      setApprovals((all) => [...all, waiting]);
     });
 
   const session: AgentSession = props.agent.ask(
     { workspace: props.workspace, prompt: props.prompt },
-    { onEvent, approve },
+    { onEvent, approve, review },
   );
   onCleanup(() => {
     // Whatever it still waits on is declined, so it never acts after the dialog is gone.
-    for (const approval of approvals()) approval.answer(false);
+    for (const waiting of approvals()) waiting.decline();
     session.stop();
   });
 
@@ -116,7 +140,9 @@ export function AgentDialog(props: AgentDialogProps) {
   const inner = () => width() - 4;
   const room = () => Math.max(3, dimensions().height - CHROME_ROWS);
   const ascii = () => props.icons === "ascii";
-  const rows = createMemo(() => transcriptRows(entries(), inner(), props.workspace.path, ascii()));
+  const rows = createMemo(() =>
+    transcriptRows(entries(), inner(), props.workspace?.path ?? null, ascii()),
+  );
   const lastTop = () => Math.max(0, rows().length - room());
   const first = () => Math.min(top() ?? lastTop(), lastTop());
   const scroll = (to: number) => setTop(to >= lastTop() ? null : Math.max(0, to));
@@ -226,9 +252,13 @@ export function AgentDialog(props: AgentDialogProps) {
       </Dialog>
       {/* Keyed: each question gets a dialog of its own, as one answers only once. */}
       <Show when={approvals()[0]} keyed>
-        {(approval: Approval) => (
-          <ConfirmDialog prompt={approval.prompt} icons={props.icons} onAnswer={approval.answer} />
-        )}
+        {(waiting: Waiting) =>
+          waiting.kind === "approve" ? (
+            <ConfirmDialog prompt={waiting.prompt} icons={props.icons} onAnswer={waiting.answer} />
+          ) : (
+            <PostDialog draft={waiting.draft} icons={props.icons} onAnswer={waiting.answer} />
+          )
+        }
       </Show>
     </>
   );

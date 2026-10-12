@@ -59,7 +59,11 @@ export interface AgentSession {
 
 /** A question for an agent about a workspace. */
 interface AgentQuestion {
-  readonly workspace: Workspace;
+  /**
+   * The workspace the question is about, whose folder the agent works in; null when no workspace
+   * holds the code, so the agent works from XueFu's tools alone.
+   */
+  readonly workspace: Workspace | null;
   /**
    * The first message. Null asks it only to study the workspace again, renewing what it keeps of
    * it, and to say what it learned.
@@ -67,11 +71,32 @@ interface AgentQuestion {
   readonly prompt: string | null;
 }
 
+/** A comment on a line of a pull request's diff, as the agent drafts it. */
+export interface DraftComment {
+  readonly file: string;
+  /** The line, numbered as in the file after, or before for a removed line. */
+  readonly line: number;
+  /** On a removed line. */
+  readonly old: boolean;
+  readonly text: string;
+  /** What the line should become, for the author to apply; null when it suggests no code. */
+  readonly suggestion: string | null;
+}
+
+/** The comments the user and the agent settled on, to post on a pull request at once. */
+export interface DraftReview {
+  /** As `PROJECT/repository#id`. */
+  readonly pullRequest: string;
+  readonly comments: readonly DraftComment[];
+}
+
 /** What the cockpit does with an agent at work. */
 export interface AgentHandlers {
   readonly onEvent: (event: AgentEvent) => void;
   /** Asks the user whether the agent may do something; resolves to their answer. */
   readonly approve: (prompt: ConfirmationPrompt) => Promise<boolean>;
+  /** Shows the user a drafted review; resolves to the comments they chose to post, maybe none. */
+  readonly review: (draft: DraftReview) => Promise<readonly DraftComment[]>;
 }
 
 /**

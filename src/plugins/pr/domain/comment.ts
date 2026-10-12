@@ -38,6 +38,23 @@ export interface CommentDraft {
   readonly replyTo: number | null;
 }
 
+/**
+ * A comment's text with the code it suggests, if any. On a line of the file after, the code is a
+ * suggestion block, which Bitbucket lets the author apply in place of the line; on a removed line
+ * there is nothing to replace, so it is plain code. The fence outruns any backticks in the code.
+ */
+export function suggestedText(
+  text: string,
+  suggestion: string | null,
+  side: "old" | "new",
+): string {
+  if (suggestion === null) return text;
+  const longest = Math.max(0, ...(suggestion.match(/`+/gu) ?? []).map((run) => run.length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  const code = suggestion.replace(/\n+$/u, "");
+  return `${text}\n\n${fence}${side === "new" ? "suggestion" : ""}\n${code}\n${fence}`;
+}
+
 /** "app/src/Login.kt, line 11", "…, old line 11", or the path alone for a file comment. */
 export function anchorText(anchor: Pick<CommentAnchor, "path" | "line" | "side">): string {
   if (anchor.line === null) return anchor.path;

@@ -924,7 +924,7 @@ describe("Shell agent", () => {
     const agent: AgentHost = {
       name: "Claude",
       ask: (question) => {
-        asked.push(`${question.prompt} in ${question.workspace.path}`);
+        asked.push(`${question.prompt} in ${question.workspace?.path ?? "no workspace"}`);
         return { send: () => undefined, stop: () => stopped++ };
       },
     };
@@ -937,6 +937,13 @@ describe("Shell agent", () => {
     useKeyboard((key) => {
       if (!props.focused) return;
       if (key.name === "a") props.askAgent?.({ title: "Review MOB/app#42", prompt: "Review it" });
+      if (key.name === "r") {
+        props.askAgent?.({
+          title: "Review OPS/deployd#7",
+          prompt: "Review that",
+          repository: { name: "OPS/deployd", holds: (origin) => origin === "deployd-origin" },
+        });
+      }
       setPressed((all) => [...all, key.name]);
     });
     return (
@@ -950,6 +957,41 @@ describe("Shell agent", () => {
       navigation: new Map([["mobile-banking", "pr"]]),
       agent,
     });
+
+  test("a question about a repository is asked in the workspace that holds it", async () => {
+    const DEPLOYD = VIEWS[1]?.workspace as Workspace;
+    const { agent, asked } = quietAgent();
+    const tried: string[] = [];
+    const shell = await renderShell({
+      sections: cockpitSections([PRS]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent,
+      workspaceWith: (holds, first) => {
+        tried.push(first.id);
+        return Promise.resolve(holds("deployd-origin") ? DEPLOYD : null);
+      },
+    });
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("r");
+    await shell.waitForFrame((f) => f.includes(" Claude · Review OPS/deployd#7 "));
+    // The one in front is tried first; the code is in deployd.
+    expect(tried).toEqual(["mobile-banking"]);
+    expect(asked).toEqual([`Review that in ${DEPLOYD.path}`]);
+  });
+
+  test("a question about a repository no workspace holds is asked in none", async () => {
+    const { agent, asked } = quietAgent();
+    const shell = await renderShell({
+      sections: cockpitSections([PRS]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent,
+      workspaceWith: () => Promise.resolve(null),
+    });
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("r");
+    await shell.waitForFrame((f) => f.includes(" Claude · Review OPS/deployd#7 "));
+    expect(asked).toEqual(["Review that in no workspace"]);
+  });
 
   test("a section asks about the workspace in front; the conversation has the keys", async () => {
     const { agent, asked, stopped } = quietAgent();
