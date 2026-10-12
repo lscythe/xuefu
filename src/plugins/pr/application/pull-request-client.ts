@@ -2,6 +2,7 @@ import type { HttpFailure } from "../../../application/ports/http-client";
 import type { SecretFailure } from "../../../application/ports/secret-provider";
 import type { ConfigurationError, NotFoundError, RemoteError } from "../../../domain/shared/errors";
 import type { Result } from "../../../domain/shared/result";
+import type { CommentDraft, PullRequestComment } from "../domain/comment";
 import type { BuildSummary, PullRequest, Repository, ReviewStatus } from "../domain/pull-request";
 
 export type PullRequestFailure =
@@ -63,6 +64,25 @@ export interface PullRequestClient {
     version: number,
     signal?: AbortSignal,
   ): Promise<Result<PullRequest, PullRequestFailure>>;
+  /** What it changes, as a unified diff with git's headings. */
+  diff(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<string, PullRequestFailure>>;
+  /** Its comment threads, oldest first, each with its replies. */
+  comments(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequestComment[], PullRequestFailure>>;
+  /** Posts a comment: on the pull request, on a line of its diff, or in reply to another. */
+  comment(
+    repository: Repository,
+    id: number,
+    draft: CommentDraft,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequestComment, PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
 }

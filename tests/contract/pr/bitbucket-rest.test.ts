@@ -325,6 +325,218 @@ describe("bitbucket REST 1.0: merging", () => {
   });
 });
 
+describe("bitbucket REST 1.0: the diff", () => {
+  test("streams it raw, with three lines of context as git shows", async () => {
+    requests.length = 0;
+    const raw = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n";
+    answer = () => new Response(raw, { headers: { "Content-Type": "text/plain" } });
+    expect(await client().diff(REPO, 42)).toEqual(ok(raw));
+    const sent = new URL(requests[0]?.url ?? "");
+    expect(sent.pathname).toBe(
+      "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42.diff",
+    );
+    expect(sent.searchParams.get("contextLines")).toBe("3");
+  });
+
+  test("one larger than the default limit on answers is still read", async () => {
+    const line = `+${"x".repeat(99)}\n`;
+    const raw = `--- a/big\n+++ b/big\n@@ -0,0 +1,60000 @@\n${line.repeat(60_000)}`;
+    answer = () => new Response(raw);
+    const read = await client().diff(REPO, 42);
+    expect(read.ok && read.value.length).toBe(raw.length);
+  });
+
+  test("a pull request that is not there is not found", async () => {
+    answer = status(404, { errors: [{ message: "No such pull request" }] });
+    const missing = await client().diff(REPO, 9);
+    expect(missing.ok ? null : missing.error).toMatchObject({
+      kind: "not-found",
+      key: "MOB/mobile-banking#9",
+    });
+  });
+});
+
+describe("bitbucket REST 1.0: comments", () => {
+  const ACTIVITIES = "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42/activities";
+  const LAST_PAGE = {
+    isLastPage: true,
+    values: [
+      {
+        action: "COMMENTED",
+        commentAction: "ADDED",
+        commentAnchor: {
+          path: "README.md",
+          line: 3,
+          lineType: "REMOVED",
+          fileType: "FROM",
+          orphaned: true,
+        },
+        comment: {
+          id: 99,
+          text: "Why remove this?",
+          author: { displayName: "Monica Reyes" },
+          createdDate: 1759700000000,
+          updatedDate: 1759700000000,
+          comments: [],
+        },
+      },
+    ],
+  };
+
+  test("threads from every page of activities, oldest first, each with its replies", async () => {
+    requests.length = 0;
+    const first = await fixture("activities").json();
+    answer = (request) =>
+      Response.json(new URL(request.url).searchParams.get("start") === "6" ? LAST_PAGE : first);
+    const read = await client().comments(REPO, 42);
+    expect(
+      requests.map((sent) => {
+        const url = new URL(sent.url);
+        return [url.pathname, url.searchParams.get("start"), url.searchParams.get("limit")];
+      }),
+    ).toEqual([
+      [ACTIVITIES, "0", "100"],
+      [ACTIVITIES, "6", "100"],
+    ]);
+    expect(read).toEqual(
+      ok([
+        {
+          id: 99,
+          version: 0,
+          author: "Monica Reyes",
+          text: "Why remove this?",
+          created: 1759700000000,
+          updated: 1759700000000,
+          anchor: { path: "README.md", line: 3, side: "old", lineKind: "removed", outdated: true },
+          todo: null,
+          resolved: false,
+          replies: [],
+        },
+        {
+          id: 101,
+          version: 2,
+          author: "Fox Mulder",
+          text: "Looks good overall.\n\nOne question below.",
+          created: 1759720000000,
+          updated: 1759725000000,
+          anchor: null,
+          todo: null,
+          resolved: true,
+          replies: [],
+        },
+        {
+          id: 102,
+          version: 0,
+          author: "Fox Mulder",
+          text: "Shouldn't this fall back to the PIN?",
+          created: 1759730000000,
+          updated: 1759730000000,
+          anchor: {
+            path: "app/src/Login.kt",
+            line: 11,
+            side: "new",
+            lineKind: "added",
+            outdated: false,
+          },
+          todo: "open",
+          resolved: false,
+          replies: [
+            {
+              id: 105,
+              version: 0,
+              author: "Dana Scully",
+              text: "It does, after three tries.",
+              created: 1759760000000,
+              updated: 1759760000000,
+              anchor: null,
+              todo: null,
+              resolved: false,
+              replies: [],
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  test("none, and a pull request that is not there", async () => {
+    answer = () => Response.json({ isLastPage: true, values: [] });
+    expect(await client().comments(REPO, 42)).toEqual(ok([]));
+    answer = status(404);
+    const missing = await client().comments(REPO, 9);
+    expect(missing.ok ? null : missing.error.kind).toBe("not-found");
+  });
+
+  /** Bitbucket's answer to a new comment: the comment, with its anchor when on a line. */
+  const created =
+    (extra: Record<string, unknown> = {}) =>
+    () =>
+      Response.json(
+        {
+          id: 120,
+          version: 0,
+          text: "Fall back to the PIN?",
+          author: { name: "dscully", displayName: "Dana Scully" },
+          createdDate: 1759770000000,
+          updatedDate: 1759770000000,
+          comments: [],
+          ...extra,
+        },
+        { status: 201 },
+      );
+
+  test("posts one on the pull request, answering with it", async () => {
+    requests.length = 0;
+    answer = created();
+    const posted = await client().comment(REPO, 42, {
+      text: "Fall back to the PIN?",
+      anchor: null,
+      replyTo: null,
+    });
+    expect(`${requests[0]?.method} ${new URL(requests[0]?.url ?? "").pathname}`).toBe(
+      "POST /rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42/comments",
+    );
+    expect(JSON.parse(requests[0]?.body ?? "")).toEqual({ text: "Fall back to the PIN?" });
+    expect(posted.ok && posted.value).toMatchObject({
+      id: 120,
+      author: "Dana Scully",
+      anchor: null,
+    });
+  });
+
+  test("on a line, placed by its number, kind and side; and a reply, by its parent", async () => {
+    requests.length = 0;
+    const anchor = { path: "app/src/Login.kt", line: 11, lineType: "REMOVED", fileType: "FROM" };
+    answer = created({ anchor });
+    const posted = await client().comment(REPO, 42, {
+      text: "Why?",
+      anchor: { path: "app/src/Login.kt", line: 11, side: "old", lineKind: "removed" },
+      replyTo: null,
+    });
+    expect(posted.ok && posted.value.anchor).toEqual({
+      path: "app/src/Login.kt",
+      line: 11,
+      side: "old",
+      lineKind: "removed",
+      outdated: false,
+    });
+    answer = created();
+    await client().comment(REPO, 42, { text: "Agreed.", anchor: null, replyTo: 105 });
+    expect(requests.map((sent) => JSON.parse(sent.body))).toEqual([
+      { text: "Why?", anchor },
+      { text: "Agreed.", parent: { id: 105 } },
+    ]);
+  });
+
+  test("a refusal says what Bitbucket said", async () => {
+    answer = status(400, { errors: [{ message: "The comment text must not be empty." }] });
+    const refused = await client().comment(REPO, 42, { text: " ", anchor: null, replyTo: null });
+    expect(refused.ok ? null : refused.error.message).toBe(
+      "Bitbucket answered 400: The comment text must not be empty.",
+    );
+  });
+});
+
 describe("bitbucket REST 1.0: refusals", () => {
   test.each([
     [401, {}, "Bitbucket did not accept the token", "HTTP access token"],

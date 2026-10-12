@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineCommand } from "../../../application/commands/command";
 import type { CommandBus } from "../../../application/commands/command-bus";
+import { anchorText, type CommentDraft } from "../domain/comment";
 import { type PullRequest, pullRequestRef, type ReviewStatus } from "../domain/pull-request";
 import type { BranchPullRequestDependencies } from "./branch-pull-request";
 import type { PullRequestClient } from "./pull-request-client";
@@ -114,7 +115,75 @@ export function prActions(client: PullRequestClient) {
       ),
   });
 
-  return { review, merge };
+  const comment = defineCommand({
+    name: "pr.comment",
+    title: "Comment on pull request",
+    category: "Pull requests",
+    safety: "confirm",
+    input: z.strictObject({
+      ...PullRequestInput,
+      text: z.string().trim().min(1).max(32_000),
+      /** The line it is on; null for the pull request as a whole, or a reply. */
+      anchor: z
+        .strictObject({
+          path: z.string().min(1).max(4096),
+          line: z.int().min(1).nullable(),
+          side: z.enum(["old", "new"]),
+          lineKind: z.enum(["added", "removed", "context"]).nullable(),
+        })
+        .nullable(),
+      replyTo: z.int().min(1).nullable(),
+    }),
+    describe: (input) => {
+      const ref = pullRequestRef({ repository: input, id: input.id });
+      const on =
+        input.replyTo !== null
+          ? `a reply to #${input.replyTo}`
+          : input.anchor === null
+            ? "the pull request"
+            : anchorText(input.anchor);
+      return {
+        title: input.replyTo === null ? `Comment on ${ref}` : `Reply on ${ref}`,
+        severity: "confirm",
+        details: [
+          { label: "Pull request", value: ref },
+          { label: "On", value: on },
+          { label: "Comment", value: shortened(input.text) },
+        ],
+        consequence:
+          "Posts it on Bitbucket under your name, where its author and reviewers will see it.",
+        confirmLabel: "Post",
+      };
+    },
+    handler: (input, context) =>
+      client.comment(
+        { project: input.project, slug: input.slug },
+        input.id,
+        { text: input.text, anchor: input.anchor, replyTo: input.replyTo },
+        context.signal,
+      ),
+  });
+
+  return { review, merge, comment };
+}
+
+/** A comment as a confirmation shows it: on one line, cut short when long. */
+const shortened = (text: string) => {
+  const line = text.trim().replace(/\s+/g, " ");
+  return line.length > 200 ? `${line.slice(0, 199)}…` : line;
+};
+
+/** What `pr.comment` takes for a comment on a pull request. */
+export function commentInput(pull: PullRequest, draft: CommentDraft) {
+  return {
+    project: pull.repository.project,
+    slug: pull.repository.slug,
+    id: pull.id,
+    title: pull.title,
+    text: draft.text,
+    anchor: draft.anchor,
+    replyTo: draft.replyTo,
+  };
 }
 
 /** What `pr.merge` takes for a pull request. */

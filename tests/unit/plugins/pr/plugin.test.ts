@@ -101,6 +101,7 @@ describe("prPlugin settings", () => {
     expect(parts.actions?.map((action) => [action.name, action.safety])).toEqual([
       ["pr.review", "confirm"],
       ["pr.merge", "confirm"],
+      ["pr.comment", "confirm"],
     ]);
   });
 

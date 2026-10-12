@@ -16,6 +16,7 @@ import type {
   PullRequestClient,
   PullRequestPage,
 } from "../../../../src/plugins/pr/application/pull-request-client";
+import type { CommentDraft, PullRequestComment } from "../../../../src/plugins/pr/domain/comment";
 import { prPlugin } from "../../../../src/plugins/pr/plugin";
 import { prView } from "../../../../src/plugins/pr/tui/pr-view";
 import { PALETTE } from "../../../../src/tui/theme/palette";
@@ -255,8 +256,8 @@ describe("prView", () => {
       { focused: true },
     );
     await until(view, (f) => f.includes("To review (1)") && f.includes("This branch"));
-    // Too narrow for every key: the least used, u, is left out.
-    expect(view.keys.at(-1)).toBe("enter details · a approve · n needs work · m merge · r refresh");
+    // Too narrow for every key: the least used, r and u, are left out.
+    expect(view.keys.at(-1)).toBe("enter details · d diff · a approve · n needs work · m merge");
     await until(view, () => lit(view).startsWith("mobile-banking#42"));
     view.mockInput.pressArrow("up");
     await until(view, () => lit(view).startsWith("mobile-banking#40"));
@@ -402,6 +403,184 @@ describe("prView", () => {
     );
     expect(view.modal).toEqual([]);
     expect(merges).toBe(0);
+  });
+
+  /** A server whose comments are `threads`, to which a posted comment is added as a new thread. */
+  const commenting = (threads: PullRequestComment[] = []) => {
+    const posted: CommentDraft[] = [];
+    const base = fakePullRequests({ yours: [pullRequest(42)] });
+    const client: PullRequestClient = {
+      ...base,
+      comments: () => Promise.resolve(ok([...threads])),
+      comment: async (repository, id, draft) => {
+        posted.push(draft);
+        const made = await base.comment(repository, id, draft);
+        if (made.ok) threads.push({ ...made.value, id: 900 + posted.length });
+        return made.ok ? ok({ ...made.value, id: 900 + posted.length }) : made;
+      },
+    };
+    return { client, posted };
+  };
+  const thread = (id: number, extra: Partial<PullRequestComment> = {}): PullRequestComment => ({
+    id,
+    version: 0,
+    author: "Fox Mulder",
+    text: `Comment ${id}`,
+    created: Date.UTC(2026, 9, 6, 9, 0),
+    updated: Date.UTC(2026, 9, 6, 9, 0),
+    anchor: null,
+    todo: null,
+    resolved: false,
+    replies: [],
+    ...extra,
+  });
+
+  test("d opens the diff with each thread under its line; q closes it", async () => {
+    const { client } = commenting([
+      thread(102, {
+        text: "Fall back to the PIN?",
+        anchor: {
+          path: "app/src/Login.kt",
+          line: 11,
+          side: "new",
+          lineKind: "added",
+          outdated: false,
+        },
+        todo: "open",
+        replies: [thread(105, { author: "Dana Scully", text: "It does." })],
+      }),
+    ]);
+    const view = await render(client, { focused: true });
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressKey("d");
+    const frame = await until(view, (f) => f.includes("Fall back to the PIN?"));
+    const lines = frame.split("\n").map((line) => line.trim());
+    const at = lines.findIndex((line) => line.includes("if (biometrics) prompt(42)"));
+    expect(lines[at]).toContain("│        11 +         if (biometrics) prompt(42)");
+    expect(lines[at + 1]).toContain("▍ Fox Mulder · Tue 06 Oct 09:00 · to do");
+    expect(lines[at + 2]).toContain("Fall back to the PIN?");
+    expect(lines[at + 3]).toContain("↳ Dana Scully · Tue 06 Oct 09:00");
+    expect(frame).toContain("A docs/login.md  +2 -0");
+    expect(view.modal.at(-1)).toBe(true);
+    view.mockInput.pressKey("q");
+    await until(view, (f) => !f.includes("Fall back to the PIN?"));
+    expect(view.modal.at(-1)).toBe(false);
+  });
+
+  test("c comments on the line under the cursor, asking first, and it shows once posted", async () => {
+    const { client, posted } = commenting();
+    const view = await render(client, { focused: true });
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("d diff"));
+    view.mockInput.pressKey("d");
+    await until(view, (f) => f.includes("c comment"));
+    // From the first line, past the removed one, to the first added.
+    view.mockInput.pressArrow("down");
+    view.mockInput.pressArrow("down");
+    view.mockInput.pressKey("c");
+    await until(view, (f) => f.includes("Comment on app/src/Login.kt, line 11"));
+    await view.mockInput.typeText("Fall back to the PIN?");
+    view.mockInput.pressKey("s", { ctrl: true });
+    await until(view, (f) => f.includes("enter post"));
+    view.mockInput.pressKey("y");
+    await until(view, (f) => f.includes("✓ Posted #901 on app/src/Login.kt, line 11."));
+    expect(posted).toEqual([
+      {
+        text: "Fall back to the PIN?",
+        anchor: { path: "app/src/Login.kt", line: 11, side: "new", lineKind: "added" },
+        replyTo: null,
+      },
+    ]);
+  });
+
+  test("on a comment, c replies to it; C comments on the whole; Esc keeps a draft", async () => {
+    const { client, posted } = commenting([thread(101, { text: "Looks good." })]);
+    const view = await render(client, { focused: true });
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressKey("d");
+    await until(view, (f) => f.includes("c reply"));
+    view.mockInput.pressKey("c");
+    await until(view, (f) => f.includes("Comment on a reply to Fox Mulder"));
+    await view.mockInput.typeText("Thanks");
+    await pressEsc(view);
+    await until(view, (f) => !f.includes("Comment on a reply"));
+    view.mockInput.pressKey("c");
+    const frame = await until(view, (f) => f.includes("Comment on a reply to Fox Mulder"));
+    expect(frame).toContain("Thanks");
+    view.mockInput.pressKey("s", { ctrl: true });
+    await until(view, (f) => f.includes("enter post"));
+    view.mockInput.pressKey("n");
+    await until(view, (f) => !f.includes("enter post"));
+    expect(posted).toEqual([]);
+    view.mockInput.pressKey("s", { ctrl: true });
+    await until(view, (f) => f.includes("enter post"));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Posted"));
+    // A fresh comment on the whole: the reply's draft went once it was posted.
+    view.mockInput.pressKey("c", { shift: true });
+    await until(view, (f) => f.includes("Comment on the pull request"));
+    await view.mockInput.typeText("Ship it");
+    view.mockInput.pressKey("s", { ctrl: true });
+    await until(view, (f) => f.includes("enter post"));
+    view.mockInput.pressKey("y");
+    await until(view, () => posted.length === 2);
+    expect(posted).toEqual([
+      { text: "Thanks", anchor: null, replyTo: 101 },
+      { text: "Ship it", anchor: null, replyTo: null },
+    ]);
+  });
+
+  test("n and p go by file; Home, End and the page keys move far; r reads it again", async () => {
+    let reads = 0;
+    const base = fakePullRequests({ yours: [pullRequest(42)] });
+    const view = await render(
+      {
+        ...base,
+        comments: () => {
+          reads += 1;
+          return Promise.resolve(
+            reads === 1
+              ? ok([])
+              : err(remoteError("Bitbucket answered 500", "bitbucket.example.com", 500)),
+          );
+        },
+      },
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressKey("d");
+    await until(view, () => lit(view).includes("fun start()"));
+    view.mockInput.pressKey("n");
+    await until(view, () => lit(view).includes("# Login"));
+    view.mockInput.pressKey("n");
+    view.mockInput.pressKey("p");
+    await until(view, () => lit(view).includes("fun start()"));
+    view.mockInput.pressKey("END");
+    await until(view, () => lit(view).includes("Face ID first"));
+    view.mockInput.pressKey("HOME");
+    await until(view, () => lit(view).includes("fun start()"));
+    // The mock keyboard has no names for the page keys; these are what a terminal sends.
+    view.mockInput.pressKey("\u001B[6~");
+    await until(view, () => lit(view).includes("Face ID first"));
+    view.mockInput.pressKey("\u001B[5~");
+    await until(view, () => lit(view).includes("fun start()"));
+    view.mockInput.pressKey("r");
+    await until(view, (f) => f.includes("⚠ Could not read the comments: Bitbucket answered 500"));
+    expect(reads).toBe(2);
+  });
+
+  test("a diff that cannot be read says why", async () => {
+    const view = await render(
+      fakePullRequests({ yours: [pullRequest(42)] }, undefined, {
+        diff: () =>
+          Promise.resolve(err(remoteError("Bitbucket answered 500", "bitbucket.example.com", 500))),
+      }),
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("Yours (1)") && f.includes("This branch"));
+    view.mockInput.pressKey("d");
+    await until(view, (f) => f.includes("✗ Bitbucket answered 500"));
   });
 
   test("closing the section with the dialog open hands the keys back", async () => {

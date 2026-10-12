@@ -41,6 +41,9 @@ xuefu jira start MOB-2841 --yes                                # work on it here
 xuefu pr                                                       # your open pull requests, and those to review
 xuefu pr show                                                  # this branch's, with its reviews and builds
 xuefu pr show MOB/mobile-banking#42                            # any other
+xuefu pr diff | delta                                          # what it changes; --stat for only the files
+xuefu pr comments                                              # its comment threads, with replies
+xuefu pr comment -m "Fall back to the PIN?" --file app/src/Login.kt --line 11  # or --reply 105
 xuefu pr approve MOB/mobile-banking#42 --yes                   # approve it; needs-work and unapprove too
 xuefu pr merge --yes                                           # merge this branch's, once Bitbucket allows
 xuefu diagnostics                                              # paths, config sources, database state
@@ -79,6 +82,8 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `s`            | in Jira: start work on the issue under the cursor, offering to move it to in progress |
 | `a` `n` `u`    | in PRs: approve the pull request under the cursor, ask for changes, or withdraw either |
 | `m`            | in PRs: merge the pull request under the cursor, once Bitbucket allows |
+| `d`            | in PRs: review the pull request under the cursor, its diff with the comments on it |
+| `c` `C`        | in a review: comment on the line under the cursor or reply, or comment on the whole |
 | `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
 
@@ -134,7 +139,7 @@ plugins:
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
 | `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
-| `pr`   | `xuefu pr list`, `show`, `approve`, `needs-work`, `unapprove` and `merge`, and a PRs section, for Bitbucket Data Center or Server |
+| `pr`   | `xuefu pr list`, `show`, `diff`, `comments`, `comment`, `approve`, `needs-work`, `unapprove` and `merge`, and a PRs section, for Bitbucket Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
@@ -185,6 +190,20 @@ section, `a`, `n` and `u` do the same for the pull request under the cursor, ask
 conflicts, or what the repository's merge checks still want, such as approvals or passing builds.
 Then it asks first, and merges as the repository merges by default. The merge is of the pull
 request as read, so one changed in the meantime is refused. In the PRs section, `m` does the same.
+
+`xuefu pr diff` prints the unified diff, ready for a pager such as `delta`, and `--stat` lists the
+files with the lines each adds and removes. `xuefu pr comments` shows the comment threads, each
+with the id to reply to and where it is in the diff. `xuefu pr comment -m` posts one: on the pull
+request; on a line with `--file` and `--line`, numbered as in the file after, or with `--old` on a
+removed line as numbered before; or in a thread with `--reply`. A line the diff does not show is
+refused before anything is posted, and the comment asks first.
+
+In the PRs section, `d` (or `d` in a pull request's details) opens its review: the diff file by
+file, with each comment thread under the line it is on, comments on the whole pull request first,
+and those on code that has changed since last. The arrows move over lines and comments, `n` and `p`
+jump between files, `c` comments on the line under the cursor or replies to the comment, and `C`
+comments on the whole pull request. The comment is written in an editor where `Ctrl+S` posts it,
+asking first; `Esc` closes it and keeps the text for next time.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret

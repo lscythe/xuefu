@@ -14,6 +14,7 @@ import { gitPlugin } from "../../../src/plugins/git/plugin";
 import { gitView } from "../../../src/plugins/git/tui/git-view";
 import { jiraPlugin } from "../../../src/plugins/jira/plugin";
 import { jiraView } from "../../../src/plugins/jira/tui/jira-view";
+import type { PullRequestComment } from "../../../src/plugins/pr/domain/comment";
 import { prPlugin } from "../../../src/plugins/pr/plugin";
 import { prView } from "../../../src/plugins/pr/tui/pr-view";
 import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
@@ -232,6 +233,47 @@ const TO_REVIEW = [
   }),
 ];
 
+/** Comments on every pull request: one on the whole, and a thread on a line, with a reply. */
+const REVIEW_THREADS: PullRequestComment[] = [
+  {
+    id: 101,
+    version: 0,
+    author: "Walter Skinner",
+    text: "Thanks for splitting the docs out.",
+    created: Date.UTC(2026, 9, 6, 9, 12),
+    updated: Date.UTC(2026, 9, 6, 9, 12),
+    anchor: null,
+    todo: null,
+    resolved: false,
+    replies: [],
+  },
+  {
+    id: 102,
+    version: 0,
+    author: "Fox Mulder",
+    text: "Does this still fall back to the PIN when Face ID is off?",
+    created: Date.UTC(2026, 9, 6, 10, 4),
+    updated: Date.UTC(2026, 9, 6, 10, 4),
+    anchor: { path: "app/src/Login.kt", line: 11, side: "new", lineKind: "added", outdated: false },
+    todo: "open",
+    resolved: false,
+    replies: [
+      {
+        id: 105,
+        version: 0,
+        author: "Dana Scully",
+        text: "It does, on the else branch below.",
+        created: Date.UTC(2026, 9, 6, 11, 30),
+        updated: Date.UTC(2026, 9, 6, 11, 30),
+        anchor: null,
+        todo: null,
+        resolved: false,
+        replies: [],
+      },
+    ],
+  },
+];
+
 /** The pull requests section as the pr plugin draws it, over a stand-in Bitbucket. */
 const prSection: Section = {
   id: prPlugin.id,
@@ -242,6 +284,7 @@ const prSection: Section = {
       fakePullRequests(
         { yours: YOUR_PULLS, toReview: TO_REVIEW },
         { successful: 2, failed: 0, inProgress: 1 },
+        { comments: () => Promise.resolve(ok(REVIEW_THREADS)) },
       ),
     ),
     maxResults: 25,
@@ -767,6 +810,22 @@ describe("screenshots", () => {
     screen.mockInput.pressKey("m");
     await screen.waitForFrame((f) => f.includes("enter merge"));
     expectScreenshot("pr-merge", screen.captureSpans());
+  });
+
+  test("pull requests, reviewing one", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("d");
+    await screen.waitForFrame((f) => f.includes("It does, on the else branch"));
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    await screen.waitForFrame((f) => f.includes("c comment"));
+    expectScreenshot("pr-review", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

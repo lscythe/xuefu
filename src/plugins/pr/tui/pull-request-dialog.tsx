@@ -19,6 +19,8 @@ export interface PullRequestDialogProps {
   readonly icons: IconSet;
   /** The time zone dates are shown in; the host's unless given. */
   readonly timeZone?: string | undefined;
+  /** Opens the review: the diff and its comments. */
+  readonly onReview: () => void;
   readonly onClose: () => void;
 }
 
@@ -50,7 +52,7 @@ function buildsLine(builds: BuildSummary): { readonly text: string; readonly ton
 
 /**
  * A pull request's details, its builds read as it opens, and its description, which the arrows
- * scroll. Esc closes.
+ * scroll. `d` opens its diff and comments; Esc closes.
  */
 export function PullRequestDialog(props: PullRequestDialogProps) {
   const dimensions = useTerminalDimensions();
@@ -133,6 +135,9 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
       case "q":
         props.onClose();
         return;
+      case "d":
+        props.onReview();
+        return;
       case "up":
       case "k":
         scroll(top() - 1);
@@ -165,7 +170,7 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
     const at = more
       ? `  ${Math.min(description().length, top() + room())}/${description().length}`
       : "";
-    return `${more ? (ascii() ? "j/k scroll  " : "↑↓ scroll  ") : ""}esc close${at}`;
+    return `${more ? (ascii() ? "j/k scroll  " : "↑↓ scroll  ") : ""}d diff  esc close${at}`;
   };
 
   return (

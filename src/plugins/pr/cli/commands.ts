@@ -10,13 +10,14 @@ import type {
 import { ok, type Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
-import { mergeInput, type PrChanges, reviewInput } from "../application/actions";
+import { commentInput, mergeInput, type PrChanges, reviewInput } from "../application/actions";
 import {
   type BranchPullRequestDependencies,
   branchPullRequest,
   whyNoPullRequest,
 } from "../application/branch-pull-request";
 import { readyToMerge } from "../application/merge";
+import { parseDiff } from "../domain/diff";
 import {
   type BuildSummary,
   type PullRequest,
@@ -25,6 +26,9 @@ import {
   type ReviewStatus,
   reviewSummary,
 } from "../domain/pull-request";
+import { commentDraft } from "./comment-draft";
+import { commentJson, formatThreads } from "./comment-format";
+import { diffStat } from "./diff-stat";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
 const workspace = {
@@ -66,10 +70,55 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     flags: { workspace, json },
     summary: "Show a pull request, by default this branch's, with its reviews and builds",
   },
+  {
+    group: "pr",
+    name: "diff",
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: {
+      workspace,
+      stat: {
+        type: "boolean",
+        description: "only the files changed, with lines added and removed",
+      },
+    },
+    summary: "Show what a pull request changes, as a unified diff",
+  },
+  {
+    group: "pr",
+    name: "comments",
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: { workspace, json },
+    summary: "Show a pull request's comment threads, with where each is in the diff",
+  },
   change("approve", "Approve a pull request"),
   change("needs-work", "Ask for changes on a pull request"),
   change("unapprove", "Withdraw your approval of, or request for changes on, a pull request"),
   change("merge", "Merge a pull request, once Bitbucket says it can be"),
+  {
+    group: "pr",
+    name: "comment",
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: {
+      message: { type: "string", short: "m", value: "<text>", description: "what to say" },
+      file: { type: "string", value: "<path>", description: "on a line of this file, with --line" },
+      line: {
+        type: "string",
+        value: "<n>",
+        description: "the line, numbered as in the file after",
+      },
+      old: { type: "boolean", description: "a removed line, numbered as in the file before" },
+      reply: { type: "string", value: "<id>", description: "in reply to this comment" },
+      workspace,
+      yes,
+    },
+    summary: "Comment on a pull request, on a line of its diff, or in reply to a comment",
+  },
 ];
 
 const REVIEWED: Readonly<Record<string, readonly [ReviewStatus, string]>> = {
@@ -220,6 +269,44 @@ export function prCommands(changes: PrChanges, maxResults: number): PluginComman
       );
       if (!merged.ok) return merged;
       io.stdout(`✓ Merged ${pullRequestRef(pull)} (${pull.title}) into ${pull.to}\n`);
+      return ok(0);
+    }
+    if (invocation.name === "comment") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const pull = found.value;
+      const draft = await commentDraft(client, pull, invocation.flags);
+      if (!draft.ok) return draft;
+      const posted = await confirmed(
+        (options) => invoke(actions.comment, commentInput(pull, draft.value), options),
+        invocation,
+      );
+      if (!posted.ok) return posted;
+      io.stdout(`✓ Posted #${posted.value.id} on ${pullRequestRef(pull)}\n`);
+      return ok(0);
+    }
+    if (invocation.name === "comments") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const threads = await client.comments(found.value.repository, found.value.id);
+      if (!threads.ok) return threads;
+      if (asJson) {
+        io.stdout(`${JSON.stringify(threads.value.map(commentJson), null, 2)}\n`);
+        return ok(threads.value.length === 0 ? 1 : 0);
+      }
+      if (threads.value.length === 0) {
+        io.stderr(`No comments on ${pullRequestRef(found.value)}.\n`);
+        return ok(1);
+      }
+      io.stdout(formatThreads(threads.value, when));
+      return ok(0);
+    }
+    if (invocation.name === "diff") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const diff = await client.diff(found.value.repository, found.value.id);
+      if (!diff.ok) return diff;
+      io.stdout(invocation.flags["stat"] === true ? diffStat(parseDiff(diff.value)) : diff.value);
       return ok(0);
     }
     if (invocation.name === "show") {
