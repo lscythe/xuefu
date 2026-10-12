@@ -833,9 +833,9 @@ describe("screenshots", () => {
   });
 
   /** Claude reviewing a pull request: it reads, answers, then asks to post a comment if `asks`. */
-  const reviewer = (asks: boolean): AgentHost => ({
+  const reviewer = (asks: boolean, posts = false): AgentHost => ({
     name: "Claude",
-    ask: (_question, { onEvent, approve }) => {
+    ask: (_question, { onEvent, approve, review }) => {
       queueMicrotask(() => {
         onEvent({
           kind: "step",
@@ -893,6 +893,34 @@ describe("screenshots", () => {
             approvalPrompt("Claude", mcpTools(PLUGIN_COMMANDS), "mcp__xuefu__pr_comment", input),
           );
         }
+        if (posts) {
+          void review({
+            pullRequest: "MOB/mobile-banking#42",
+            comments: [
+              {
+                file: "app/src/Login.kt",
+                line: 11,
+                old: false,
+                text: "A cancelled biometric prompt still signs in: prompt() runs before the check is awaited.",
+                suggestion: "        if (!authenticate().await()) return\n        prompt()",
+              },
+              {
+                file: "app/src/Login.kt",
+                line: 12,
+                old: false,
+                text: "The PIN fallback has no attempt limit; lock after three tries?",
+                suggestion: null,
+              },
+              {
+                file: "README.md",
+                line: 9,
+                old: false,
+                text: "Link the new docs/login.md here.",
+                suggestion: "- [Login](docs/login.md): biometric sign-in and the PIN fallback",
+              },
+            ],
+          });
+        }
       });
       return { send: () => undefined, stop: () => undefined };
     },
@@ -922,6 +950,22 @@ describe("screenshots", () => {
     screen.mockInput.pressKey("A");
     await screen.waitForFrame((f) => f.includes("enter allow"));
     expectScreenshot("pr-agent-approval", screen.captureSpans());
+  });
+
+  test("pull requests, posting the review settled with Claude", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent: reviewer(false, true),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("A");
+    await screen.waitForFrame((f) => f.includes("enter post 3 of 3"));
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressKey(" ");
+    await screen.waitForFrame((f) => f.includes("enter post 2 of 3"));
+    expectScreenshot("pr-agent-post", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

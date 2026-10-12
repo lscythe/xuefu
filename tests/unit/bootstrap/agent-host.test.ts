@@ -5,6 +5,8 @@ import type {
   AgentRunner,
   AgentServer,
   AgentSession,
+  DraftComment,
+  DraftReview,
 } from "../../../src/application/ports/agent";
 import type {
   CodeGraph,
@@ -13,8 +15,9 @@ import type {
   ProjectBriefs,
 } from "../../../src/application/ports/project-context";
 import { agentHost, approvalPrompt } from "../../../src/bootstrap/agent-host";
+import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
 import type { McpTools } from "../../../src/cli/mcp-server";
-import type { McpTool } from "../../../src/cli/mcp-tools";
+import { type McpTool, mcpTools } from "../../../src/cli/mcp-tools";
 import type { ConfirmationPrompt } from "../../../src/domain/shared/confirmation";
 import { fileSystemError, processError } from "../../../src/domain/shared/errors";
 import type { WorkspaceId } from "../../../src/domain/shared/ids";
@@ -159,15 +162,30 @@ const FRESH: ProjectBrief = {
   createdAt: (Date.UTC(2026, 9, 6, 9, 0, 0) - 3 * DAY_MS) as Timestamp,
 };
 
-function tools(): McpTools & { ran: (readonly string[])[] } {
+/** XueFu's own `pr comment`, as agents get it. */
+const COMMENT = mcpTools(PLUGIN_COMMANDS).find((tool) => tool.name === "pr_comment") as McpTool;
+
+/** XueFu's tools, `pr comment` among them if `commenting`; a run fails when `fails` says. */
+function tools(
+  commenting = false,
+  fails: (argv: readonly string[]) => boolean = () => false,
+): McpTools & { ran: (readonly string[])[] } {
   const ran: (readonly string[])[] = [];
   return {
     version: "9.9.9",
-    tools: [DIFF, APPROVE],
+    tools: [DIFF, APPROVE, ...(commenting ? [COMMENT] : [])],
     ran,
     run: (argv) => {
       ran.push(argv);
-      return Promise.resolve({ code: 0, stdout: `ran ${argv.join(" ")}\n`, stderr: "" });
+      return Promise.resolve(
+        fails(argv)
+          ? {
+              code: 65,
+              stdout: "",
+              stderr: "Comment is invalid\nline: line 99 is not in the diff\n",
+            }
+          : { code: 0, stdout: `ran ${argv.join(" ")}\n`, stderr: "" },
+      );
     },
   };
 }
@@ -180,6 +198,11 @@ interface Setup {
   readonly broken?: boolean;
   readonly fails?: boolean;
   readonly setup?: CodeGraphSetup | null;
+  /** XueFu's PR commands are on, so reviews can be posted. */
+  readonly commenting?: boolean;
+  readonly runFails?: (argv: readonly string[]) => boolean;
+  /** What the user posts of a drafted review; all of it by default. */
+  readonly pick?: (draft: DraftReview) => readonly DraftComment[];
 }
 
 /** An installer for graf that records what it was asked, installing or failing as told. */
@@ -214,10 +237,11 @@ function fakeSetup(options: { declined?: boolean; installs?: boolean; remembers?
 function asking(setup: Setup = {}) {
   const answers = setup.answers ?? [];
   const fake = fakeRunner(setup.fails);
-  const served = tools();
+  const served = tools(setup.commenting, setup.runFails);
   const memory = memoryBriefs(setup.kept === undefined ? FRESH : setup.kept, setup.broken);
   const clock = new ManualClock();
   const asked: ConfirmationPrompt[] = [];
+  const reviewed: DraftReview[] = [];
   const events: AgentEvent[] = [];
   const host = agentHost({
     runner: fake.runner,
@@ -239,10 +263,14 @@ function asking(setup: Setup = {}) {
           asked.push(prompt);
           return Promise.resolve(answers.shift() ?? false);
         },
+        review: (draft) => {
+          reviewed.push(draft);
+          return Promise.resolve(setup.pick?.(draft) ?? draft.comments);
+        },
       },
     );
   const started = ask(events);
-  return { host, fake, served, started, asked, events, clock, saved: memory.saved, ask };
+  return { host, fake, served, started, asked, reviewed, events, clock, saved: memory.saved, ask };
 }
 
 const steps = (events: readonly AgentEvent[]) =>
@@ -251,8 +279,8 @@ const steps = (events: readonly AgentEvent[]) =>
   );
 
 /** Starts a conversation, with a fresh brief, and a way to call its endpoint. */
-async function session(answers: boolean[] = []) {
-  const { fake, ...rest } = asking({ answers });
+async function session(answers: boolean[] = [], setup: Setup = {}) {
+  const { fake, ...rest } = asking({ answers, ...setup });
   await until(() => fake.launches.length === 1);
   const launch = fake.launches[0] as AgentLaunch;
   let id = 0;
@@ -297,6 +325,146 @@ describe("agentHost", () => {
     expect(init.result["instructions"]).toContain("pass yes set to true");
     const listed = (await rpc("tools/list")).result["tools"] as { name: string }[];
     expect(listed.map((tool) => tool.name)).toEqual(["pr_diff", "pr_approve", "approval"]);
+    fake.emit({ kind: "exit", message: null });
+  });
+
+  test("a settled review is shown to the user, and what they choose is posted on its lines", async () => {
+    const LOGIN = {
+      file: "app/src/Login.kt",
+      line: 11,
+      text: "Await authenticate() before prompt().",
+      suggestion: "    authenticate().await()\n",
+    };
+    const { launch, rpc, call, served, reviewed, fake } = await session([], {
+      commenting: true,
+      // The user leaves out the last.
+      pick: (draft) => draft.comments.slice(0, 2),
+    });
+    expect(launch.readTools).toContain("post_comments");
+    const listed = (await rpc("tools/list")).result["tools"] as { name: string }[];
+    expect(listed.map((tool) => tool.name).slice(-2)).toEqual(["approval", "post_comments"]);
+
+    const posted = await call("post_comments", {
+      pullRequest: "MOB/app#42",
+      comments: [
+        LOGIN,
+        { file: "app/src/Pin.kt", line: 4, old: true, text: " Why was the limit removed? " },
+        { file: "README.md", line: 2, text: "Link docs/login.md.", suggestion: "  " },
+      ],
+    });
+    expect(reviewed).toEqual([
+      {
+        pullRequest: "MOB/app#42",
+        comments: [
+          { ...LOGIN, old: false },
+          {
+            file: "app/src/Pin.kt",
+            line: 4,
+            old: true,
+            text: "Why was the limit removed?",
+            suggestion: null,
+          },
+          { file: "README.md", line: 2, old: false, text: "Link docs/login.md.", suggestion: null },
+        ],
+      },
+    ]);
+    expect(served.ran).toEqual([
+      [
+        "pr",
+        "comment",
+        "--message=Await authenticate() before prompt().\n\n```suggestion\n    authenticate().await()\n```",
+        "--file=app/src/Login.kt",
+        "--line=11",
+        "--yes",
+        "--",
+        "MOB/app#42",
+      ],
+      [
+        "pr",
+        "comment",
+        "--message=Why was the limit removed?",
+        "--file=app/src/Pin.kt",
+        "--line=4",
+        "--old",
+        "--yes",
+        "--",
+        "MOB/app#42",
+      ],
+    ]);
+    expect(posted).toEqual({
+      content: [
+        {
+          type: "text",
+          text:
+            "Posted on app/src/Login.kt:11.\nPosted on app/src/Pin.kt:4.\n" +
+            "The user left out 1 of them.",
+        },
+      ],
+    });
+    fake.emit({ kind: "exit", message: null });
+  });
+
+  test("a review posted with nothing chosen, or not all posted, says so", async () => {
+    const none = await session([], { commenting: true, pick: () => [] });
+    const comment = { file: "a.kt", line: 99, text: "Hm." };
+    expect(
+      await none.call("post_comments", { pullRequest: "MOB/app#42", comments: [comment] }),
+    ).toEqual({
+      content: [
+        { type: "text", text: "The user posted none of them. Ask what they would change." },
+      ],
+    });
+    expect(none.served.ran).toEqual([]);
+    none.fake.emit({ kind: "exit", message: null });
+
+    const failing = await session([], { commenting: true, runFails: () => true });
+    const said = await failing.call("post_comments", {
+      pullRequest: "MOB/app#42",
+      comments: [comment],
+    });
+    expect((said["content"] as { text: string }[])[0]?.text).toBe(
+      "Could not post on a.kt:99: line: line 99 is not in the diff",
+    );
+    failing.fake.emit({ kind: "exit", message: null });
+  });
+
+  test("a review drafted wrong is sent back, saying what is wrong", async () => {
+    const { call, reviewed, fake } = await session([], { commenting: true });
+    const wrong = async (args: object) => {
+      const result = await call("post_comments", args);
+      expect(result["isError"]).toBe(true);
+      return (result["content"] as { text: string }[])[0]?.text;
+    };
+    expect(await wrong({ comments: [] })).toBe("pullRequest is needed, as PROJECT/repository#id");
+    expect(await wrong({ pullRequest: "MOB/app#42" })).toBe(
+      "comments is needed: at least one comment to post",
+    );
+    expect(await wrong({ pullRequest: "MOB/app#42", comments: [{ line: 1, text: "x" }] })).toBe(
+      "comment 1 needs the file it is on",
+    );
+    const at = (line: unknown) => ({
+      pullRequest: "p",
+      comments: [{ file: "f", line, text: "x" }],
+    });
+    expect(await wrong(at(0))).toBe("comment 1 needs its line, a whole number from 1");
+    expect(await wrong(at(1.5))).toBe("comment 1 needs its line, a whole number from 1");
+    expect(await wrong(at("3"))).toBe("comment 1 needs its line, a whole number from 1");
+    expect(
+      await wrong({ pullRequest: "p", comments: [{ file: "f", line: 1, text: " " }, null] }),
+    ).toBe("comment 1 needs its text");
+    expect(reviewed).toEqual([]);
+    fake.emit({ kind: "exit", message: null });
+  });
+
+  test("without XueFu's PR commands, there is no review to post", async () => {
+    const { launch, rpc, reviewed, fake } = await session();
+    expect(launch.readTools).not.toContain("post_comments");
+    const listed = (await rpc("tools/list")).result["tools"] as { name: string }[];
+    expect(listed.map((tool) => tool.name)).not.toContain("post_comments");
+    // An unknown tool, as to any MCP client.
+    const unknown = await rpc("tools/call", { name: "post_comments", arguments: {} });
+    expect(unknown).toMatchObject({ error: { code: -32602 } });
+    expect(reviewed).toEqual([]);
     fake.emit({ kind: "exit", message: null });
   });
 

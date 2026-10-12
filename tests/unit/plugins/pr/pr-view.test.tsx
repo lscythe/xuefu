@@ -326,7 +326,8 @@ describe("prView", () => {
     expect(view.asked).toHaveLength(1);
     expect(view.asked[0]?.title).toBe("Review MOB/mobile-banking#40");
     expect(view.asked[0]?.prompt).toContain('pullRequest "MOB/mobile-banking#40"');
-    expect(view.asked[0]?.prompt).toContain("Do not comment on, approve or merge it");
+    expect(view.asked[0]?.prompt).toContain("call post_comments once with the comments we settled");
+    expect(view.asked[0]?.prompt).toContain("Do not post, approve or merge anything before I say");
     // Shift+a is not a: nothing was approved.
     expect(sent).toEqual([]);
 

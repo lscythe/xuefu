@@ -18,6 +18,7 @@ import { type McpTools, mcpReply } from "../cli/mcp-server";
 import type { McpTool } from "../cli/mcp-tools";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import { briefAge, freshBrief, INSTRUCTIONS, instructionsFor, studyPrompt } from "./agent-context";
+import { canPost, draftReview, POST, POST_TOOL, postReview } from "./review-post";
 
 /** The tool Claude Code asks before using any other, as `--permission-prompt-tool`. */
 const APPROVAL = "approval";
@@ -174,6 +175,22 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         result: { content: [{ type: "text", text: JSON.stringify(decision) }] },
       };
     }
+    if (message?.["method"] === "tools/call" && params?.["name"] === POST && canPost(tools)) {
+      // The user chooses what is posted in XueFu's own dialog, which is their approval of it.
+      const draft = draftReview(params["arguments"]);
+      const said =
+        typeof draft === "string"
+          ? draft
+          : await postReview(tools, draft, await handlers.review(draft));
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [{ type: "text", text: said }],
+          ...(typeof draft === "string" ? { isError: true } : {}),
+        },
+      };
+    }
     if (message?.["method"] === "tools/call") {
       const name = String(params?.["name"]);
       const input = record(params?.["arguments"]) ?? {};
@@ -191,7 +208,9 @@ export function agentHost(options: AgentHostOptions): AgentHost {
     }
     const reply = await mcpReply({ ...tools, instructions: INSTRUCTIONS }, text);
     const listed = record(record(reply)?.["result"])?.["tools"];
-    if (message?.["method"] === "tools/list" && Array.isArray(listed)) listed.push(APPROVAL_TOOL);
+    if (message?.["method"] === "tools/list" && Array.isArray(listed)) {
+      listed.push(APPROVAL_TOOL, ...(canPost(tools) ? [POST_TOOL] : []));
+    }
     return reply;
   };
 
@@ -250,7 +269,11 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         prompt,
         instructions,
         mcp: endpoint.mcp,
-        readTools: tools.tools.filter((tool) => !tool.changes).map((tool) => tool.name),
+        // Posting a review needs no approval of Claude Code's: XueFu's dialog asks the user.
+        readTools: [
+          ...tools.tools.filter((tool) => !tool.changes).map((tool) => tool.name),
+          ...(canPost(tools) ? [POST] : []),
+        ],
         approvalTool: APPROVAL,
         servers,
       });

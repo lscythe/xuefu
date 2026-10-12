@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
-import type { AgentHandlers, AgentHost } from "../../../../src/application/ports/agent";
+import type {
+  AgentHandlers,
+  AgentHost,
+  DraftReview,
+} from "../../../../src/application/ports/agent";
 import type { ConfirmationPrompt } from "../../../../src/domain/shared/confirmation";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
@@ -31,6 +35,21 @@ const APPROVE: ConfirmationPrompt = {
   details: [{ label: "pullRequest", value: "MOB/app#42" }],
   consequence: "Approve a pull request, as you, as xuefu pr approve would, without asking again.",
   confirmLabel: "Allow",
+};
+
+const REVIEW: DraftReview = {
+  pullRequest: "MOB/app#42",
+  comments: [
+    {
+      file: "app/src/Login.kt",
+      line: 11,
+      old: false,
+      text: "Await authenticate() before prompt().",
+      suggestion: "authenticate().await()",
+    },
+    { file: "app/src/Pin.kt", line: 4, old: true, text: "Why remove it?", suggestion: null },
+    { file: "README.md", line: 2, old: false, text: "Link docs/login.md.", suggestion: null },
+  ],
 };
 
 /** An agent the test speaks for: what it is sent, whether it is stopped, and its handlers. */
@@ -168,6 +187,79 @@ describe("AgentDialog", () => {
     expect(await frame()).not.toContain("Let Claude");
   });
 
+  test("a settled review is shown whole; the comments chosen are posted", async () => {
+    const script = scriptedAgent();
+    const { view, frame } = await open(script.agent);
+    const posting = script.handlers().review(REVIEW);
+    let shown = await frame();
+    expect(shown).toContain(" Post on MOB/app#42 ");
+    expect(shown).toContain("◉ 1. app/src/Login.kt:11");
+    expect(shown).toContain("+ authenticate().await()");
+    expect(shown).toContain("◉ 2. app/src/Pin.kt, old line 4");
+    expect(shown).toContain("enter post 3 of 3 comments");
+    // Keys are the review's: typing goes nowhere else.
+    view.mockInput.pressArrow("down");
+    view.mockInput.pressKey(" ");
+    shown = await frame();
+    expect(shown).toContain("○ 2. app/src/Pin.kt, old line 4");
+    expect(shown).toContain("enter post 2 of 3 comments");
+    view.mockInput.pressEnter();
+    expect(await posting).toEqual(REVIEW.comments.filter((_, index) => index !== 1));
+    expect(await frame()).not.toContain("Post on");
+    expect(script.sent).toHaveLength(1);
+  });
+
+  test("in a review, a chooses all or none, and Esc posts none", async () => {
+    const script = scriptedAgent();
+    const { view, frame } = await open(script.agent, "ascii");
+    const first = script.handlers().review(REVIEW);
+    await frame();
+    view.mockInput.pressKey("a");
+    const shown = await frame();
+    expect(shown).toContain("[ ] 1. app/src/Login.kt:11");
+    expect(shown).toContain("enter post 0 of 3 comments");
+    view.mockInput.pressKey("a");
+    expect(await frame()).toContain("[x] 3. README.md:2");
+    view.mockInput.pressKey("k");
+    view.mockInput.pressKey("j");
+    view.mockInput.pressArrow("up");
+    view.mockInput.pressKey("a");
+    view.mockInput.pressKey(" ");
+    expect(await frame()).toContain("enter post 1 of 3 comments");
+    view.mockInput.pressEnter();
+    expect(await first).toEqual(REVIEW.comments.slice(0, 1));
+
+    const second = script.handlers().review(REVIEW);
+    await view.renderOnce();
+    await pressEsc(view);
+    expect(await second).toEqual([]);
+  });
+
+  test("a long review keeps the comment under the cursor in view", async () => {
+    const script = scriptedAgent();
+    const { view, frame } = await open(script.agent, "unicode", 14);
+    const many = {
+      pullRequest: "MOB/app#42",
+      comments: Array.from({ length: 8 }, (_, n) => ({
+        file: `F${n + 1}.kt`,
+        line: n + 1,
+        old: false,
+        text: `Point ${n + 1}.`,
+        suggestion: null,
+      })),
+    };
+    void script.handlers().review(many);
+    let shown = await frame();
+    expect(shown).toContain("enter post 8 of 8 comments");
+    expect(shown).toContain("F1.kt:1");
+    expect(shown).not.toContain("F8.kt:8");
+    for (let n = 0; n < 7; n++) view.mockInput.pressArrow("down");
+    shown = await frame();
+    expect(shown).toContain("F8.kt:8");
+    expect(shown).not.toContain("F1.kt:1");
+    view.mockInput.pressKey("c", { ctrl: true });
+  });
+
   test("Ctrl+C on a question declines it; the conversation stays", async () => {
     const script = scriptedAgent();
     const { view, shown } = await open(script.agent);
@@ -184,10 +276,12 @@ describe("AgentDialog", () => {
     const { view, close } = await open(script.agent);
     const asked = script.handlers().approve(APPROVE);
     const queued = script.handlers().approve(APPROVE);
+    const review = script.handlers().review(REVIEW);
     await view.renderOnce();
     close();
     expect(await asked).toBe(false);
     expect(await queued).toBe(false);
+    expect(await review).toEqual([]);
     expect(script.stopped()).toBe(1);
   });
 
