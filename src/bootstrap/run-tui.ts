@@ -1,5 +1,6 @@
 import type { CliRenderer } from "@opentui/core";
 import type { AppError } from "../application/errors";
+import type { AgentHost } from "../application/ports/agent";
 import type { OpenTabs } from "../application/workspace/queries";
 import type { NoteBody } from "../domain/notes/note";
 import { unexpected } from "../domain/shared/errors";
@@ -58,6 +59,8 @@ export async function runTui(
   cwd: string,
   /** Masks credentials in text shown on screen, as the CLI does in what it prints. */
   redact: (text: string) => string,
+  /** A coding agent to ask about workspaces; null when none is installed. */
+  agent: AgentHost | null = null,
 ): Promise<Result<void, AppError>> {
   const tabs = await startingTabs(app, cwd);
   if (!tabs.ok) return tabs;
@@ -149,6 +152,7 @@ export async function runTui(
       loadTracked: (since) => app.timers.trackedSince(since),
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
+      agent,
     });
   } catch (thrown) {
     renderer.destroy();

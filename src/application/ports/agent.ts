@@ -1,6 +1,8 @@
+import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
 import type { ProcessError } from "../../domain/shared/errors";
 import type { AbsolutePath } from "../../domain/shared/path";
 import type { Result } from "../../domain/shared/result";
+import type { AppError } from "../errors";
 
 /** How to start a coding agent, such as Claude Code, on a question. */
 export interface AgentLaunch {
@@ -41,6 +43,26 @@ export interface AgentSession {
   send(text: string): void;
   /** Stops the agent; it ends with an `exit` event. */
   stop(): void;
+}
+
+/** A question for an agent, about the files in `cwd`. */
+interface AgentQuestion {
+  readonly cwd: AbsolutePath;
+  readonly prompt: string;
+}
+
+/** What the cockpit does with an agent at work. */
+export interface AgentHandlers {
+  readonly onEvent: (event: AgentEvent) => void;
+  /** Asks the user whether the agent may do something; resolves to their answer. */
+  readonly approve: (prompt: ConfirmationPrompt) => Promise<boolean>;
+}
+
+/** Starts an agent on a question, with XueFu's tools, asking the user before any change. */
+export interface AgentHost {
+  /** The agent's name, as the user knows it, such as "Claude". */
+  readonly name: string;
+  ask(question: AgentQuestion, handlers: AgentHandlers): Result<AgentSession, AppError>;
 }
 
 /** Starts a coding agent; fails when it cannot be run, such as when it is not installed. */

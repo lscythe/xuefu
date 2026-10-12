@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { confirmationTokenFor } from "../application/commands/command";
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
+import type { AgentHost } from "../application/ports/agent";
 import {
   createRedactor,
   isSensitiveKey,
@@ -25,7 +26,7 @@ import {
   timerSubject,
   workSubject,
 } from "../cli/format";
-import { type CommandRun, serveMcp } from "../cli/mcp-server";
+import { type CommandRun, type McpTools, serveMcp } from "../cli/mcp-server";
 import { mcpTools } from "../cli/mcp-tools";
 import { type CliCommand, parseArgs } from "../cli/parse-args";
 import type { PluginInvocation } from "../cli/plugin-command";
@@ -38,8 +39,10 @@ import { clockDuration } from "../domain/shared/time";
 import { elapsed } from "../domain/timesheet/timer";
 import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
+import { claudeCode } from "../infrastructure/agent/claude-code";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
+import { agentHost } from "./agent-host";
 import { PLUGIN_COMMANDS, PLUGINS } from "./plugins";
 import { runTui, type TuiHost } from "./run-tui";
 import { type App, startApp } from "./start-app";
@@ -661,9 +664,23 @@ async function runPluginCommand(
   return ran.ok ? ran.value : fail(out, ran.error);
 }
 
+/** Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit. */
+function cockpitAgent(app: App, out: Output): AgentHost | null {
+  const command = Bun.which("claude", { PATH: out.runtime.env["PATH"] ?? "" });
+  if (command === null) return null;
+  return agentHost(
+    claudeCode({ command, env: out.runtime.env, model: null }),
+    agentTools(app, out),
+  );
+}
+
 async function openCockpit(app: App, out: Output): Promise<number> {
-  const closed = await runTui(app, out.runtime.tui, out.runtime.cwd, (text) =>
-    out.redactor.redactString(text),
+  const closed = await runTui(
+    app,
+    out.runtime.tui,
+    out.runtime.cwd,
+    (text) => out.redactor.redactString(text),
+    cockpitAgent(app, out),
   );
   return closed.ok ? EXIT.ok : fail(out, closed.error);
 }
@@ -698,7 +715,7 @@ async function runForAgent(app: App, out: Output, argv: readonly string[]): Prom
   return { code, stdout, stderr };
 }
 
-/** Serves agents the commands as MCP tools until stdin closes; plugins left off add none. */
+/** Serves agents the commands as MCP tools until stdin closes. */
 async function serveAgents(app: App, out: Output): Promise<number> {
   if (!out.runtime.stdin.piped) {
     out.runtime.stderr.write(
@@ -706,17 +723,21 @@ async function serveAgents(app: App, out: Output): Promise<number> {
         "Add it to Claude Code with: claude mcp add xuefu -- xuefu mcp\n",
     );
   }
-  const on = new Set(app.plugins.map(({ plugin }) => plugin.id));
   await serveMcp(
-    {
-      version: out.runtime.version,
-      tools: mcpTools(PLUGIN_COMMANDS.filter((spec) => on.has(spec.group))),
-      run: (argv) => runForAgent(app, out, argv),
-      write: (text) => out.runtime.stdout.write(text),
-    },
+    { ...agentTools(app, out), write: (text) => out.runtime.stdout.write(text) },
     out.runtime.stdin.chunks(),
   );
   return EXIT.ok;
+}
+
+/** XueFu's commands as tools for agents; plugins left off add none. */
+function agentTools(app: App, out: Output): McpTools {
+  const on = new Set(app.plugins.map(({ plugin }) => plugin.id));
+  return {
+    version: out.runtime.version,
+    tools: mcpTools(PLUGIN_COMMANDS.filter((spec) => on.has(spec.group))),
+    run: (argv) => runForAgent(app, out, argv),
+  };
 }
 
 function runCommand(app: App, out: Output, command: CliCommand): Promise<number> | number {

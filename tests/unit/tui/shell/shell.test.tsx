@@ -5,6 +5,7 @@ import { testRender, useKeyboard } from "@opentui/solid";
 import { type Component, createEffect, createSignal } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
+import type { AgentHost } from "../../../../src/application/ports/agent";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
 import { storageError } from "../../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
@@ -912,6 +913,82 @@ describe("Shell plugin sections", () => {
     shell.mockInput.pressTab();
     shell.mockInput.pressKey("f");
     await shell.waitForFrame((f) => f.includes("Disk full"));
+  });
+});
+
+describe("Shell agent", () => {
+  /** An agent that only records what it is asked, in which folder, and whether it was stopped. */
+  function quietAgent() {
+    const asked: string[] = [];
+    let stopped = 0;
+    const agent: AgentHost = {
+      name: "Claude",
+      ask: (question) => {
+        asked.push(`${question.prompt} in ${question.cwd}`);
+        return ok({ send: () => undefined, stop: () => stopped++ });
+      },
+    };
+    return { agent, asked, stopped: () => stopped };
+  }
+
+  /** A view that asks the agent on a, and shows the keys it gets and whether it can ask. */
+  const asking: Component<SectionProps> = (props) => {
+    const [pressed, setPressed] = createSignal<string[]>([]);
+    useKeyboard((key) => {
+      if (!props.focused) return;
+      if (key.name === "a") props.askAgent?.({ title: "Review MOB/app#42", prompt: "Review it" });
+      setPressed((all) => [...all, key.name]);
+    });
+    return (
+      <text>{`${props.askAgent == null ? "no agent" : "agent"}: ${pressed().join(" ")}`}</text>
+    );
+  };
+  const PRS = { id: "pr", label: "PRs", icons: { nerd: "P", letter: "P" }, view: asking };
+  const onPrs = (agent: AgentHost | null) =>
+    renderShell({
+      sections: cockpitSections([PRS]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent,
+    });
+
+  test("a section asks about the workspace in front; the conversation has the keys", async () => {
+    const { agent, asked, stopped } = quietAgent();
+    const shell = await onPrs(agent);
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("a");
+    await shell.waitForFrame((f) => f.includes(" Claude · Review MOB/app#42 "));
+    expect(asked).toEqual([`Review it in ${MOBILE.workspace.path}`]);
+    // What is typed is the conversation's, not the section's or the cockpit's.
+    await shell.mockInput.typeText("qt");
+    await shell.waitForFrame((f) => f.includes("qt▏"));
+    expect(shell.quits()).toBe(0);
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Claude · "));
+    expect(stopped()).toBe(1);
+    shell.mockInput.pressKey("x");
+    await shell.waitForFrame((f) => f.includes("agent: a x"));
+  });
+
+  test("without an agent, sections cannot ask and the palette does not offer it", async () => {
+    const shell = await onPrs(null);
+    await shell.waitForFrame((f) => f.includes("no agent: "));
+    shell.mockInput.pressKey(":");
+    const palette = await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    expect(palette).not.toContain("Ask Claude");
+  });
+
+  test("the palette asks a question of your own", async () => {
+    const { agent, asked } = quietAgent();
+    const shell = await renderShell({ agent });
+    shell.mockInput.pressKey(":");
+    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    await shell.mockInput.typeText("ask claude");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes("Question"));
+    await shell.mockInput.typeText("What is left on MOB-2841?");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes(" Claude · Question "));
+    expect(asked).toEqual([`What is left on MOB-2841? in ${MOBILE.workspace.path}`]);
   });
 });
 
