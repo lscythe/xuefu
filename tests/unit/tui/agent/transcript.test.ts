@@ -10,6 +10,8 @@ describe("toolLine", () => {
       "Read app/src/Login.kt 40",
     );
     expect(toolLine("Grep", { pattern: "a\n b" }, "/w")).toBe("Grep a b");
+    // Working in no folder, paths stay whole.
+    expect(toolLine("Read", { file_path: "/w/Login.kt" }, null)).toBe("Read /w/Login.kt");
     const long = toolLine("pr_comment", { message: "x".repeat(200) }, "/w");
     expect(long).toHaveLength(80);
     expect(long.endsWith("…")).toBe(true);

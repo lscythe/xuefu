@@ -125,6 +125,14 @@ export interface ShellProps {
   readonly onQuit: () => void;
   /** A coding agent to ask about the workspace in front; none when it is not installed. */
   readonly agent?: AgentHost | null;
+  /**
+   * The workspace holding a clone whose origin `holds` accepts, `first` tried before the rest;
+   * null when none does. Without it, the agent is asked in the workspace in front.
+   */
+  readonly workspaceWith?: (
+    holds: (origin: string) => boolean,
+    first: Workspace,
+  ) => Promise<Workspace | null>;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
   readonly tickMs?: number;
@@ -140,7 +148,8 @@ interface EditingNote {
 /** A conversation with the agent on screen. */
 interface AskingAgent extends AgentQuestionAbout {
   readonly agent: AgentHost;
-  readonly workspace: Workspace;
+  /** Where the agent works; null when no workspace holds the repository asked about. */
+  readonly workspace: Workspace | null;
 }
 
 /** The header's two rows, the panel's frame and the key bar. */
@@ -316,7 +325,18 @@ export function Shell(props: ShellProps) {
     const agent = props.agent ?? null;
     const current = workspace();
     if (agent === null || current === null) return null;
-    return (question: AgentQuestionAbout) => setAsking({ ...question, agent, workspace: current });
+    return (question: AgentQuestionAbout) => {
+      const { repository } = question;
+      const find = props.workspaceWith;
+      if (repository === undefined || find === undefined) {
+        setAsking({ ...question, agent, workspace: current });
+        return;
+      }
+      // The code is in the workspace that holds its repository, which may not be the one in front.
+      void find(repository.holds, current).then((holder) =>
+        setAsking({ ...question, agent, workspace: holder }),
+      );
+    };
   });
 
   /** Opens the editor on the front workspace's note, or on the note on its work in progress. */

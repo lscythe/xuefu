@@ -328,6 +328,20 @@ describe("prView", () => {
     expect(view.asked[0]?.prompt).toContain('pullRequest "MOB/mobile-banking#40"');
     expect(view.asked[0]?.prompt).toContain("call post_comments once with the comments we settled");
     expect(view.asked[0]?.prompt).toContain("Do not post, approve or merge anything before I say");
+    // Asked in the workspace holding a clone of its repository, over SSH or HTTPS.
+    const repository = view.asked[0]?.repository;
+    expect(repository?.name).toBe("MOB/mobile-banking");
+    expect(repository?.holds("ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git")).toBe(
+      true,
+    );
+    expect(repository?.holds("https://bitbucket.example.com/scm/MOB/Mobile-Banking.git")).toBe(
+      true,
+    );
+    expect(repository?.holds("ssh://git@bitbucket.example.com:7999/mob/other.git")).toBe(false);
+    expect(repository?.holds("ssh://git@bitbucket.example.com:7999/ops/mobile-banking.git")).toBe(
+      false,
+    );
+    expect(repository?.holds("git@github.com:lscythe/xuefu.git")).toBe(false);
     // Shift+a is not a: nothing was approved.
     expect(sent).toEqual([]);
 

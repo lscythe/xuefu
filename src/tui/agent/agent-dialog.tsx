@@ -22,8 +22,8 @@ export interface AgentDialogProps {
   readonly agent: AgentHost;
   /** What the conversation is about, for the title, such as "Review MOB/app#42". */
   readonly title: string;
-  /** Where the agent works: the workspace in front. */
-  readonly workspace: Workspace;
+  /** Where the agent works; null when no workspace holds the code it is asked about. */
+  readonly workspace: Workspace | null;
   /** The first message, sent as the dialog opens; null has it study the workspace again. */
   readonly prompt: string | null;
   readonly icons: IconSet;
@@ -140,7 +140,9 @@ export function AgentDialog(props: AgentDialogProps) {
   const inner = () => width() - 4;
   const room = () => Math.max(3, dimensions().height - CHROME_ROWS);
   const ascii = () => props.icons === "ascii";
-  const rows = createMemo(() => transcriptRows(entries(), inner(), props.workspace.path, ascii()));
+  const rows = createMemo(() =>
+    transcriptRows(entries(), inner(), props.workspace?.path ?? null, ascii()),
+  );
   const lastTop = () => Math.max(0, rows().length - room());
   const first = () => Math.min(top() ?? lastTop(), lastTop());
   const scroll = (to: number) => setTop(to >= lastTop() ? null : Math.max(0, to));

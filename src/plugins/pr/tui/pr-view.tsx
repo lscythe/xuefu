@@ -246,7 +246,7 @@ export function prView(section: PrSection): Component<SectionProps> {
     /** Opens a conversation with the agent on reviewing the pull request. */
     const askReview = (pull: PullRequest) => {
       setOpened(null);
-      props.askAgent?.(reviewQuestion(pull));
+      props.askAgent?.(reviewQuestion(pull, section.host));
     };
 
     useKeyboard((key) => {

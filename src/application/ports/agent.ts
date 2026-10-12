@@ -59,7 +59,11 @@ export interface AgentSession {
 
 /** A question for an agent about a workspace. */
 interface AgentQuestion {
-  readonly workspace: Workspace;
+  /**
+   * The workspace the question is about, whose folder the agent works in; null when no workspace
+   * holds the code, so the agent works from XueFu's tools alone.
+   */
+  readonly workspace: Workspace | null;
   /**
    * The first message. Null asks it only to study the workspace again, renewing what it keeps of
    * it, and to say what it learned.

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { confirmationTokenFor } from "../application/commands/command";
 import type { DiagnosticsReport } from "../application/diagnostics";
@@ -33,7 +34,7 @@ import type { PluginInvocation } from "../cli/plugin-command";
 import { assertNever } from "../domain/shared/assert-never";
 import { configurationError, validationError } from "../domain/shared/errors";
 import { workspaceId } from "../domain/shared/ids";
-import { absolutePath } from "../domain/shared/path";
+import { type AbsolutePath, absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import { clockDuration } from "../domain/shared/time";
 import { elapsed } from "../domain/timesheet/timer";
@@ -691,8 +692,19 @@ function cockpitAgent(app: App, out: Output): AgentHost | null {
           })
         : null,
     briefs: briefFiles(join(app.paths.dataDir, "briefs")),
+    elsewhere: emptyFolder(join(app.paths.dataDir, "agent")),
     clock: systemClock,
   });
+}
+
+/** A folder of XueFu's own, kept empty, for the agent to work in when no workspace has the code. */
+function emptyFolder(folder: string): AbsolutePath {
+  try {
+    mkdirSync(folder, { recursive: true, mode: 0o700 });
+  } catch {
+    // Claude says it cannot start there, which is said in the conversation.
+  }
+  return folder as AbsolutePath;
 }
 
 async function openCockpit(app: App, out: Output): Promise<number> {

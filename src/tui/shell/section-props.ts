@@ -28,9 +28,18 @@ export interface SectionProps {
   readonly report: (error: AppError) => void;
   /**
    * Opens a conversation with the coding agent about something in the section, in the workspace
-   * in front. Absent when no agent is installed or no workspace is open.
+   * in front, or in the one that holds the repository it is about. Absent when no agent is
+   * installed or no workspace is open.
    */
   readonly askAgent?: ((question: AgentQuestionAbout) => void) | null;
+}
+
+/** A repository the code asked about lives in, to find the workspace that holds a clone of it. */
+interface AgentRepository {
+  /** As the user knows it, such as "MOB/app". */
+  readonly name: string;
+  /** Whether a clone with this origin is of it. */
+  readonly holds: (origin: string) => boolean;
 }
 
 /** What a section asks the agent: the first message, and what it is about, for the title. */
@@ -39,4 +48,9 @@ export interface AgentQuestionAbout {
   readonly title: string;
   /** Null has the agent study the workspace again, without a question. */
   readonly prompt: string | null;
+  /**
+   * The repository the question is about, when it is one: the agent works in the workspace that
+   * holds a clone of it, whichever is in front, or in none when no workspace does.
+   */
+  readonly repository?: AgentRepository;
 }

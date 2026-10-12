@@ -17,6 +17,7 @@ import type {
 import { type McpTools, mcpReply } from "../cli/mcp-server";
 import type { McpTool } from "../cli/mcp-tools";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
+import type { AbsolutePath } from "../domain/shared/path";
 import { briefAge, freshBrief, INSTRUCTIONS, instructionsFor, studyPrompt } from "./agent-context";
 import { canPost, draftReview, POST, POST_TOOL, postReview } from "./review-post";
 
@@ -101,6 +102,8 @@ export interface AgentHostOptions {
   readonly setup: CodeGraphSetup | null;
   /** What the agent learned of each workspace, kept between conversations. */
   readonly briefs: ProjectBriefs;
+  /** An empty folder the agent works in when no workspace holds the code it is asked about. */
+  readonly elsewhere: AbsolutePath;
   readonly clock: Clock;
 }
 
@@ -265,7 +268,7 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       };
       const step = (text: string, failed = false) => tell({ kind: "step", text, failed });
       const launch = (prompt: string, instructions: string, servers: readonly AgentServer[]) => ({
-        cwd: workspace.path,
+        cwd: workspace?.path ?? options.elsewhere,
         prompt,
         instructions,
         mcp: endpoint.mcp,
@@ -325,7 +328,28 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         return codeGraph;
       };
 
+      /** Starts the conversation itself, sending what the user said while it was prepared. */
+      const converse = (prompt: string, instructions: string, servers: readonly AgentServer[]) => {
+        const started = runner.start(launch(prompt, instructions, servers), (event) =>
+          event.kind === "exit" ? end(event.message) : tell(event),
+        );
+        if (!started.ok) {
+          end(started.error.message);
+          return;
+        }
+        current = conversation = started.value;
+        for (const text of waiting.splice(0)) conversation.send(text);
+      };
+
       void (async () => {
+        if (workspace === null) {
+          // Nothing to graph or study: the code is reached through XueFu's tools.
+          step(`No workspace holds this code, so ${runner.name} works from XueFu's tools alone.`);
+          if (question.prompt === null) end(null);
+          else
+            converse(question.prompt, instructionsFor(null, null, false, options.clock.now()), []);
+          return;
+        }
         const servers: AgentServer[] = [];
         const setup = options.setup;
         const graph =
@@ -388,20 +412,11 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         }
 
         const later = options.clock.now();
-        const started = runner.start(
-          launch(
-            question.prompt,
-            instructionsFor(workspace, freshBrief(brief, later) ? brief : null, withGraph, later),
-            servers,
-          ),
-          (event) => (event.kind === "exit" ? end(event.message) : tell(event)),
+        converse(
+          question.prompt,
+          instructionsFor(workspace, freshBrief(brief, later) ? brief : null, withGraph, later),
+          servers,
         );
-        if (!started.ok) {
-          end(started.error.message);
-          return;
-        }
-        current = conversation = started.value;
-        for (const text of waiting.splice(0)) conversation.send(text);
       })();
 
       return {

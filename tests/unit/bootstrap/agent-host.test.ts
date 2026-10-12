@@ -203,7 +203,11 @@ interface Setup {
   readonly runFails?: (argv: readonly string[]) => boolean;
   /** What the user posts of a drafted review; all of it by default. */
   readonly pick?: (draft: DraftReview) => readonly DraftComment[];
+  /** Where the question is asked; Mobile by default, null for no workspace. */
+  readonly workspace?: Workspace | null;
 }
+
+const ELSEWHERE = "/data/agent" as AbsolutePath;
 
 /** An installer for graf that records what it was asked, installing or failing as told. */
 function fakeSetup(options: { declined?: boolean; installs?: boolean; remembers?: boolean } = {}) {
@@ -249,12 +253,13 @@ function asking(setup: Setup = {}) {
     graph: setup.graph ?? null,
     setup: setup.setup ?? null,
     briefs: memory.briefs,
+    elsewhere: ELSEWHERE,
     clock,
   });
   const ask = (into: AgentEvent[]) =>
     host.ask(
       {
-        workspace: MOBILE,
+        workspace: setup.workspace === undefined ? MOBILE : setup.workspace,
         prompt: setup.prompt === undefined ? "Review MOB/app#42" : setup.prompt,
       },
       {
@@ -632,6 +637,32 @@ describe("agentHost", () => {
     expect(steps(forgetful.events)[0]).toBe(
       "! Without graf; Unable to remember not to install graf",
     );
+  });
+
+  test("with no workspace holding the code, it works from XueFu's tools in an empty folder", async () => {
+    let prepared = 0;
+    const graph: CodeGraph = {
+      prepare: () => {
+        prepared += 1;
+        return fakeGraph(false).prepare(MOBILE);
+      },
+    };
+    const { fake, events } = asking({ workspace: null, graph, kept: null });
+    await until(() => fake.launches.length === 1);
+    const launch = fake.launches[0] as AgentLaunch;
+    // Nothing to graph or study: straight to the conversation.
+    expect(prepared).toBe(0);
+    expect(launch.prompt).toBe("Review MOB/app#42");
+    expect(launch.cwd).toBe(ELSEWHERE);
+    expect(launch.servers).toEqual([]);
+    expect(launch.instructions).toContain("this folder is empty: read the changes through");
+    expect(steps(events)).toEqual([
+      "No workspace holds this code, so Claude works from XueFu's tools alone.",
+    ]);
+
+    const studying = asking({ workspace: null, prompt: null });
+    await until(() => studying.events.some((event) => event.kind === "exit"));
+    expect(studying.fake.launches).toEqual([]);
   });
 
   test("a graph that cannot be made is said so, and the agent goes on without it", async () => {

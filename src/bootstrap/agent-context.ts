@@ -48,13 +48,22 @@ export function studyPrompt(withGraph: boolean): string {
   ].join("\n\n");
 }
 
-/** The instructions for a conversation: where it runs, the graph if any, and the brief if any. */
+const NO_CODE =
+  "No workspace of the user's holds the code you are asked about, so this folder is empty: read " +
+  "the changes through XueFu's tools, such as pr_diff and pr_comments, and say so when a finding " +
+  "would need the code around them.";
+
+/**
+ * The instructions for a conversation: where it runs, the graph if any, and the brief if any; for
+ * no workspace, that there is no code at hand.
+ */
 export function instructionsFor(
-  workspace: Workspace,
+  workspace: Workspace | null,
   brief: ProjectBrief | null,
   withGraph: boolean,
   now: Timestamp,
 ): string {
+  if (workspace === null) return [INSTRUCTIONS, NO_CODE].join("\n\n");
   return [
     INSTRUCTIONS,
     ...(withGraph ? [GRAPH] : []),

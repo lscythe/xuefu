@@ -11,6 +11,7 @@ import { systemClock } from "../infrastructure/system/clock";
 import { cockpitSections } from "../tui/shell/sections";
 import type { CockpitSnapshot } from "../tui/shell/shell";
 import type { App } from "./start-app";
+import { workspaceWith } from "./workspace-with";
 
 /** The terminal the cockpit draws on; tests substitute a headless renderer. */
 export interface TuiHost {
@@ -153,6 +154,7 @@ export async function runTui(
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
       agent,
+      workspaceWith: workspaceWith({ workspaces: app.workspaces, processes: app.processes }),
     });
   } catch (thrown) {
     renderer.destroy();

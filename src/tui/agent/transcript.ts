@@ -23,16 +23,19 @@ const MAX_TOOL_LINE = 80;
 
 /**
  * A tool the agent used, in a few words: its name as a command, then the values it was given,
- * paths under the folder it works in shown from there.
+ * paths under the folder it works in, if any, shown from there.
  */
 export function toolLine(
   name: string,
   input: Readonly<Record<string, unknown>>,
-  cwd: string,
+  cwd: string | null,
 ): string {
   const values = Object.values(input)
     .filter((value) => typeof value === "string" || typeof value === "number")
-    .map((value) => String(value).replace(`${cwd}/`, "").replace(/\s+/gu, " "));
+    .map((value) => {
+      const text = String(value);
+      return (cwd === null ? text : text.replace(`${cwd}/`, "")).replace(/\s+/gu, " ");
+    });
   const line = [name.replaceAll("_", " "), ...values].join(" ");
   return line.length > MAX_TOOL_LINE ? `${line.slice(0, MAX_TOOL_LINE - 1)}…` : line;
 }
@@ -44,7 +47,7 @@ export function toolLine(
 export function transcriptRows(
   entries: readonly TranscriptEntry[],
   width: number,
-  cwd: string,
+  cwd: string | null,
   ascii: boolean,
 ): TranscriptRow[] {
   const rows: TranscriptRow[] = [];
