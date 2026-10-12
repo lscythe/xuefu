@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender, useKeyboard } from "@opentui/solid";
-import { type Component, createEffect, createSignal } from "solid-js";
+import { type Component, createEffect, createSignal, lazy } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
 import type { AgentHost } from "../../../../src/application/ports/agent";
@@ -800,6 +800,24 @@ describe("Shell plugin sections", () => {
     shell.mockInput.pressKey("j");
     const next = await shell.waitForFrame((f) => showing("Timesheet")(f));
     expect(next).not.toContain(" on mobile-banking ");
+  });
+
+  test("a view loaded when first shown says so while it loads, as plugins' views are", async () => {
+    let loaded: () => void = () => undefined;
+    const later = lazy(
+      () =>
+        new Promise<{ default: Component<SectionProps> }>((resolve) => {
+          loaded = () => resolve({ default: view });
+        }),
+    );
+    const shell = await renderShell({
+      sections: cockpitSections([{ ...GIT, view: later }]),
+      // Opened on it, as when the cockpit last closed there.
+      navigation: new Map([["mobile-banking", "git"]]),
+    });
+    await shell.waitForFrame((f) => showing("Git")(f) && f.includes("│ Loading…"));
+    loaded();
+    await shell.waitForFrame((f) => f.includes("│ Mobile Banking in 79x25"));
   });
 
   test("its view follows the workspace in front", async () => {
