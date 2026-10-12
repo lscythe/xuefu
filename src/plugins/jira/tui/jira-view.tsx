@@ -11,18 +11,16 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import { confirmationTokenFor } from "../../../application/commands/command";
 import type { AppError } from "../../../application/errors";
-import type { ConfirmationPrompt } from "../../../domain/shared/confirmation";
 import { validationError } from "../../../domain/shared/errors";
-import { ConfirmDialog } from "../../../tui/confirm-dialog";
+import { createAsking } from "../../../tui/asking";
+import { type Banner, BannerLine } from "../../../tui/banner-line";
 import { ErrorLine } from "../../../tui/error-line";
 import { cycle, scrollOffset } from "../../../tui/list-navigation";
 import { fitHints } from "../../../tui/shell/panel-status";
 import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
-import { statusGlyph } from "../../../tui/theme/status";
 import { type JiraChanges, startWorkOnIssue } from "../application/start-work";
 import { IssueDialog } from "./issue-dialog";
 import { categoryTone, type FoundIssues, issueColumns, issueCount } from "./issue-rows";
@@ -36,18 +34,6 @@ export interface JiraSection {
   readonly refreshMs: number;
   /** The time zone dates are shown in; the host's unless given. */
   readonly timeZone?: string;
-}
-
-/** A line above the list: what is running, how it went, or what did not. */
-interface Banner {
-  readonly kind: "running" | "success" | "warning";
-  readonly text: string;
-}
-
-/** A confirmation on screen, and how to answer it. */
-interface Asking {
-  readonly prompt: ConfirmationPrompt;
-  readonly answer: (approved: boolean) => void;
 }
 
 const padded = (text: string, width: number) =>
@@ -73,7 +59,7 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
     const [opened, setOpened] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [banner, setBanner] = createSignal<Banner | null>(null);
-    const [asking, setAsking] = createSignal<Asking | null>(null);
+    const { asking, confirmed, AskingDialog } = createAsking();
     const ascii = () => props.icons === "ascii";
 
     let running: AbortController | null = null;
@@ -101,7 +87,7 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
     });
 
     // A dialog of the section's has every key while it is open.
-    const modal = () => opened() !== null || asking() !== null;
+    const modal = () => opened() !== null || asking();
     createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
       if (modal()) props.setModal(false);
@@ -138,18 +124,6 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
       );
     });
 
-    /** Shows a confirmation and resolves to the answer. */
-    const ask = (prompt: ConfirmationPrompt) =>
-      new Promise<boolean>((resolve) =>
-        setAsking({
-          prompt,
-          answer: (approved) => {
-            setAsking(null);
-            resolve(approved);
-          },
-        }),
-      );
-
     /**
      * Starts work on the issue in the front workspace, then offers to move it to in progress,
      * asking first, as the move changes Jira for the whole team.
@@ -181,15 +155,7 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
           : { kind: "warning", text: `${working} Could not read its moves: ${unread.message}` },
       );
       if (move !== null) {
-        const asked = await changes.invoke(actions.move, move);
-        const moved =
-          !asked.ok && asked.error.kind === "confirmation-required"
-            ? (await ask(asked.error.prompt))
-              ? await changes.invoke(actions.move, move, {
-                  confirmation: confirmationTokenFor(asked.error),
-                })
-              : null
-            : asked;
+        const moved = await confirmed((options) => changes.invoke(actions.move, move, options));
         if (moved !== null && !moved.ok) props.report(moved.error);
         if (moved?.ok === true) {
           setBanner({ kind: "success", text: `${working} Moved it to ${move.to}.` });
@@ -238,10 +204,6 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
     /** Rows for the list: fewer for each line said above it. */
     const listRows = () =>
       Math.max(1, props.rows - (failure() === null ? 0 : 1) - (banner() === null ? 0 : 1));
-    const bannerTone = (kind: Banner["kind"]) =>
-      kind === "running" ? PALETTE.busy : kind === "success" ? PALETTE.success : PALETTE.warning;
-    const bannerGlyph = (kind: Banner["kind"]) =>
-      kind === "warning" ? (ascii() ? "[!]" : "⚠") : statusGlyph(kind, props.icons);
     const drawn = () => {
       const all = issues();
       const top = scrollOffset(props.focused ? at() : 0, all.length, listRows());
@@ -276,14 +238,7 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
           <Match when={true}>
             <Show when={banner()}>
               {(line: Accessor<Banner>) => (
-                <text>
-                  <span
-                    style={{ fg: bannerTone(line().kind) }}
-                  >{`${bannerGlyph(line().kind)} `}</span>
-                  <span style={{ fg: PALETTE.text }}>
-                    {truncateToWidth(line().text, props.width - 2)}
-                  </span>
-                </text>
+                <BannerLine banner={line()} width={props.width} icons={props.icons} />
               )}
             </Show>
             <Show when={failure()}>
@@ -336,11 +291,7 @@ export function jiraView(section: JiraSection): Component<SectionProps> {
             />
           )}
         </Show>
-        <Show when={asking()}>
-          {(shown: Accessor<Asking>) => (
-            <ConfirmDialog prompt={shown().prompt} icons={props.icons} onAnswer={shown().answer} />
-          )}
-        </Show>
+        <AskingDialog icons={props.icons} />
       </>
     );
   };
