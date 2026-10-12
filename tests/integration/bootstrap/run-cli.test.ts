@@ -63,7 +63,11 @@ async function run(
     cwd,
     version: "9.9.9",
     tui,
-    stdin: { piped: stdin !== null, read: () => Promise.resolve(stdin ?? "") },
+    stdin: {
+      piped: stdin !== null,
+      read: () => Promise.resolve(stdin ?? ""),
+      chunks: () => (stdin === null ? [] : [stdin]),
+    },
     stdout: {
       write: (s) => {
         stdout += s;
@@ -988,6 +992,131 @@ describe("runCli: plugins", () => {
 
   test("help lists plugins' commands", async () => {
     expect((await run(["--help"])).stdout).toContain("git [status]");
+  });
+});
+
+describe("runCli: agents over MCP", () => {
+  /** Serves the messages as an agent's harness would send them; the replies come back by id. */
+  async function mcp(messages: object[], env: Record<string, string> = {}, cwd = dir.path) {
+    const input = messages.map((message) => `${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
+    const served = await run(["mcp"], env, cwd, NO_TERMINAL, input.join(""));
+    expect(served.code).toBe(EXIT.ok);
+    expect(served.stderr).toBe("");
+    const replies = served.stdout
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    return new Map(replies.map((reply) => [reply.id, reply]));
+  }
+  const call = (id: number, name: string, args: object = {}) => ({
+    id,
+    method: "tools/call",
+    params: { name, arguments: args },
+  });
+  const text = (reply: { result: { content: { text: string }[] } }) =>
+    reply.result.content.map((part) => part.text).join("");
+
+  test("lists the core's tools and those of the plugins that are on", async () => {
+    const replies = await mcp([{ id: 1, method: "tools/list" }]);
+    const names = replies.get(1).result.tools.map((tool: { name: string }) => tool.name);
+    expect(names).toContain("work_start");
+    expect(names).toContain("git_status");
+    // Jira and Bitbucket are not set up here.
+    expect(names.some((name: string) => /^(jira|pr)_/.test(name))).toBe(false);
+  });
+
+  test("tools run XueFu's commands in the folder the agent runs in", async () => {
+    const repo = makeRepo();
+    try {
+      await run(["workspace", "add", repo.path, "--name", "Mobile"], GIT_ENV);
+      const started = await mcp(
+        [call(1, "work_start", { issue: "MOB-1", title: "Biometric login" })],
+        GIT_ENV,
+        repo.path,
+      );
+      expect(started.get(1).result.isError).toBe(false);
+      expect(text(started.get(1))).toContain("MOB-1");
+
+      const replies = await mcp(
+        [call(2, "work_status"), call(3, "git_status"), call(4, "work_start")],
+        GIT_ENV,
+        repo.path,
+      );
+      expect(JSON.parse(text(replies.get(2)))).toMatchObject([
+        { workspaceId: "mobile", issueKey: "MOB-1", title: "Biometric login" },
+      ]);
+      expect(JSON.parse(text(replies.get(3)))).toMatchObject({ workspace: "mobile" });
+      expect(replies.get(4).result).toEqual({
+        content: [{ type: "text", text: "Missing argument: issue" }],
+        isError: true,
+      });
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  test("a change asks first; the agent confirms it only by calling again with yes", async () => {
+    const fixture = readFileSync(
+      join(import.meta.dir, "..", "..", "contract", "pr", "fixtures", "pull-request.json"),
+      "utf8",
+    );
+    const sent: string[] = [];
+    const pull = "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42";
+    const bitbucket = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        const path = new URL(request.url).pathname;
+        sent.push(`${request.method} ${path}`);
+        if (path === pull) return new Response(fixture);
+        if (path === "/rest/api/1.0/application-properties") {
+          return Response.json({}, { headers: { "X-AUSERNAME": "dscully" } });
+        }
+        if (path === "/rest/api/1.0/users") {
+          return Response.json({ values: [{ name: "dscully", slug: "dscully" }] });
+        }
+        return Response.json({ status: "APPROVED" });
+      },
+    });
+    try {
+      mkdirSync(join(dir.path, "config"), { recursive: true });
+      writeFileSync(
+        join(dir.path, "config", "config.yml"),
+        `version: 1\nplugins:\n  pr:\n    url: http://127.0.0.1:${bitbucket.port}\n` +
+          "    token: { env: BITBUCKET_TOKEN }\n",
+      );
+      const env = { BITBUCKET_TOKEN: "BBDC-agent-test-token" };
+      const target = { pullRequest: "MOB/mobile-banking#42" };
+
+      const asked = (await mcp([call(1, "pr_approve", target)], env)).get(1);
+      expect(asked.result.isError).toBe(true);
+      expect(text(asked)).toContain("? Approve MOB/mobile-banking#42");
+      expect(text(asked)).toContain("call the tool again with yes set to true");
+      expect(sent).toEqual([`GET ${pull}`]);
+
+      const approved = (await mcp([call(2, "pr_approve", { ...target, yes: true })], env)).get(2);
+      expect(approved.result.isError).toBe(false);
+      expect(text(approved)).toContain("✓ Approved MOB/mobile-banking#42");
+      expect(sent.at(-1)).toBe(`PUT ${pull}/participants/dscully`);
+    } finally {
+      bitbucket.stop(true);
+    }
+  });
+
+  test("started from a terminal, it says what it is for", async () => {
+    let stderr = "";
+    const code = await runCli({
+      argv: ["mcp"],
+      env: { XUEFU_CONFIG_DIR: join(dir.path, "config"), XUEFU_DATA_DIR: join(dir.path, "data") },
+      home: dir.path,
+      cwd: dir.path,
+      version: "9.9.9",
+      tui: NO_TERMINAL,
+      stdin: { piped: false, read: () => Promise.resolve(""), chunks: () => [] },
+      stdout: { write: () => undefined },
+      stderr: { write: (s) => (stderr += s) },
+    });
+    expect(code).toBe(EXIT.ok);
+    expect(stderr).toContain("claude mcp add xuefu -- xuefu mcp");
   });
 });
 

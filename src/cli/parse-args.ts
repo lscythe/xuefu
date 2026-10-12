@@ -66,6 +66,8 @@ export type CliCommand =
       readonly limit: string | null;
       readonly json: boolean;
     }
+  /** Serve XueFu's commands to agents as MCP tools, over stdin and stdout. */
+  | { readonly kind: "mcp" }
   /** A command a plugin adds, run by that plugin. */
   | { readonly kind: "plugin"; readonly invocation: PluginInvocation };
 
@@ -290,6 +292,13 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
       limit: text(values, "limit"),
       json: flag(values, "json"),
     }),
+  },
+  mcp: {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: [],
+    build: () => ({ kind: "mcp" }),
   },
   "timer pause": timerChange("pause"),
   "timer resume": timerChange("resume"),

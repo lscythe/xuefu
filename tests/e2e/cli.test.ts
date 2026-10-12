@@ -82,4 +82,32 @@ describe("xuefu entrypoint", () => {
     expect(saved).toMatchObject({ code: 0, stdout: "✓ Saved the note for project\n" });
     expect((await xuefuIn(project, "note")).stdout).toBe("Staging needs the VPN\n");
   });
+
+  test("mcp answers an agent's harness on stdin and stdout, then stops when stdin closes", async () => {
+    const messages = [
+      { id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      { method: "notifications/initialized" },
+      { id: 2, method: "tools/call", params: { name: "workspace_list", arguments: {} } },
+    ];
+    const served = await xuefuWith(
+      dir.path,
+      messages.map((message) => `${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`).join(""),
+      "mcp",
+    );
+    expect(served.code).toBe(0);
+    expect(served.stderr).toBe("");
+    const replies = served.stdout
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(replies.map((reply) => reply.id).sort()).toEqual([1, 2]);
+    expect(replies.find((reply) => reply.id === 1).result.serverInfo).toMatchObject({
+      name: "xuefu",
+      version: pkg.version,
+    });
+    expect(replies.find((reply) => reply.id === 2).result).toEqual({
+      content: [{ type: "text", text: "[]\n" }],
+      isError: false,
+    });
+  });
 });
