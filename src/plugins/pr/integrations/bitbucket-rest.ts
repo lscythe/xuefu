@@ -5,6 +5,7 @@ import { notFound, type RemoteError, remoteError } from "../../../domain/shared/
 import { err, ok, type Result } from "../../../domain/shared/result";
 import type { Secret } from "../../../domain/shared/secret";
 import type { PullRequestClient, PullRequestFailure } from "../application/pull-request-client";
+import type { PullRequestComment } from "../domain/comment";
 import {
   type PullRequest,
   type PullRequestState,
@@ -14,6 +15,8 @@ import {
 } from "../domain/pull-request";
 
 const TIMEOUT_MS = 20_000;
+/** How many of a pull request's activities are read for its comments, at most. */
+const MAX_ACTIVITIES = 2000;
 /** A diff longer than this is refused rather than read into memory. */
 const MAX_DIFF_BYTES = 32 * 1024 * 1024;
 
@@ -63,6 +66,40 @@ const ErrorsSchema = z.object({
     .optional(),
 });
 const UsersSchema = z.object({ values: z.array(z.object({ name: z.string(), slug: z.string() })) });
+const AnchorSchema = z.object({
+  path: z.string(),
+  line: z.number().int().optional(),
+  lineType: z.string().optional(),
+  fileType: z.string().optional(),
+  orphaned: z.boolean().optional(),
+});
+const CommentSchema = z.object({
+  id: z.number().int(),
+  version: z.number().int().default(0),
+  text: z.string(),
+  author: z.object({ displayName: z.string() }),
+  createdDate: z.number(),
+  updatedDate: z.number(),
+  severity: z.string().optional(),
+  state: z.string().optional(),
+  threadResolved: z.boolean().optional(),
+  anchor: AnchorSchema.optional(),
+  get comments() {
+    return z.array(CommentSchema).default([]);
+  },
+});
+const ActivitiesSchema = z.object({
+  values: z.array(
+    z.object({
+      action: z.string(),
+      commentAction: z.string().optional(),
+      comment: CommentSchema.optional(),
+      commentAnchor: AnchorSchema.optional(),
+    }),
+  ),
+  isLastPage: z.boolean(),
+  nextPageStart: z.number().int().optional(),
+});
 const MergeabilitySchema = z.object({
   canMerge: z.boolean(),
   conflicted: z.boolean().default(false),
@@ -83,6 +120,42 @@ const REVIEW_STATUSES: Readonly<Record<ReviewStatus, string>> = {
   "needs-work": "NEEDS_WORK",
   unapproved: "UNAPPROVED",
 };
+
+const LINE_KINDS: Readonly<Record<string, "added" | "removed" | "context">> = {
+  ADDED: "added",
+  REMOVED: "removed",
+  CONTEXT: "context",
+};
+
+/** A comment as REST 1.0 sends it, with its replies, and where it sits when it is on the diff. */
+function toComment(
+  raw: z.infer<typeof CommentSchema>,
+  anchor: z.infer<typeof AnchorSchema> | undefined,
+): PullRequestComment {
+  return {
+    id: raw.id,
+    version: raw.version,
+    author: raw.author.displayName,
+    text: raw.text,
+    created: raw.createdDate,
+    updated: raw.updatedDate,
+    anchor:
+      anchor === undefined
+        ? null
+        : {
+            path: anchor.path,
+            line: anchor.line ?? null,
+            side: anchor.fileType === "FROM" ? "old" : "new",
+            lineKind: LINE_KINDS[anchor.lineType ?? ""] ?? null,
+            outdated: anchor.orphaned === true,
+          },
+    todo: raw.severity === "BLOCKER" ? (raw.state === "RESOLVED" ? "done" : "open") : null,
+    resolved: raw.threadResolved === true,
+    replies: raw.comments
+      .map((reply) => toComment(reply, undefined))
+      .sort((a, b) => a.created - b.created || a.id - b.id),
+  };
+}
 
 /**
  * The first thing the server said was wrong, when it said anything, with what each merge check
@@ -364,6 +437,53 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       return answered.value.status === 200
         ? ok(answered.value.body)
         : gone({ error: refused(answered.value) }, repository, id);
+    },
+
+    async comments(repository, id, signal) {
+      // Each comment thread starts with an activity; a reply comes inside its thread as well as
+      // in an activity of its own, and a deleted comment leaves an activity saying so.
+      const added: z.infer<typeof CommentSchema>[] = [];
+      const anchors = new Map<number, z.infer<typeof AnchorSchema>>();
+      const deleted = new Set<number>();
+      let start = 0;
+      while (start < MAX_ACTIVITIES) {
+        const query = new URLSearchParams({ start: String(start), limit: "100" });
+        const page = await get(
+          `${repoPath(repository)}/pull-requests/${id}/activities?${query}`,
+          ActivitiesSchema,
+          signal,
+        );
+        if (!page.ok) return gone(page, repository, id);
+        for (const activity of page.value.values) {
+          const comment = activity.comment;
+          if (activity.action !== "COMMENTED" || comment === undefined) continue;
+          if (activity.commentAction === "DELETED") deleted.add(comment.id);
+          else if (activity.commentAction === "ADDED") {
+            added.push(comment);
+            if (activity.commentAnchor !== undefined) {
+              anchors.set(comment.id, activity.commentAnchor);
+            }
+          }
+        }
+        if (page.value.isLastPage || page.value.nextPageStart === undefined) break;
+        start = page.value.nextPageStart;
+      }
+      const replies = new Set<number>();
+      const collect = (comment: z.infer<typeof CommentSchema>) => {
+        for (const reply of comment.comments) {
+          replies.add(reply.id);
+          collect(reply);
+        }
+      };
+      for (const comment of added) collect(comment);
+      const threads = new Map<number, PullRequestComment>();
+      for (const comment of added) {
+        if (replies.has(comment.id) || deleted.has(comment.id) || threads.has(comment.id)) {
+          continue;
+        }
+        threads.set(comment.id, toComment(comment, anchors.get(comment.id) ?? comment.anchor));
+      }
+      return ok([...threads.values()].sort((a, b) => a.created - b.created || a.id - b.id));
     },
 
     builds(commit, signal) {

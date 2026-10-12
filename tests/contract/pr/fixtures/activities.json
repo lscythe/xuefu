@@ -1,0 +1,127 @@
+{
+  "size": 6,
+  "limit": 100,
+  "isLastPage": false,
+  "start": 0,
+  "nextPageStart": 6,
+  "values": [
+    {
+      "id": 9006,
+      "createdDate": 1759760000000,
+      "user": { "name": "dscully", "displayName": "Dana Scully", "slug": "dscully" },
+      "action": "COMMENTED",
+      "commentAction": "ADDED",
+      "comment": {
+        "properties": { "repositoryId": 84 },
+        "id": 105,
+        "version": 0,
+        "text": "It does, after three tries.",
+        "author": { "name": "dscully", "displayName": "Dana Scully", "slug": "dscully" },
+        "createdDate": 1759760000000,
+        "updatedDate": 1759760000000,
+        "comments": [],
+        "severity": "NORMAL",
+        "state": "OPEN",
+        "permittedOperations": { "editable": true, "deletable": true }
+      }
+    },
+    {
+      "id": 9005,
+      "createdDate": 1759750000000,
+      "user": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+      "action": "COMMENTED",
+      "commentAction": "DELETED",
+      "comment": {
+        "id": 103,
+        "version": 1,
+        "text": "Never mind.",
+        "author": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+        "createdDate": 1759740000000,
+        "updatedDate": 1759750000000,
+        "comments": []
+      }
+    },
+    {
+      "id": 9004,
+      "createdDate": 1759745000000,
+      "user": { "name": "wskinner", "displayName": "Walter Skinner", "slug": "wskinner" },
+      "action": "APPROVED"
+    },
+    {
+      "id": 9003,
+      "createdDate": 1759740000000,
+      "user": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+      "action": "COMMENTED",
+      "commentAction": "ADDED",
+      "comment": {
+        "id": 103,
+        "version": 0,
+        "text": "Never mind.",
+        "author": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+        "createdDate": 1759740000000,
+        "updatedDate": 1759740000000,
+        "comments": []
+      }
+    },
+    {
+      "id": 9002,
+      "createdDate": 1759730000000,
+      "user": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+      "action": "COMMENTED",
+      "commentAction": "ADDED",
+      "commentAnchor": {
+        "fromHash": "3b18e51",
+        "toHash": "a2c4f0d",
+        "line": 11,
+        "lineType": "ADDED",
+        "fileType": "TO",
+        "path": "app/src/Login.kt",
+        "diffType": "EFFECTIVE",
+        "orphaned": false
+      },
+      "comment": {
+        "id": 102,
+        "version": 0,
+        "text": "Shouldn't this fall back to the PIN?",
+        "author": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+        "createdDate": 1759730000000,
+        "updatedDate": 1759730000000,
+        "comments": [
+          {
+            "id": 105,
+            "version": 0,
+            "text": "It does, after three tries.",
+            "author": { "name": "dscully", "displayName": "Dana Scully", "slug": "dscully" },
+            "createdDate": 1759760000000,
+            "updatedDate": 1759760000000,
+            "comments": [],
+            "severity": "NORMAL",
+            "state": "OPEN"
+          }
+        ],
+        "severity": "BLOCKER",
+        "state": "OPEN",
+        "threadResolved": false
+      }
+    },
+    {
+      "id": 9001,
+      "createdDate": 1759720000000,
+      "user": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+      "action": "COMMENTED",
+      "commentAction": "ADDED",
+      "comment": {
+        "id": 101,
+        "version": 2,
+        "text": "Looks good overall.\n\nOne question below.",
+        "author": { "name": "fmulder", "displayName": "Fox Mulder", "slug": "fmulder" },
+        "createdDate": 1759720000000,
+        "updatedDate": 1759725000000,
+        "comments": [],
+        "severity": "NORMAL",
+        "state": "OPEN",
+        "threadResolved": true
+      }
+    }
+  ]
+}

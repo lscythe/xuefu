@@ -26,6 +26,7 @@ import {
   type ReviewStatus,
   reviewSummary,
 } from "../domain/pull-request";
+import { commentJson, formatThreads } from "./comment-format";
 import { diffStat } from "./diff-stat";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
@@ -82,6 +83,15 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
       },
     },
     summary: "Show what a pull request changes, as a unified diff",
+  },
+  {
+    group: "pr",
+    name: "comments",
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: { workspace, json },
+    summary: "Show a pull request's comment threads, with where each is in the diff",
   },
   change("approve", "Approve a pull request"),
   change("needs-work", "Ask for changes on a pull request"),
@@ -237,6 +247,22 @@ export function prCommands(changes: PrChanges, maxResults: number): PluginComman
       );
       if (!merged.ok) return merged;
       io.stdout(`✓ Merged ${pullRequestRef(pull)} (${pull.title}) into ${pull.to}\n`);
+      return ok(0);
+    }
+    if (invocation.name === "comments") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const threads = await client.comments(found.value.repository, found.value.id);
+      if (!threads.ok) return threads;
+      if (asJson) {
+        io.stdout(`${JSON.stringify(threads.value.map(commentJson), null, 2)}\n`);
+        return ok(threads.value.length === 0 ? 1 : 0);
+      }
+      if (threads.value.length === 0) {
+        io.stderr(`No comments on ${pullRequestRef(found.value)}.\n`);
+        return ok(1);
+      }
+      io.stdout(formatThreads(threads.value, when));
       return ok(0);
     }
     if (invocation.name === "diff") {

@@ -2,6 +2,7 @@ import type { HttpFailure } from "../../../application/ports/http-client";
 import type { SecretFailure } from "../../../application/ports/secret-provider";
 import type { ConfigurationError, NotFoundError, RemoteError } from "../../../domain/shared/errors";
 import type { Result } from "../../../domain/shared/result";
+import type { PullRequestComment } from "../domain/comment";
 import type { BuildSummary, PullRequest, Repository, ReviewStatus } from "../domain/pull-request";
 
 export type PullRequestFailure =
@@ -69,6 +70,12 @@ export interface PullRequestClient {
     id: number,
     signal?: AbortSignal,
   ): Promise<Result<string, PullRequestFailure>>;
+  /** Its comment threads, oldest first, each with its replies. */
+  comments(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<PullRequestComment[], PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
 }

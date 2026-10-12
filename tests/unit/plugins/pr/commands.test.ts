@@ -14,6 +14,7 @@ import type {
 } from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
 import { diffStat } from "../../../../src/plugins/pr/cli/diff-stat";
+import type { PullRequestComment } from "../../../../src/plugins/pr/domain/comment";
 import {
   fakePullRequests,
   prChanges,
@@ -443,6 +444,80 @@ describe("xuefu pr diff", () => {
       ].join("\n"),
     );
     expect(diffStat([])).toBe("No changes.\n");
+  });
+});
+
+describe("xuefu pr comments", () => {
+  const comment = (id: number, extra: Partial<PullRequestComment> = {}): PullRequestComment => ({
+    id,
+    version: 0,
+    author: "Fox Mulder",
+    text: `Comment ${id}`,
+    created: Date.UTC(2026, 9, 6, 9, 0),
+    updated: Date.UTC(2026, 9, 6, 9, 0),
+    anchor: null,
+    todo: null,
+    resolved: false,
+    replies: [],
+    ...extra,
+  });
+  const THREADS = [
+    comment(101, { text: "Looks good.\n\nOne question below.", resolved: true }),
+    comment(102, {
+      text: "Fall back to the PIN?",
+      anchor: {
+        path: "app/src/Login.kt",
+        line: 11,
+        side: "new",
+        lineKind: "added",
+        outdated: false,
+      },
+      todo: "open",
+      replies: [comment(105, { author: "Dana Scully", text: "It does." })],
+    }),
+    comment(99, {
+      anchor: { path: "README.md", line: 3, side: "old", lineKind: "removed", outdated: true },
+      todo: "done",
+    }),
+  ];
+  const withThreads = (threads: PullRequestComment[]) =>
+    fakePullRequests({ yours: [pullRequest(42)] }, undefined, {
+      comments: () => Promise.resolve(ok(threads)),
+    });
+
+  test("each thread with its id, author, time, place in the diff, and replies under it", async () => {
+    const shown = await run(withThreads(THREADS), "comments", ["MOB/mobile-banking#42"]);
+    expect(shown.code).toEqual(ok(0));
+    expect(shown.stdout).toBe(
+      [
+        "#101 · Fox Mulder · Tue 06 Oct 09:00 · resolved",
+        "  Looks good.",
+        "",
+        "  One question below.",
+        "",
+        "#102 · Fox Mulder · Tue 06 Oct 09:00 · app/src/Login.kt, line 11 · to do",
+        "  Fall back to the PIN?",
+        "  ↳ #105 · Dana Scully · Tue 06 Oct 09:00",
+        "    It does.",
+        "",
+        "#99 · Fox Mulder · Tue 06 Oct 09:00 · README.md, old line 3 · done · outdated",
+        "  Comment 99",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("none says so and exits 1; --json carries the threads", async () => {
+    const none = await run(withThreads([]), "comments", ["MOB/mobile-banking#42"]);
+    expect(none.code).toEqual(ok(1));
+    expect(none.stderr).toBe("No comments on MOB/mobile-banking#42.\n");
+    const json = await run(withThreads(THREADS), "comments", [], { json: true });
+    const parsed = JSON.parse(json.stdout);
+    expect(parsed[1]).toMatchObject({
+      id: 102,
+      created: "2026-10-06T09:00:00.000Z",
+      replies: [{ id: 105, created: "2026-10-06T09:00:00.000Z" }],
+    });
   });
 });
 

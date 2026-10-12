@@ -106,6 +106,10 @@ export function fakePullRequests(
       const found = find(repository, id);
       return Promise.resolve(found.ok ? ok(sampleDiff(found.value)) : found);
     },
+    comments: (repository, id) => {
+      const found = find(repository, id);
+      return Promise.resolve(found.ok ? ok([]) : found);
+    },
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };

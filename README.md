@@ -42,6 +42,7 @@ xuefu pr                                                       # your open pull 
 xuefu pr show                                                  # this branch's, with its reviews and builds
 xuefu pr show MOB/mobile-banking#42                            # any other
 xuefu pr diff | delta                                          # what it changes; --stat for only the files
+xuefu pr comments                                              # its comment threads, with replies
 xuefu pr approve MOB/mobile-banking#42 --yes                   # approve it; needs-work and unapprove too
 xuefu pr merge --yes                                           # merge this branch's, once Bitbucket allows
 xuefu diagnostics                                              # paths, config sources, database state
@@ -135,7 +136,7 @@ plugins:
 |--------|------|
 | `git`  | `xuefu git status`, and a Git section in the cockpit: the branch, how it compares with its upstream, and changed files to stage and commit |
 | `jira` | `xuefu jira issues`, `show <key>` and `start <key>`, and a Jira section listing your issues, for Jira Data Center or Server |
-| `pr`   | `xuefu pr list`, `show`, `diff`, `approve`, `needs-work`, `unapprove` and `merge`, and a PRs section, for Bitbucket Data Center or Server |
+| `pr`   | `xuefu pr list`, `show`, `diff`, `comments`, `approve`, `needs-work`, `unapprove` and `merge`, and a PRs section, for Bitbucket Data Center or Server |
 
 A plugin's section sits in the cockpit's nav after Work, and is only there while the plugin is on.
 The Git section reads the front workspace's status when it opens and again every few seconds while
