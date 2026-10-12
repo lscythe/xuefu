@@ -28,6 +28,13 @@ export interface PluginCommandSpec {
   readonly flags: Readonly<Record<string, PluginFlag>>;
   /** One line for help. */
   readonly summary: string;
+  /**
+   * The positional argument by name, for callers that pass arguments by name, as agents do over
+   * MCP. Needed when the command takes one; none takes more.
+   */
+  readonly argument?: { readonly name: string; readonly description: string };
+  /** It changes something, here or on a server, so agents' harnesses ask before running it. */
+  readonly changes?: boolean;
 }
 
 /** A plugin command as typed, checked against its spec. */
