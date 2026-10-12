@@ -27,6 +27,7 @@ import { readyToMerge } from "../application/merge";
 import type { PullRequest, ReviewStatus } from "../domain/pull-request";
 import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
 import { PullRequestDialog } from "./pull-request-dialog";
+import { ReviewDialog } from "./review-dialog";
 
 /** Everything the section needs from the pull requests plugin. */
 export interface PrSection extends PrChanges {
@@ -73,6 +74,7 @@ export function prView(section: PrSection): Component<SectionProps> {
     } | null>(null);
     const [cursor, setCursor] = createSignal(0);
     const [opened, setOpened] = createSignal<PullRequest | null>(null);
+    const [reviewing, setReviewing] = createSignal<PullRequest | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [banner, setBanner] = createSignal<Banner | null>(null);
     const { asking, confirmed, AskingDialog } = createAsking();
@@ -131,7 +133,7 @@ export function prView(section: PrSection): Component<SectionProps> {
     );
 
     // A dialog of the section's has every key while it is open.
-    const modal = () => opened() !== null || asking();
+    const modal = () => opened() !== null || reviewing() !== null || asking();
     createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
       if (modal()) props.setModal(false);
@@ -182,13 +184,14 @@ export function prView(section: PrSection): Component<SectionProps> {
             ...(pulls().length > 0
               ? [
                   { text: "enter details", rank: 0 },
-                  { text: "a approve", rank: 1 },
-                  { text: "n needs work", rank: 2 },
-                  { text: "m merge", rank: 3 },
-                  { text: "u withdraw", rank: 5 },
+                  { text: "d diff", rank: 1 },
+                  { text: "a approve", rank: 2 },
+                  { text: "n needs work", rank: 3 },
+                  { text: "m merge", rank: 4 },
+                  { text: "u withdraw", rank: 6 },
                 ]
               : []),
-            { text: "r refresh", rank: 4 },
+            { text: "r refresh", rank: 5 },
           ],
           props.width - 2,
           ascii(),
@@ -274,6 +277,11 @@ export function prView(section: PrSection): Component<SectionProps> {
         case "m": {
           const row = selected();
           if (row !== null) void merge(row.pull);
+          return;
+        }
+        case "d": {
+          const row = selected();
+          if (row !== null) setReviewing(row.pull);
           return;
         }
         case "r":
@@ -376,7 +384,22 @@ export function prView(section: PrSection): Component<SectionProps> {
               builds={(signal) => client.builds(pull().commit, signal)}
               icons={props.icons}
               timeZone={timeZone}
+              onReview={() => {
+                setReviewing(pull());
+                setOpened(null);
+              }}
               onClose={() => setOpened(null)}
+            />
+          )}
+        </Show>
+        <Show when={reviewing()}>
+          {(pull: Accessor<PullRequest>) => (
+            <ReviewDialog
+              pull={pull()}
+              changes={section}
+              icons={props.icons}
+              timeZone={timeZone}
+              onClose={() => setReviewing(null)}
             />
           )}
         </Show>

@@ -1,7 +1,7 @@
 import type { CommentAnchor } from "./comment";
 
 /** A line of a diff, with its number in the file before and after; null where it is not in one. */
-interface DiffLine {
+export interface DiffLine {
   readonly kind: "added" | "removed" | "context";
   readonly text: string;
   readonly old: number | null;

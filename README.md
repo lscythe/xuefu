@@ -82,6 +82,8 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `s`            | in Jira: start work on the issue under the cursor, offering to move it to in progress |
 | `a` `n` `u`    | in PRs: approve the pull request under the cursor, ask for changes, or withdraw either |
 | `m`            | in PRs: merge the pull request under the cursor, once Bitbucket allows |
+| `d`            | in PRs: review the pull request under the cursor, its diff with the comments on it |
+| `c` `C`        | in a review: comment on the line under the cursor or reply, or comment on the whole |
 | `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
 
@@ -195,6 +197,13 @@ with the id to reply to and where it is in the diff. `xuefu pr comment -m` posts
 request; on a line with `--file` and `--line`, numbered as in the file after, or with `--old` on a
 removed line as numbered before; or in a thread with `--reply`. A line the diff does not show is
 refused before anything is posted, and the comment asks first.
+
+In the PRs section, `d` (or `d` in a pull request's details) opens its review: the diff file by
+file, with each comment thread under the line it is on, comments on the whole pull request first,
+and those on code that has changed since last. The arrows move over lines and comments, `n` and `p`
+jump between files, `c` comments on the line under the cursor or replies to the comment, and `C`
+comments on the whole pull request. The comment is written in an editor where `Ctrl+S` posts it,
+asking first; `Esc` closes it and keeps the text for next time.
 
 Jira takes a personal access token (in Jira: Profile, Personal Access Tokens). `token` says where
 it is kept, never the token itself: an environment variable, or the macOS keychain or a Secret
