@@ -8,6 +8,7 @@ import {
   Match,
   onCleanup,
   Show,
+  Suspense,
   Switch,
 } from "solid-js";
 import type { ActivityEntry } from "../../application/activity/queries";
@@ -516,19 +517,23 @@ export function Shell(props: ShellProps) {
               <Switch fallback={<text fg={PALETTE.textMuted}>Nothing to show yet.</text>}>
                 <Match when={section()?.view} keyed>
                   {(View: Component<SectionProps>) => (
-                    <View
-                      workspace={workspace()}
-                      work={work()}
-                      width={areaWidth() - PANEL_CHROME_COLUMNS}
-                      rows={panelRows()}
-                      icons={props.icons}
-                      focused={inSection() && asking() === null}
-                      setStatus={setPluginStatus}
-                      setKeys={setPluginKeys}
-                      setModal={setModal}
-                      report={setNotice}
-                      askAgent={askAgent()}
-                    />
+                    // A plugin's view loads when first shown; until then a lazy view is an empty
+                    // string, which a box cannot hold, so the wait shows as a line of its own.
+                    <Suspense fallback={<text fg={PALETTE.textMuted}>Loading…</text>}>
+                      <View
+                        workspace={workspace()}
+                        work={work()}
+                        width={areaWidth() - PANEL_CHROME_COLUMNS}
+                        rows={panelRows()}
+                        icons={props.icons}
+                        focused={inSection() && asking() === null}
+                        setStatus={setPluginStatus}
+                        setKeys={setPluginKeys}
+                        setModal={setModal}
+                        report={setNotice}
+                        askAgent={askAgent()}
+                      />
+                    </Suspense>
                   )}
                 </Match>
                 <Match when={section()?.id === "work"}>
