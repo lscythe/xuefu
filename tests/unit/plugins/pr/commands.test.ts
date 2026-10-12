@@ -13,7 +13,13 @@ import type {
   PullRequestClient,
 } from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
-import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
+import { diffStat } from "../../../../src/plugins/pr/cli/diff-stat";
+import {
+  fakePullRequests,
+  prChanges,
+  pullRequest,
+  sampleDiff,
+} from "../../../support/fake-pull-requests";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -380,6 +386,63 @@ describe("xuefu pr merge", () => {
     const done = await run(client, "merge", ["MOB/mobile-banking#42"], { yes: true });
     expect(done.code.ok ? null : done.code.error.message).toBe("MOB/mobile-banking#42 is merged");
     expect(sent).toEqual([]);
+  });
+});
+
+describe("xuefu pr diff", () => {
+  test("the unified diff as Bitbucket sends it, for piping to a pager", async () => {
+    const shown = await run(fakePullRequests({ yours: [pullRequest(42)] }), "diff", [
+      "MOB/mobile-banking#42",
+    ]);
+    expect(shown.code).toEqual(ok(0));
+    expect(shown.stdout).toBe(sampleDiff({ id: 42 }));
+  });
+
+  test("--stat lists the files, how each changed, and the totals", async () => {
+    const shown = await run(fakePullRequests({ yours: [pullRequest(42)] }), "diff", [], {
+      stat: true,
+    });
+    expect(shown.stdout).toBe(
+      [
+        "M  app/src/Login.kt  +2 -1",
+        "A  docs/login.md     +2",
+        "2 files changed, 4 lines added, 1 line removed",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("a rename, a binary file, and nothing at all", () => {
+    expect(
+      diffStat([
+        {
+          from: "src/A.kt",
+          to: "src/B.kt",
+          change: "renamed",
+          binary: false,
+          hunks: [],
+          added: 0,
+          removed: 0,
+        },
+        {
+          from: "logo.png",
+          to: "logo.png",
+          change: "modified",
+          binary: true,
+          hunks: [],
+          added: 0,
+          removed: 0,
+        },
+      ]),
+    ).toBe(
+      [
+        "R  src/A.kt → src/B.kt",
+        "M  logo.png             binary",
+        "2 files changed, 0 lines added, 0 lines removed",
+        "",
+      ].join("\n"),
+    );
+    expect(diffStat([])).toBe("No changes.\n");
   });
 });
 

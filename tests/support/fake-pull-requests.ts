@@ -36,6 +36,29 @@ export const pullRequest = (id: number, extra: Partial<PullRequest> = {}): PullR
   ...extra,
 });
 
+/** What every pull request in a fake server changes: a line in one file, and a new file. */
+export const sampleDiff = (pull: Pick<PullRequest, "id">): string =>
+  [
+    "diff --git a/app/src/Login.kt b/app/src/Login.kt",
+    "index 3b18e51..a2c4f0d 100644",
+    "--- a/app/src/Login.kt",
+    "+++ b/app/src/Login.kt",
+    "@@ -10,3 +10,4 @@ class Login {",
+    "     fun start() {",
+    "-        pin()",
+    `+        if (biometrics) prompt(${pull.id})`,
+    "+        else pin()",
+    "     }",
+    "diff --git a/docs/login.md b/docs/login.md",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/docs/login.md",
+    "@@ -0,0 +1,2 @@",
+    "+# Login",
+    "+Face ID first, then the PIN.",
+    "",
+  ].join("\n");
+
 /**
  * A server with `yours` and `toReview` open, finding each by its ref, with every commit's builds
  * as `builds`.
@@ -78,6 +101,10 @@ export function fakePullRequests(
     merge: (repository, id) => {
       const found = find(repository, id);
       return Promise.resolve(found.ok ? ok({ ...found.value, state: "merged" as const }) : found);
+    },
+    diff: (repository, id) => {
+      const found = find(repository, id);
+      return Promise.resolve(found.ok ? ok(sampleDiff(found.value)) : found);
     },
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,

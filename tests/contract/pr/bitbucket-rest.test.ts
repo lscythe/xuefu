@@ -325,6 +325,37 @@ describe("bitbucket REST 1.0: merging", () => {
   });
 });
 
+describe("bitbucket REST 1.0: the diff", () => {
+  test("streams it raw, with three lines of context as git shows", async () => {
+    requests.length = 0;
+    const raw = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n";
+    answer = () => new Response(raw, { headers: { "Content-Type": "text/plain" } });
+    expect(await client().diff(REPO, 42)).toEqual(ok(raw));
+    const sent = new URL(requests[0]?.url ?? "");
+    expect(sent.pathname).toBe(
+      "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42.diff",
+    );
+    expect(sent.searchParams.get("contextLines")).toBe("3");
+  });
+
+  test("one larger than the default limit on answers is still read", async () => {
+    const line = `+${"x".repeat(99)}\n`;
+    const raw = `--- a/big\n+++ b/big\n@@ -0,0 +1,60000 @@\n${line.repeat(60_000)}`;
+    answer = () => new Response(raw);
+    const read = await client().diff(REPO, 42);
+    expect(read.ok && read.value.length).toBe(raw.length);
+  });
+
+  test("a pull request that is not there is not found", async () => {
+    answer = status(404, { errors: [{ message: "No such pull request" }] });
+    const missing = await client().diff(REPO, 9);
+    expect(missing.ok ? null : missing.error).toMatchObject({
+      kind: "not-found",
+      key: "MOB/mobile-banking#9",
+    });
+  });
+});
+
 describe("bitbucket REST 1.0: refusals", () => {
   test.each([
     [401, {}, "Bitbucket did not accept the token", "HTTP access token"],

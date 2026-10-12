@@ -63,6 +63,12 @@ export interface PullRequestClient {
     version: number,
     signal?: AbortSignal,
   ): Promise<Result<PullRequest, PullRequestFailure>>;
+  /** What it changes, as a unified diff with git's headings. */
+  diff(
+    repository: Repository,
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<Result<string, PullRequestFailure>>;
   /** Builds reported for a commit. */
   builds(commit: string, signal?: AbortSignal): Promise<Result<BuildSummary, PullRequestFailure>>;
 }

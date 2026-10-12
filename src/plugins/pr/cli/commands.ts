@@ -17,6 +17,7 @@ import {
   whyNoPullRequest,
 } from "../application/branch-pull-request";
 import { readyToMerge } from "../application/merge";
+import { parseDiff } from "../domain/diff";
 import {
   type BuildSummary,
   type PullRequest,
@@ -25,6 +26,7 @@ import {
   type ReviewStatus,
   reviewSummary,
 } from "../domain/pull-request";
+import { diffStat } from "./diff-stat";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
 const workspace = {
@@ -65,6 +67,21 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     maxArgs: 1,
     flags: { workspace, json },
     summary: "Show a pull request, by default this branch's, with its reviews and builds",
+  },
+  {
+    group: "pr",
+    name: "diff",
+    usage: "[PROJECT/repository#id]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: {
+      workspace,
+      stat: {
+        type: "boolean",
+        description: "only the files changed, with lines added and removed",
+      },
+    },
+    summary: "Show what a pull request changes, as a unified diff",
   },
   change("approve", "Approve a pull request"),
   change("needs-work", "Ask for changes on a pull request"),
@@ -220,6 +237,14 @@ export function prCommands(changes: PrChanges, maxResults: number): PluginComman
       );
       if (!merged.ok) return merged;
       io.stdout(`✓ Merged ${pullRequestRef(pull)} (${pull.title}) into ${pull.to}\n`);
+      return ok(0);
+    }
+    if (invocation.name === "diff") {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const diff = await client.diff(found.value.repository, found.value.id);
+      if (!diff.ok) return diff;
+      io.stdout(invocation.flags["stat"] === true ? diffStat(parseDiff(diff.value)) : diff.value);
       return ok(0);
     }
     if (invocation.name === "show") {

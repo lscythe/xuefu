@@ -14,6 +14,8 @@ import {
 } from "../domain/pull-request";
 
 const TIMEOUT_MS = 20_000;
+/** A diff longer than this is refused rather than read into memory. */
+const MAX_DIFF_BYTES = 32 * 1024 * 1024;
 
 const RefSchema = z.object({
   displayId: z.string(),
@@ -175,7 +177,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
     method: HttpRequest["method"],
     path: string,
     signal: AbortSignal | undefined,
-    body?: unknown,
+    extra: { readonly body?: unknown; readonly maxBodyBytes?: number } = {},
   ): Promise<Result<HttpResponse, PullRequestFailure>> => {
     const token = await options.token();
     if (!token.ok) return token;
@@ -184,9 +186,13 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         method,
         url: `${url}${path}`,
         headers: { Authorization: `Bearer ${token.value.reveal()}` },
-        ...(body === undefined ? {} : { body }),
+        ...(extra.body === undefined ? {} : { body: extra.body }),
       },
-      { timeoutMs: TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) },
+      {
+        timeoutMs: TIMEOUT_MS,
+        ...(signal === undefined ? {} : { signal }),
+        ...(extra.maxBodyBytes === undefined ? {} : { maxBodyBytes: extra.maxBodyBytes }),
+      },
     );
   };
 
@@ -311,7 +317,7 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         `${repoPath(repository)}/pull-requests/${id}/participants/${encodeURIComponent(slug.value)}`,
         signal,
         // Bound to the commit that was seen: a branch that moved since is refused.
-        { status: REVIEW_STATUSES[status], lastReviewedCommit: commit },
+        { body: { status: REVIEW_STATUSES[status], lastReviewedCommit: commit } },
       );
       if (!answered.ok) return answered;
       const reviewed = decode(answered.value, z.unknown());
@@ -339,11 +345,25 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         "POST",
         `${repoPath(repository)}/pull-requests/${id}/merge?${query}`,
         signal,
-        {},
+        { body: {} },
       );
       if (!answered.ok) return answered;
       const merged = decode(answered.value, PullRequestSchema);
       return merged.ok ? ok(toPullRequest(merged.value)) : gone(merged, repository, id);
+    },
+
+    async diff(repository, id, signal) {
+      const query = new URLSearchParams({ contextLines: "3" });
+      const answered = await send(
+        "GET",
+        `${repoPath(repository)}/pull-requests/${id}.diff?${query}`,
+        signal,
+        { maxBodyBytes: MAX_DIFF_BYTES },
+      );
+      if (!answered.ok) return answered;
+      return answered.value.status === 200
+        ? ok(answered.value.body)
+        : gone({ error: refused(answered.value) }, repository, id);
     },
 
     builds(commit, signal) {
