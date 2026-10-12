@@ -3,15 +3,26 @@ import type {
   AgentEvent,
   AgentLaunch,
   AgentRunner,
+  AgentServer,
   AgentSession,
 } from "../../../src/application/ports/agent";
+import type {
+  CodeGraph,
+  CodeGraphSetup,
+  ProjectBrief,
+  ProjectBriefs,
+} from "../../../src/application/ports/project-context";
 import { agentHost, approvalPrompt } from "../../../src/bootstrap/agent-host";
 import type { McpTools } from "../../../src/cli/mcp-server";
 import type { McpTool } from "../../../src/cli/mcp-tools";
 import type { ConfirmationPrompt } from "../../../src/domain/shared/confirmation";
-import { processError } from "../../../src/domain/shared/errors";
+import { fileSystemError, processError } from "../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../src/domain/shared/path";
 import { err, ok } from "../../../src/domain/shared/result";
+import type { Timestamp } from "../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../src/domain/workspace/workspace";
+import { ManualClock } from "../../support/manual-clock";
 
 const DIFF: McpTool = {
   name: "pr_diff",
@@ -72,10 +83,22 @@ describe("approvalPrompt", () => {
   });
 });
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/tmp" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
+const GRAF: AgentServer = { name: "graf", command: "graf", args: ["serve", "--db", "/g.db"] };
+
 /** An agent that does nothing on its own: the test speaks for it, as its MCP client. */
 function fakeRunner(fails = false) {
   const launches: AgentLaunch[] = [];
   const stopped: string[] = [];
+  const sent: string[] = [];
   let emit: (event: AgentEvent) => void = () => undefined;
   const runner: AgentRunner = {
     name: "Claude",
@@ -84,14 +107,57 @@ function fakeRunner(fails = false) {
       launches.push(launch);
       emit = onEvent;
       const session: AgentSession = {
-        send: () => undefined,
+        send: (text) => sent.push(text),
         stop: () => stopped.push(launch.prompt),
       };
       return ok(session);
     },
   };
-  return { runner, launches, stopped, emit: (event: AgentEvent) => emit(event) };
+  return { runner, launches, stopped, sent, emit: (event: AgentEvent) => emit(event) };
 }
+
+/** Briefs kept in memory, failing to read or keep when told to. */
+function memoryBriefs(kept: ProjectBrief | null = null, broken = false) {
+  const saved: ProjectBrief[] = [];
+  const failure = fileSystemError("Unable to keep the project brief", "/b.json", "write");
+  const briefs: ProjectBriefs = {
+    find: () => (broken ? err(failure) : ok(kept)),
+    save: (brief) => {
+      if (broken) return err(failure);
+      saved.push(brief);
+      return ok(undefined);
+    },
+  };
+  return { briefs, saved };
+}
+
+/** A code graph that is ready at once, or fails as told. */
+function fakeGraph(created: boolean, fails = false): CodeGraph {
+  return {
+    prepare: () =>
+      Promise.resolve(
+        fails
+          ? err(
+              processError("graf could not index Mobile", "graf", 1, {
+                hint: "error: unsupported",
+              }),
+            )
+          : ok({ server: GRAF, created, files: 347 }),
+      ),
+  };
+}
+
+/** Waits for what the host does after a moment, such as preparing the graph. */
+async function until(done: () => boolean) {
+  for (let tries = 0; tries < 100 && !done(); tries += 1) await Bun.sleep(1);
+  expect(done()).toBe(true);
+}
+
+const FRESH: ProjectBrief = {
+  workspaceId: MOBILE.id,
+  text: "Mobile is a Kotlin app.",
+  createdAt: (Date.UTC(2026, 9, 6, 9, 0, 0) - 3 * DAY_MS) as Timestamp,
+};
 
 function tools(): McpTools & { ran: (readonly string[])[] } {
   const ran: (readonly string[])[] = [];
@@ -106,23 +172,88 @@ function tools(): McpTools & { ran: (readonly string[])[] } {
   };
 }
 
-/** Starts a session, answering approvals as `answers` says, and a way to call its endpoint. */
-function session(answers: boolean[] = []) {
-  const fake = fakeRunner();
+interface Setup {
+  readonly answers?: boolean[];
+  readonly prompt?: string | null;
+  readonly graph?: CodeGraph | null;
+  readonly kept?: ProjectBrief | null;
+  readonly broken?: boolean;
+  readonly fails?: boolean;
+  readonly setup?: CodeGraphSetup | null;
+}
+
+/** An installer for graf that records what it was asked, installing or failing as told. */
+function fakeSetup(options: { declined?: boolean; installs?: boolean; remembers?: boolean } = {}) {
+  let declined = options.declined ?? false;
+  let installs = 0;
+  const setup: CodeGraphSetup = {
+    name: "graf",
+    command: "curl -fsSL https://example.test/install.sh | sh",
+    url: "https://github.com/ctxrs/graf",
+    declined: () => declined,
+    decline: () => {
+      if (options.remembers === false) {
+        return err(fileSystemError("Unable to remember not to install graf", "/d", "write"));
+      }
+      declined = true;
+      return ok(undefined);
+    },
+    install: () => {
+      installs += 1;
+      return Promise.resolve(
+        options.installs === false
+          ? err(processError("graf could not be installed", "sh", 1, { hint: "curl: (6)" }))
+          : ok(fakeGraph(true)),
+      );
+    },
+  };
+  return { setup, declined: () => declined, installs: () => installs };
+}
+
+/** Asks the host, answering approvals as `answers` says. */
+function asking(setup: Setup = {}) {
+  const answers = setup.answers ?? [];
+  const fake = fakeRunner(setup.fails);
   const served = tools();
+  const memory = memoryBriefs(setup.kept === undefined ? FRESH : setup.kept, setup.broken);
+  const clock = new ManualClock();
   const asked: ConfirmationPrompt[] = [];
   const events: AgentEvent[] = [];
-  const host = agentHost(fake.runner, served);
-  const started = host.ask(
-    { cwd: "/tmp" as AbsolutePath, prompt: "Review MOB/app#42" },
-    {
-      onEvent: (event) => events.push(event),
-      approve: (prompt) => {
-        asked.push(prompt);
-        return Promise.resolve(answers.shift() ?? false);
+  const host = agentHost({
+    runner: fake.runner,
+    tools: served,
+    graph: setup.graph ?? null,
+    setup: setup.setup ?? null,
+    briefs: memory.briefs,
+    clock,
+  });
+  const ask = (into: AgentEvent[]) =>
+    host.ask(
+      {
+        workspace: MOBILE,
+        prompt: setup.prompt === undefined ? "Review MOB/app#42" : setup.prompt,
       },
-    },
+      {
+        onEvent: (event) => into.push(event),
+        approve: (prompt) => {
+          asked.push(prompt);
+          return Promise.resolve(answers.shift() ?? false);
+        },
+      },
+    );
+  const started = ask(events);
+  return { host, fake, served, started, asked, events, clock, saved: memory.saved, ask };
+}
+
+const steps = (events: readonly AgentEvent[]) =>
+  events.flatMap((event) =>
+    event.kind === "step" ? [event.failed ? `! ${event.text}` : event.text] : [],
   );
+
+/** Starts a conversation, with a fresh brief, and a way to call its endpoint. */
+async function session(answers: boolean[] = []) {
+  const { fake, ...rest } = asking({ answers });
+  await until(() => fake.launches.length === 1);
   const launch = fake.launches[0] as AgentLaunch;
   let id = 0;
   const post = (body: string, headers: Record<string, string> = {}) =>
@@ -138,7 +269,7 @@ function session(answers: boolean[] = []) {
   };
   const call = async (name: string, args: object) =>
     (await rpc("tools/call", { name, arguments: args })).result;
-  return { host, fake, served, started, launch, asked, events, post, rpc, call };
+  return { fake, ...rest, launch, post, rpc, call };
 }
 
 const decision = (result: Record<string, unknown>) =>
@@ -146,27 +277,31 @@ const decision = (result: Record<string, unknown>) =>
 
 describe("agentHost", () => {
   test("starts the agent with its own endpoint, its reads free and the rest asked", async () => {
-    const { host, started, launch, rpc, fake } = session();
+    const { host, launch, rpc, fake, events } = await session();
     expect(host.name).toBe("Claude");
-    expect(started.ok).toBe(true);
     expect(launch).toMatchObject({
       cwd: "/tmp",
       prompt: "Review MOB/app#42",
       readTools: ["pr_diff"],
       approvalTool: "approval",
+      servers: [],
     });
     expect(launch.mcp.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     expect(launch.instructions).toContain("pass yes set to true");
+    // What it learned of the workspace before, without a graph to use.
+    expect(launch.instructions).toContain("Mobile is a Kotlin app.");
+    expect(launch.instructions).not.toContain("graf");
+    expect(steps(events)).toEqual(["Using what Claude learned of Mobile 3 days ago."]);
 
     const init = await rpc("initialize", { protocolVersion: "2025-06-18" });
-    expect(init.result["instructions"]).toBe(launch.instructions);
+    expect(init.result["instructions"]).toContain("pass yes set to true");
     const listed = (await rpc("tools/list")).result["tools"] as { name: string }[];
     expect(listed.map((tool) => tool.name)).toEqual(["pr_diff", "pr_approve", "approval"]);
     fake.emit({ kind: "exit", message: null });
   });
 
   test("only the agent it started gets in, and only by POST to its endpoint", async () => {
-    const { launch, post, fake } = session();
+    const { launch, post, fake } = await session();
     const ping = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
     expect((await fetch(launch.mcp.url, { method: "POST", body: ping })).status).toBe(401);
     expect((await post(ping, { authorization: "Bearer guess" })).status).toBe(401);
@@ -185,7 +320,7 @@ describe("agentHost", () => {
   });
 
   test("reads run freely; a change runs once the user allows it, and only that once", async () => {
-    const { call, asked, served, fake, events } = session([true]);
+    const { call, asked, served, fake, events } = await session([true]);
     expect(await call("pr_diff", { pullRequest: "MOB/app#42" })).toMatchObject({ isError: false });
 
     // Not asked of the user first: refused.
@@ -214,14 +349,14 @@ describe("agentHost", () => {
 
     fake.emit({ kind: "text", text: "Approved." });
     fake.emit({ kind: "exit", message: null });
-    expect(events).toEqual([
+    expect(events.slice(1)).toEqual([
       { kind: "text", text: "Approved." },
       { kind: "exit", message: null },
     ]);
   });
 
   test("a change the user declines is denied, with why, and does not run", async () => {
-    const { call, served, fake } = session([false]);
+    const { call, served, fake } = await session([false]);
     const denied = await call("approval", {
       tool_name: "mcp__xuefu__pr_approve",
       input: { pullRequest: "MOB/app#42" },
@@ -237,20 +372,243 @@ describe("agentHost", () => {
     fake.emit({ kind: "exit", message: null });
   });
 
-  test("its endpoint closes when the agent stops", async () => {
-    const { launch, fake } = session();
+  test("its endpoint closes when the agent stops, and nothing is told after", async () => {
+    const { launch, fake, events } = await session();
     fake.emit({ kind: "exit", message: "Invalid API key" });
+    fake.emit({ kind: "text", text: "late" });
+    expect(events.slice(1)).toEqual([{ kind: "exit", message: "Invalid API key" }]);
     await Bun.sleep(10);
     await expect(fetch(launch.mcp.url, { method: "POST", body: "{}" })).rejects.toThrow();
   });
 
-  test("an agent that cannot start is said so, and nothing is left listening", () => {
-    const fake = fakeRunner(true);
-    const started = agentHost(fake.runner, tools()).ask(
-      { cwd: "/tmp" as AbsolutePath, prompt: "hi" },
-      { onEvent: () => undefined, approve: () => Promise.resolve(false) },
+  test("an agent that cannot start is said so", async () => {
+    const { events } = asking({ fails: true });
+    await until(() => events.some((event) => event.kind === "exit"));
+    expect(events.at(-1)).toEqual({ kind: "exit", message: "Unable to run claude" });
+  });
+
+  test("with a code graph, the agent gets graf's tools and is told to use them", async () => {
+    const { fake, events } = asking({ graph: fakeGraph(true) });
+    await until(() => fake.launches.length === 1);
+    expect(fake.launches[0]?.servers).toEqual([GRAF]);
+    expect(fake.launches[0]?.instructions).toContain("use impact on the files and symbols");
+    expect(steps(events)).toEqual([
+      "Indexed 347 files of Mobile into a code graph with graf.",
+      "Using what Claude learned of Mobile 3 days ago.",
+    ]);
+    const updated = asking({ graph: fakeGraph(false) });
+    await until(() => updated.fake.launches.length === 1);
+    expect(steps(updated.events)[0]).toBe("The code graph of Mobile is up to date (347 files).");
+  });
+
+  test("without graf, it offers to install it, then uses its graph from then on", async () => {
+    const graf = fakeSetup();
+    const { fake, events, asked, ask } = asking({ setup: graf.setup, answers: [true] });
+    await until(() => fake.launches.length === 1);
+    expect(asked).toEqual([
+      {
+        title: "Install graf",
+        severity: "confirm",
+        details: [
+          { label: "Runs", value: "curl -fsSL https://example.test/install.sh | sh" },
+          { label: "About", value: "https://github.com/ctxrs/graf" },
+        ],
+        consequence:
+          "graf keeps a graph of each workspace's code on this machine, so Claude can follow " +
+          "what calls what and what a change affects. Without it, Claude studies the code by " +
+          "reading it, and you are not asked again.",
+        confirmLabel: "Install",
+      },
+    ]);
+    expect(steps(events).slice(0, 3)).toEqual([
+      "Installing graf…",
+      "Installed graf.",
+      "Indexed 347 files of Mobile into a code graph with graf.",
+    ]);
+    expect(fake.launches[0]?.servers).toEqual([GRAF]);
+
+    const later: AgentEvent[] = [];
+    ask(later);
+    await until(() => fake.launches.length === 2);
+    expect(graf.installs()).toBe(1);
+    expect(asked).toHaveLength(1);
+    expect(fake.launches[1]?.servers).toEqual([GRAF]);
+  });
+
+  test("declined, Claude reads the code itself, and graf is not offered again", async () => {
+    const graf = fakeSetup();
+    const { fake, events, asked } = asking({ setup: graf.setup, kept: null, answers: [false] });
+    await until(() => fake.launches.length === 1);
+    expect(graf.declined()).toBe(true);
+    expect(graf.installs()).toBe(0);
+    expect(fake.launches[0]?.servers).toEqual([]);
+    expect(fake.launches[0]?.prompt).toContain("Study this project");
+    expect(steps(events)[0]).toBe(
+      "Without graf, Claude reads the code itself. To have it later: https://github.com/ctxrs/graf",
     );
-    expect(started.ok).toBe(false);
-    if (!started.ok) expect(started.error.message).toBe("Unable to run claude");
+
+    const again = asking({ setup: graf.setup });
+    await until(() => again.fake.launches.length === 1);
+    expect(again.asked).toEqual([]);
+    expect(asked).toHaveLength(1);
+  });
+
+  test("an install or a decline that fails is said so, and the agent goes on", async () => {
+    const failing = asking({ setup: fakeSetup({ installs: false }).setup, answers: [true] });
+    await until(() => failing.fake.launches.length === 1);
+    expect(failing.fake.launches[0]?.servers).toEqual([]);
+    expect(steps(failing.events)[1]).toBe("! graf could not be installed: curl: (6)");
+
+    const forgetful = asking({ setup: fakeSetup({ remembers: false }).setup });
+    await until(() => forgetful.fake.launches.length === 1);
+    expect(steps(forgetful.events)[0]).toBe(
+      "! Without graf; Unable to remember not to install graf",
+    );
+  });
+
+  test("a graph that cannot be made is said so, and the agent goes on without it", async () => {
+    const { fake, events } = asking({ graph: fakeGraph(true, true) });
+    await until(() => fake.launches.length === 1);
+    expect(fake.launches[0]?.servers).toEqual([]);
+    expect(steps(events)[0]).toBe("! No code graph: error: unsupported");
+  });
+
+  test("a workspace it has not learned is studied first, and what it learns is kept", async () => {
+    const { fake, events, saved, clock } = asking({ kept: null, graph: fakeGraph(false) });
+    await until(() => fake.launches.length === 1);
+    const study = fake.launches[0] as AgentLaunch;
+    expect(study.prompt).toContain("Study this project");
+    expect(study.prompt).toContain("graf's tools");
+    expect(study.servers).toEqual([GRAF]);
+
+    // Only the tools it uses show while it studies; its brief is kept, not shown.
+    fake.emit({ kind: "ready", model: "claude-opus" });
+    fake.emit({ kind: "tool", name: "graf_god_nodes", input: {} });
+    fake.emit({ kind: "text", text: "Looking around." });
+    fake.emit({ kind: "text", text: "Mobile is a Kotlin app, layered." });
+    clock.advance(1000);
+    fake.emit({ kind: "turn", costUsd: 0.4, failed: null });
+    await until(() => fake.launches.length === 2);
+    expect(fake.stopped).toEqual([study.prompt]);
+    fake.emit({ kind: "exit", message: null });
+
+    expect(saved).toEqual([
+      {
+        workspaceId: MOBILE.id,
+        text: "Mobile is a Kotlin app, layered.",
+        createdAt: (Date.UTC(2026, 9, 6, 9, 0, 0) + 1000) as Timestamp,
+      },
+    ]);
+    const conversation = fake.launches[1] as AgentLaunch;
+    expect(conversation.prompt).toBe("Review MOB/app#42");
+    expect(conversation.instructions).toContain(
+      "What you learned of Mobile when you studied it today:\n\nMobile is a Kotlin app, layered.",
+    );
+    expect(events.filter((event) => event.kind !== "step")).toEqual([
+      { kind: "tool", name: "graf_god_nodes", input: {} },
+      { kind: "exit", message: null },
+    ]);
+    expect(steps(events)).toEqual([
+      "The code graph of Mobile is up to date (347 files).",
+      "Studying Mobile first; what Claude learns is kept for next time.",
+      "Learned Mobile, $0.40; kept for next time.",
+    ]);
+  });
+
+  test("a brief two weeks old is studied again", async () => {
+    const old = asking({
+      kept: { ...FRESH, createdAt: (FRESH.createdAt - 11 * DAY_MS) as Timestamp },
+    });
+    await until(() => old.fake.launches.length === 1);
+    expect(old.fake.launches[0]?.prompt).toContain("Study this project");
+    expect(old.fake.launches[0]?.prompt).not.toContain("graf");
+  });
+
+  test("a study that fails is said so; the conversation starts without a brief", async () => {
+    const { fake, events, saved } = asking({ kept: null });
+    await until(() => fake.launches.length === 1);
+    fake.emit({ kind: "text", text: "partial" });
+    fake.emit({ kind: "turn", costUsd: 0.1, failed: "Credit balance is too low" });
+    await until(() => fake.launches.length === 2);
+    expect(saved).toEqual([]);
+    expect(fake.launches[1]?.instructions).not.toContain("What you learned");
+    expect(steps(events).at(-1)).toBe("! It could not study Mobile: Credit balance is too low");
+  });
+
+  test("a study the agent leaves early is said so", async () => {
+    const { fake, events } = asking({ kept: null });
+    await until(() => fake.launches.length === 1);
+    fake.emit({ kind: "exit", message: "Invalid API key" });
+    await until(() => fake.launches.length === 2);
+    expect(steps(events).at(-1)).toBe("! It could not study Mobile: Invalid API key");
+  });
+
+  test("briefs that cannot be read or kept are said so, and the agent goes on", async () => {
+    const { fake, events } = asking({ broken: true });
+    await until(() => fake.launches.length === 1);
+    fake.emit({ kind: "text", text: "Brief." });
+    fake.emit({ kind: "turn", costUsd: null, failed: null });
+    await until(() => fake.launches.length === 2);
+    expect(steps(events)).toEqual([
+      "! What Claude learned could not be read: Unable to keep the project brief",
+      "Studying Mobile first; what Claude learns is kept for next time.",
+      "! Learned Mobile, but it could not be kept: Unable to keep the project brief",
+    ]);
+  });
+
+  test("studying again only says what it learned, then ends", async () => {
+    const { fake, events, saved } = asking({ prompt: null, kept: FRESH });
+    await until(() => fake.launches.length === 1);
+    expect(fake.launches[0]?.prompt).toContain("Study this project");
+    fake.emit({ kind: "text", text: "Mobile, again." });
+    fake.emit({ kind: "turn", costUsd: 0.3, failed: null });
+    await until(() => events.some((event) => event.kind === "exit"));
+    expect(saved.map((brief) => brief.text)).toEqual(["Mobile, again."]);
+    expect(fake.launches).toHaveLength(1);
+    expect(events.filter((event) => event.kind !== "step")).toEqual([
+      { kind: "text", text: "Mobile, again." },
+      { kind: "turn", costUsd: 0.3, failed: null },
+      { kind: "exit", message: null },
+    ]);
+  });
+
+  test("what is said while it prepares is sent once the conversation starts", async () => {
+    const { fake, started } = asking({ kept: null });
+    await until(() => fake.launches.length === 1);
+    started.send("and the tests?");
+    expect(fake.sent).toEqual([]);
+    fake.emit({ kind: "text", text: "Brief." });
+    fake.emit({ kind: "turn", costUsd: null, failed: null });
+    await until(() => fake.launches.length === 2);
+    expect(fake.sent).toEqual(["and the tests?"]);
+    started.send("thanks");
+    expect(fake.sent).toEqual(["and the tests?", "thanks"]);
+  });
+
+  test("stopped while it prepares, it ends once and starts nothing more", async () => {
+    let release: () => void = () => undefined;
+    const graph: CodeGraph = {
+      prepare: (_workspace, signal) =>
+        new Promise((resolve) => {
+          release = () => resolve(ok({ server: GRAF, created: false, files: 1 }));
+          signal?.addEventListener("abort", release);
+        }),
+    };
+    const { fake, events, started } = asking({ graph });
+    started.stop();
+    started.stop();
+    release();
+    await Bun.sleep(5);
+    expect(fake.launches).toEqual([]);
+    expect(events).toEqual([{ kind: "exit", message: null }]);
+
+    const studying = asking({ kept: null });
+    await until(() => studying.fake.launches.length === 1);
+    studying.started.stop();
+    expect(studying.fake.stopped).toHaveLength(1);
+    studying.fake.emit({ kind: "exit", message: null });
+    await Bun.sleep(5);
+    expect(studying.fake.launches).toHaveLength(1);
+    expect(studying.events.filter((event) => event.kind === "exit")).toHaveLength(1);
   });
 });

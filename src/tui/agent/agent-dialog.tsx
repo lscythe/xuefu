@@ -2,10 +2,9 @@ import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/solid";
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { AgentEvent, AgentHost, AgentSession } from "../../application/ports/agent";
 import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
-import type { AbsolutePath } from "../../domain/shared/path";
+import type { Workspace } from "../../domain/workspace/workspace";
 import { ConfirmDialog } from "../confirm-dialog";
 import { Dialog } from "../dialog";
-import { errorText } from "../error-line";
 import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
 import { queryActionFor } from "../query-input/keys";
 import { PALETTE } from "../theme/palette";
@@ -16,10 +15,10 @@ export interface AgentDialogProps {
   readonly agent: AgentHost;
   /** What the conversation is about, for the title, such as "Review MOB/app#42". */
   readonly title: string;
-  /** Where the agent works: the folder of the workspace in front. */
-  readonly cwd: AbsolutePath;
-  /** The first message, sent as the dialog opens. */
-  readonly prompt: string;
+  /** Where the agent works: the workspace in front. */
+  readonly workspace: Workspace;
+  /** The first message, sent as the dialog opens; null has it study the workspace again. */
+  readonly prompt: string | null;
   readonly icons: IconSet;
   readonly onClose: () => void;
 }
@@ -51,9 +50,9 @@ function lastColumns(text: string, width: number): string {
  */
 export function AgentDialog(props: AgentDialogProps) {
   const dimensions = useTerminalDimensions();
-  const [entries, setEntries] = createSignal<TranscriptEntry[]>([
-    { kind: "you", text: props.prompt },
-  ]);
+  const [entries, setEntries] = createSignal<TranscriptEntry[]>(
+    props.prompt === null ? [] : [{ kind: "you", text: props.prompt }],
+  );
   const [working, setWorking] = createSignal(true);
   const [ended, setEnded] = createSignal(false);
   const [cost, setCost] = createSignal<number | null>(null);
@@ -73,6 +72,9 @@ export function AgentDialog(props: AgentDialogProps) {
         return;
       case "tool":
         add({ kind: "tool", name: event.name, input: event.input });
+        return;
+      case "step":
+        add({ kind: "note", text: event.text, tone: event.failed ? "error" : "muted" });
         return;
       case "turn":
         setWorking(false);
@@ -99,19 +101,14 @@ export function AgentDialog(props: AgentDialogProps) {
       setApprovals((all) => [...all, approval]);
     });
 
-  let session: AgentSession | null = null;
-  const started = props.agent.ask({ cwd: props.cwd, prompt: props.prompt }, { onEvent, approve });
-  if (started.ok) {
-    session = started.value;
-  } else {
-    setWorking(false);
-    setEnded(true);
-    add({ kind: "note", text: errorText(started.error), tone: "error" });
-  }
+  const session: AgentSession = props.agent.ask(
+    { workspace: props.workspace, prompt: props.prompt },
+    { onEvent, approve },
+  );
   onCleanup(() => {
     // Whatever it still waits on is declined, so it never acts after the dialog is gone.
     for (const approval of approvals()) approval.answer(false);
-    session?.stop();
+    session.stop();
   });
 
   const width = () => Math.max(20, dimensions().width - 4);
@@ -119,7 +116,7 @@ export function AgentDialog(props: AgentDialogProps) {
   const inner = () => width() - 4;
   const room = () => Math.max(3, dimensions().height - CHROME_ROWS);
   const ascii = () => props.icons === "ascii";
-  const rows = createMemo(() => transcriptRows(entries(), inner(), props.cwd, ascii()));
+  const rows = createMemo(() => transcriptRows(entries(), inner(), props.workspace.path, ascii()));
   const lastTop = () => Math.max(0, rows().length - room());
   const first = () => Math.min(top() ?? lastTop(), lastTop());
   const scroll = (to: number) => setTop(to >= lastTop() ? null : Math.max(0, to));
@@ -131,7 +128,7 @@ export function AgentDialog(props: AgentDialogProps) {
     setDraft("");
     setTop(null);
     setWorking(true);
-    session?.send(text);
+    session.send(text);
   };
 
   useKeyboard((key) => {

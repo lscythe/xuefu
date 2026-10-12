@@ -4,10 +4,20 @@ import { testRender } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
 import type { AgentHandlers, AgentHost } from "../../../../src/application/ports/agent";
 import type { ConfirmationPrompt } from "../../../../src/domain/shared/confirmation";
-import { processError } from "../../../../src/domain/shared/errors";
+import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
-import { err, ok } from "../../../../src/domain/shared/result";
+import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import { AgentDialog } from "../../../../src/tui/agent/agent-dialog";
+
+const MOBILE: Workspace = {
+  id: "mobile" as WorkspaceId,
+  name: "Mobile" as WorkspaceName,
+  path: "/w" as AbsolutePath,
+  group: null,
+  addedAt: 0 as Timestamp,
+  lastActiveAt: null,
+};
 
 let setup: TestRendererSetup | undefined;
 afterEach(() => {
@@ -24,26 +34,22 @@ const APPROVE: ConfirmationPrompt = {
 };
 
 /** An agent the test speaks for: what it is sent, whether it is stopped, and its handlers. */
-function scriptedAgent(fails = false) {
-  const sent: string[] = [];
+function scriptedAgent() {
+  const sent: (string | null)[] = [];
   let stopped = 0;
   let handlers: AgentHandlers | null = null;
   const agent: AgentHost = {
     name: "Claude",
     ask: (question, given) => {
-      if (fails) {
-        return err(
-          processError("Unable to run claude", "claude", null, { hint: "Install Claude Code" }),
-        );
-      }
+      expect(question.workspace).toBe(MOBILE);
       sent.push(question.prompt);
       handlers = given;
-      return ok({
+      return {
         send: (text) => sent.push(text),
         stop: () => {
           stopped += 1;
         },
-      });
+      };
     },
   };
   return {
@@ -54,7 +60,12 @@ function scriptedAgent(fails = false) {
   };
 }
 
-async function open(agent: AgentHost, icons: "unicode" | "ascii" = "unicode", height = 24) {
+async function open(
+  agent: AgentHost,
+  icons: "unicode" | "ascii" = "unicode",
+  height = 24,
+  prompt: string | null = "Review the pull request MOB/app#42.",
+) {
   const [shown, setShown] = createSignal(true);
   setup = await testRender(
     () => (
@@ -62,8 +73,8 @@ async function open(agent: AgentHost, icons: "unicode" | "ascii" = "unicode", he
         <AgentDialog
           agent={agent}
           title="Review MOB/app#42"
-          cwd={"/w" as AbsolutePath}
-          prompt="Review the pull request MOB/app#42."
+          workspace={MOBILE}
+          prompt={prompt}
           icons={icons}
           onClose={() => setShown(false)}
         />
@@ -240,9 +251,31 @@ describe("AgentDialog", () => {
     expect(script.sent).toHaveLength(1);
   });
 
-  test("an agent that cannot start says so", async () => {
-    const script = scriptedAgent(true);
+  test("what XueFu does to prepare it shows with the tools it uses, failures as errors", async () => {
+    const script = scriptedAgent();
     const { frame } = await open(script.agent);
+    const { onEvent } = script.handlers();
+    onEvent({ kind: "step", text: "No code graph: error: unsupported", failed: true });
+    onEvent({ kind: "step", text: "Studying Mobile first.", failed: false });
+    onEvent({ kind: "tool", name: "graf_god_nodes", input: {} });
+    const shown = await frame();
+    // Together, with no blank line between.
+    expect(shown).toMatch(
+      /No code graph: error: unsupported +│ +\n +│ Studying Mobile first\. +│ +\n +│ ↳ graf god nodes/u,
+    );
+  });
+
+  test("asked only to study the workspace again, it starts with no message of yours", async () => {
+    const script = scriptedAgent();
+    const { frame } = await open(script.agent, "unicode", 24, null);
+    expect(script.sent).toEqual([null]);
+    expect(await frame()).not.toContain("›  ");
+  });
+
+  test("an agent that cannot start says so", async () => {
+    const script = scriptedAgent();
+    const { frame } = await open(script.agent);
+    script.handlers().onEvent({ kind: "exit", message: "Unable to run claude" });
     const shown = await frame();
     expect(shown).toContain("Unable to run claude");
     expect(shown).toContain("Claude has stopped");

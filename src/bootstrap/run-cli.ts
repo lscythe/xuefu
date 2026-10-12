@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { confirmationTokenFor } from "../application/commands/command";
 import type { DiagnosticsReport } from "../application/diagnostics";
 import type { AppError } from "../application/errors";
@@ -39,7 +39,9 @@ import { clockDuration } from "../domain/shared/time";
 import { elapsed } from "../domain/timesheet/timer";
 import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
+import { briefFiles } from "../infrastructure/agent/brief-files";
 import { claudeCode } from "../infrastructure/agent/claude-code";
+import { findGraf, grafGraph, grafSetup } from "../infrastructure/agent/graf";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
 import { agentHost } from "./agent-host";
@@ -664,14 +666,33 @@ async function runPluginCommand(
   return ran.ok ? ran.value : fail(out, ran.error);
 }
 
-/** Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit. */
+/**
+ * Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit. With
+ * graf on PATH too, it also gets a graph of the workspace's code.
+ */
 function cockpitAgent(app: App, out: Output): AgentHost | null {
-  const command = Bun.which("claude", { PATH: out.runtime.env["PATH"] ?? "" });
+  const PATH = out.runtime.env["PATH"] ?? "";
+  const command = Bun.which("claude", { PATH });
   if (command === null) return null;
-  return agentHost(
-    claudeCode({ command, env: out.runtime.env, model: null }),
-    agentTools(app, out),
-  );
+  const graf = findGraf(PATH, out.runtime.home);
+  const cacheDir = join(app.paths.dataDir, "graf");
+  return agentHost({
+    runner: claudeCode({ command, env: out.runtime.env, model: null }),
+    tools: agentTools(app, out),
+    graph: graf === null ? null : grafGraph({ command: graf, processes: app.processes, cacheDir }),
+    setup:
+      graf === null
+        ? grafSetup({
+            processes: app.processes,
+            home: out.runtime.home,
+            env: out.runtime.env,
+            cacheDir,
+            declinedFile: join(app.paths.dataDir, "graf-declined"),
+          })
+        : null,
+    briefs: briefFiles(join(app.paths.dataDir, "briefs")),
+    clock: systemClock,
+  });
 }
 
 async function openCockpit(app: App, out: Output): Promise<number> {

@@ -17,7 +17,7 @@ describe("toolLine", () => {
 });
 
 describe("transcriptRows", () => {
-  test("your messages marked, answers as written, tool steps dim and together", () => {
+  test("your messages marked, answers as written, notes and tool steps dim and together", () => {
     const rows = transcriptRows(
       [
         { kind: "you", text: "Review MOB/app#42 for me please" },
@@ -48,7 +48,6 @@ describe("transcriptRows", () => {
       { text: "fallback.", tone: "text" },
       { text: "", tone: "text" },
       { text: "Claude stopped", tone: "error" },
-      { text: "", tone: "text" },
       { text: "aside", tone: "textMuted" },
     ]);
   });

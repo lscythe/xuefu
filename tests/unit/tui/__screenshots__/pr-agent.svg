@@ -40,9 +40,9 @@
 <rect x="18" y="72" width="9" height="18" fill="#272939"/>
 <text x="18" y="86" fill="#f2a774">│</text>
 <rect x="27" y="72" width="9" height="18" fill="#272939"/>
-<rect x="36" y="72" width="810" height="18" fill="#272939"/>
-<text x="54 63 72 81 90 99 108 117 126 135 144 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 387 396 405 423 432 441 459 468 477 486 504 513 522 531 540 549 567 576 585 603 612 621 630 639 648 657 675 684 702 711 720 729 747 756 765 774 783 792 810 819 828 837" y="86" fill="#b8a6f6">pullRequest&quot;MOB/mobile-banking#42&quot;,andthecodearoundthechangesinthisfolderwhen</text>
-<rect x="846" y="72" width="27" height="18" fill="#272939"/>
+<rect x="36" y="72" width="819" height="18" fill="#272939"/>
+<text x="54 63 72 81 99 108 117 126 135 144 162 171 189 198 207 216 225 234 243 252 270 279 288 297 315 324 333 351 360 369 378 387 405 414 423 432 441 450 468 477 486 495 513 522 531 540 558 567 576 594 603 612 621 639 648 657 675 684 693 702 711 729 738 747 756 774 783 792 801 810 819 828 837 846" y="86" fill="#b8a6f6">Thenreviewitbriefly:bugsandrisksfirst,eachwithitsfileandline,thenquestions</text>
+<rect x="855" y="72" width="18" height="18" fill="#272939"/>
 <rect x="873" y="72" width="9" height="18" fill="#272939"/>
 <text x="873" y="86" fill="#f2a774">│</text>
 <rect x="882" y="72" width="9" height="18" fill="#0d0d12"/>
@@ -54,9 +54,9 @@
 <rect x="18" y="90" width="9" height="18" fill="#272939"/>
 <text x="18" y="104" fill="#f2a774">│</text>
 <rect x="27" y="90" width="9" height="18" fill="#272939"/>
-<rect x="36" y="90" width="252" height="18" fill="#272939"/>
-<text x="54 63 81 90 108 117 126 144 153 162 171 189 198 207 216 225 234 243 252 261 270 279" y="104" fill="#b8a6f6">itisthesamerepository.</text>
-<rect x="288" y="90" width="585" height="18" fill="#272939"/>
+<rect x="36" y="90" width="567" height="18" fill="#272939"/>
+<text x="54 63 72 90 99 108 126 135 144 153 162 171 180 198 207 216 225 243 252 261 270 279 288 297 315 324 333 342 351 360 369 387 396 405 423 432 450 459 477 486 504 513 522 531 540 558 567 576 585 594" y="104" fill="#b8a6f6">fortheauthor,thensmallerpoints.Saysoifitlooksgood.</text>
+<rect x="603" y="90" width="270" height="18" fill="#272939"/>
 <rect x="873" y="90" width="9" height="18" fill="#272939"/>
 <text x="873" y="104" fill="#f2a774">│</text>
 <rect x="882" y="90" width="9" height="18" fill="#0d0d12"/>
@@ -81,9 +81,9 @@
 <rect x="18" y="126" width="9" height="18" fill="#272939"/>
 <text x="18" y="140" fill="#f2a774">│</text>
 <rect x="27" y="126" width="9" height="18" fill="#272939"/>
-<rect x="36" y="126" width="819" height="18" fill="#272939"/>
-<text x="54 63 72 81 99 108 117 126 135 144 162 171 189 198 207 216 225 234 243 252 270 279 288 297 315 324 333 351 360 369 378 387 405 414 423 432 441 450 468 477 486 495 513 522 531 540 558 567 576 594 603 612 621 639 648 657 675 684 693 702 711 729 738 747 756 774 783 792 801 810 819 828 837 846" y="140" fill="#b8a6f6">Thenreviewitbriefly:bugsandrisksfirst,eachwithitsfileandline,thenquestions</text>
-<rect x="855" y="126" width="18" height="18" fill="#272939"/>
+<rect x="36" y="126" width="486" height="18" fill="#272939"/>
+<text x="54 63 81 90 99 117 126 135 144 153 162 171 189 198 207 225 234 243 252 261 270 279 297 306 324 333 342 351 360 378 387 405 414 423 432 441 450 468 486 495 504 513" y="140" fill="#b8a6f6">Donotcommenton,approveormergeitunlessIask.</text>
+<rect x="522" y="126" width="351" height="18" fill="#272939"/>
 <rect x="873" y="126" width="9" height="18" fill="#272939"/>
 <text x="873" y="140" fill="#f2a774">│</text>
 <rect x="882" y="126" width="9" height="18" fill="#0d0d12"/>
@@ -95,9 +95,8 @@
 <rect x="18" y="144" width="9" height="18" fill="#272939"/>
 <text x="18" y="158" fill="#f2a774">│</text>
 <rect x="27" y="144" width="9" height="18" fill="#272939"/>
-<rect x="36" y="144" width="567" height="18" fill="#272939"/>
-<text x="54 63 72 90 99 108 126 135 144 153 162 171 180 198 207 216 225 243 252 261 270 279 288 297 315 324 333 342 351 360 369 387 396 405 423 432 450 459 477 486 504 513 522 531 540 558 567 576 585 594" y="158" fill="#b8a6f6">fortheauthor,thensmallerpoints.Saysoifitlooksgood.</text>
-<rect x="603" y="144" width="270" height="18" fill="#272939"/>
+<rect x="36" y="144" width="9" height="18" fill="#272939"/>
+<rect x="45" y="144" width="828" height="18" fill="#272939"/>
 <rect x="873" y="144" width="9" height="18" fill="#272939"/>
 <text x="873" y="158" fill="#f2a774">│</text>
 <rect x="882" y="144" width="9" height="18" fill="#0d0d12"/>
@@ -109,8 +108,9 @@
 <rect x="18" y="162" width="9" height="18" fill="#272939"/>
 <text x="18" y="176" fill="#f2a774">│</text>
 <rect x="27" y="162" width="9" height="18" fill="#272939"/>
-<rect x="36" y="162" width="18" height="18" fill="#272939"/>
-<rect x="54" y="162" width="819" height="18" fill="#272939"/>
+<rect x="36" y="162" width="531" height="18" fill="#272939"/>
+<text x="36 45 54 72 81 90 99 117 126 135 144 153 171 180 198 207 216 225 234 243 261 270 279 288 297 306 315 333 342 360 369 387 396 414 423 432 441 459 468 477 486 504 513 522 531 540 549 558" y="176" fill="#9a9db6">ThecodegraphofMobileBankingisuptodate(412files).</text>
+<rect x="567" y="162" width="306" height="18" fill="#272939"/>
 <rect x="873" y="162" width="9" height="18" fill="#272939"/>
 <text x="873" y="176" fill="#f2a774">│</text>
 <rect x="882" y="162" width="9" height="18" fill="#0d0d12"/>
@@ -122,9 +122,9 @@
 <rect x="18" y="180" width="9" height="18" fill="#272939"/>
 <text x="18" y="194" fill="#f2a774">│</text>
 <rect x="27" y="180" width="9" height="18" fill="#272939"/>
-<rect x="36" y="180" width="486" height="18" fill="#272939"/>
-<text x="54 63 81 90 99 117 126 135 144 153 162 171 189 198 207 225 234 243 252 261 270 279 297 306 324 333 342 351 360 378 387 405 414 423 432 441 450 468 486 495 504 513" y="194" fill="#b8a6f6">Donotcommenton,approveormergeitunlessIask.</text>
-<rect x="522" y="180" width="351" height="18" fill="#272939"/>
+<rect x="36" y="180" width="495" height="18" fill="#272939"/>
+<text x="36 45 54 63 72 90 99 108 117 135 144 153 162 171 180 198 207 216 225 234 243 252 270 279 297 306 315 324 333 342 360 369 378 387 396 405 414 432 450 459 468 477 495 504 513 522" y="194" fill="#9a9db6">UsingwhatClaudelearnedofMobileBanking2daysago.</text>
+<rect x="531" y="180" width="342" height="18" fill="#272939"/>
 <rect x="873" y="180" width="9" height="18" fill="#272939"/>
 <text x="873" y="194" fill="#f2a774">│</text>
 <rect x="882" y="180" width="9" height="18" fill="#0d0d12"/>
@@ -136,8 +136,9 @@
 <rect x="18" y="198" width="9" height="18" fill="#272939"/>
 <text x="18" y="212" fill="#f2a774">│</text>
 <rect x="27" y="198" width="9" height="18" fill="#272939"/>
-<rect x="36" y="198" width="9" height="18" fill="#272939"/>
-<rect x="45" y="198" width="828" height="18" fill="#272939"/>
+<rect x="36" y="198" width="279" height="18" fill="#272939"/>
+<text x="36 54 63 81 90 99 108 126 135 144 153 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306" y="212" fill="#9a9db6">↳prdiffMOB/mobile-banking#42</text>
+<rect x="315" y="198" width="558" height="18" fill="#272939"/>
 <rect x="873" y="198" width="9" height="18" fill="#272939"/>
 <text x="873" y="212" fill="#f2a774">│</text>
 <rect x="882" y="198" width="9" height="18" fill="#0d0d12"/>
@@ -149,9 +150,9 @@
 <rect x="18" y="216" width="9" height="18" fill="#272939"/>
 <text x="18" y="230" fill="#f2a774">│</text>
 <rect x="27" y="216" width="9" height="18" fill="#272939"/>
-<rect x="36" y="216" width="279" height="18" fill="#272939"/>
-<text x="36 54 63 81 90 99 108 126 135 144 153 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306" y="230" fill="#9a9db6">↳prdiffMOB/mobile-banking#42</text>
-<rect x="315" y="216" width="558" height="18" fill="#272939"/>
+<rect x="36" y="216" width="315" height="18" fill="#272939"/>
+<text x="36 54 63 81 90 99 108 117 126 135 144 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342" y="230" fill="#9a9db6">↳prcommentsMOB/mobile-banking#42</text>
+<rect x="351" y="216" width="522" height="18" fill="#272939"/>
 <rect x="873" y="216" width="9" height="18" fill="#272939"/>
 <text x="873" y="230" fill="#f2a774">│</text>
 <rect x="882" y="216" width="9" height="18" fill="#0d0d12"/>
@@ -163,9 +164,9 @@
 <rect x="18" y="234" width="9" height="18" fill="#272939"/>
 <text x="18" y="248" fill="#f2a774">│</text>
 <rect x="27" y="234" width="9" height="18" fill="#272939"/>
-<rect x="36" y="234" width="315" height="18" fill="#272939"/>
-<text x="36 54 63 81 90 99 108 117 126 135 144 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342" y="248" fill="#9a9db6">↳prcommentsMOB/mobile-banking#42</text>
-<rect x="351" y="234" width="522" height="18" fill="#272939"/>
+<rect x="36" y="234" width="270" height="18" fill="#272939"/>
+<text x="36 54 63 72 81 99 108 117 126 135 144 162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297" y="248" fill="#9a9db6">↳grafimpactapp/src/Login.kt</text>
+<rect x="306" y="234" width="567" height="18" fill="#272939"/>
 <rect x="873" y="234" width="9" height="18" fill="#272939"/>
 <text x="873" y="248" fill="#f2a774">│</text>
 <rect x="882" y="234" width="9" height="18" fill="#0d0d12"/>

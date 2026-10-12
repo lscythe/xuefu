@@ -924,8 +924,8 @@ describe("Shell agent", () => {
     const agent: AgentHost = {
       name: "Claude",
       ask: (question) => {
-        asked.push(`${question.prompt} in ${question.cwd}`);
-        return ok({ send: () => undefined, stop: () => stopped++ });
+        asked.push(`${question.prompt} in ${question.workspace.path}`);
+        return { send: () => undefined, stop: () => stopped++ };
       },
     };
     return { agent, asked, stopped: () => stopped };
@@ -989,6 +989,18 @@ describe("Shell agent", () => {
     shell.mockInput.pressEnter();
     await shell.waitForFrame((f) => f.includes(" Claude · Question "));
     expect(asked).toEqual([`What is left on MOB-2841? in ${MOBILE.workspace.path}`]);
+  });
+
+  test("the palette has it study the workspace again", async () => {
+    const { agent, asked } = quietAgent();
+    const shell = await renderShell({ agent });
+    shell.mockInput.pressKey(":");
+    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    await shell.mockInput.typeText("study again");
+    await shell.waitForFrame((f) => f.includes("Have Claude study Mobile Banking again"));
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes(" Claude · Study "));
+    expect(asked).toEqual([`null in ${MOBILE.workspace.path}`]);
   });
 });
 

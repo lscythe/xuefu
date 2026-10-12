@@ -37,5 +37,6 @@ export interface SectionProps {
 export interface AgentQuestionAbout {
   /** A few words, such as "Review MOB/app#42". */
   readonly title: string;
-  readonly prompt: string;
+  /** Null has the agent study the workspace again, without a question. */
+  readonly prompt: string | null;
 }

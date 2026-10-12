@@ -242,12 +242,33 @@ under the cursor; from the palette, "Ask Claude" takes any question about the wo
 The conversation opens in a dialog: what Claude says and each tool it uses show as it works, and
 once it has answered, Enter sends a follow-up. Esc closes it and stops Claude.
 
+Before it answers, Claude gets to know the workspace. The first time you ask about one, Claude
+studies it: its README, CLAUDE.md or AGENTS.md, its lint, build and test configuration and its
+central files. It then writes itself a short brief of the project's architecture, conventions and
+what a reviewer should watch for. XueFu keeps that brief in its data folder, and every later
+conversation about the workspace starts from it, with no study needed, until it is two weeks old.
+"Have Claude study <workspace> again" in the palette renews it sooner.
+
+With [graf](https://github.com/ctxrs/graf) installed, XueFu brings a graph of the workspace's code
+up to date before each conversation: a full index the first time, then only what changed. Claude
+can then ask what calls what, what depends on a file and what a change affects. A workspace with
+its own `.graf/index.db` keeps using it; any other gets one in XueFu's data folder, so the
+repository is not touched. Nothing leaves your machine.
+
+Without graf, the first conversation offers to install it with graf's own installer, which checks
+the release's signature, into `~/.local/bin`. Decline, and Claude studies the code by reading it;
+you are not asked again. To install it later:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ctxrs/graf/main/install.sh | sh
+```
+
 Claude runs headless in the workspace's folder, with XueFu's tools served to it alone over a local
-endpoint for as long as the conversation lasts, and no other MCP servers. It may read the folder's
-files and run XueFu's reads freely; it cannot edit files or run commands. Anything else, such as
-commenting on or approving a pull request, is put to you in XueFu first, showing the command and
-exactly what it would be passed, and runs only if you allow it. The conversation is not saved to
-Claude Code's history.
+endpoint for as long as the conversation lasts, and no other MCP servers but graf's read-only one.
+It may read the folder's files and run XueFu's and graf's reads freely; it cannot edit files or run
+commands. Anything else, such as commenting on or approving a pull request, is put to you in XueFu
+first, showing the command and exactly what it would be passed, and runs only if you allow it. The
+conversation is not saved to Claude Code's history.
 
 ## Development
 

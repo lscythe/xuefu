@@ -2,7 +2,15 @@ import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
 import type { ProcessError } from "../../domain/shared/errors";
 import type { AbsolutePath } from "../../domain/shared/path";
 import type { Result } from "../../domain/shared/result";
-import type { AppError } from "../errors";
+import type { Workspace } from "../../domain/workspace/workspace";
+
+/** Another MCP server the agent gets, run by it over stdio; every tool it has only reads. */
+export interface AgentServer {
+  /** Its name to the agent, so its tools are `mcp__<name>__<tool>`. */
+  readonly name: string;
+  readonly command: string;
+  readonly args: readonly string[];
+}
 
 /** How to start a coding agent, such as Claude Code, on a question. */
 export interface AgentLaunch {
@@ -18,6 +26,8 @@ export interface AgentLaunch {
   readonly readTools: readonly string[];
   /** XueFu's tool the agent asks before using any other; it asks the user. */
   readonly approvalTool: string;
+  /** Read-only servers it may also use freely, such as a code graph of the folder. */
+  readonly servers: readonly AgentServer[];
 }
 
 /** What the agent does, as it does it. */
@@ -32,6 +42,8 @@ export type AgentEvent =
       readonly name: string;
       readonly input: Readonly<Record<string, unknown>>;
     }
+  /** What XueFu does to prepare it, such as bringing the code graph up to date. */
+  | { readonly kind: "step"; readonly text: string; readonly failed: boolean }
   /** Its answer to a message is complete; `failed` says why when it could not finish. */
   | { readonly kind: "turn"; readonly costUsd: number | null; readonly failed: string | null }
   /** It has stopped; `message` says why when it was not asked to. */
@@ -45,10 +57,14 @@ export interface AgentSession {
   stop(): void;
 }
 
-/** A question for an agent, about the files in `cwd`. */
+/** A question for an agent about a workspace. */
 interface AgentQuestion {
-  readonly cwd: AbsolutePath;
-  readonly prompt: string;
+  readonly workspace: Workspace;
+  /**
+   * The first message. Null asks it only to study the workspace again, renewing what it keeps of
+   * it, and to say what it learned.
+   */
+  readonly prompt: string | null;
 }
 
 /** What the cockpit does with an agent at work. */
@@ -58,11 +74,14 @@ export interface AgentHandlers {
   readonly approve: (prompt: ConfirmationPrompt) => Promise<boolean>;
 }
 
-/** Starts an agent on a question, with XueFu's tools, asking the user before any change. */
+/**
+ * Starts an agent on a question, with XueFu's tools, asking the user before any change. It first
+ * prepares what it knows of the workspace; anything that fails ends the session with a reason.
+ */
 export interface AgentHost {
   /** The agent's name, as the user knows it, such as "Claude". */
   readonly name: string;
-  ask(question: AgentQuestion, handlers: AgentHandlers): Result<AgentSession, AppError>;
+  ask(question: AgentQuestion, handlers: AgentHandlers): AgentSession;
 }
 
 /** Starts a coding agent; fails when it cannot be run, such as when it is not installed. */

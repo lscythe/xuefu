@@ -54,10 +54,11 @@ export function transcriptRows(
       rows.push({ text: `${index === 0 ? first : rest}${line}`, tone });
     });
   };
+  const step = (kind: TranscriptEntry["kind"] | null) => kind === "tool" || kind === "note";
   let previous: TranscriptEntry["kind"] | null = null;
   for (const entry of entries) {
-    // A blank line between turns, and around the agent's answers; tool steps keep together.
-    if (previous !== null && !(previous === "tool" && entry.kind === "tool")) {
+    // A blank line between turns, and around the agent's answers; notes and tool steps keep together.
+    if (previous !== null && !(step(previous) && step(entry.kind))) {
       rows.push({ text: "", tone: "text" });
     }
     previous = entry.kind;
