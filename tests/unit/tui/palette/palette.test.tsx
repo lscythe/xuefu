@@ -140,6 +140,33 @@ describe("Palette", () => {
     await palette.waitForFrame(() => palette.closed() === 1);
   });
 
+  test("opened on an entry, it asks for its fields at once, and esc closes", async () => {
+    const ran: (string | null)[][] = [];
+    const rename: PaletteEntry = {
+      title: "Rename Mobile",
+      keys: null,
+      fields: [{ label: "Name", example: "Mobile", optional: false, check: (raw) => ok(raw) }],
+      run: (values) => {
+        ran.push([...values]);
+        return Promise.resolve(ok(undefined));
+      },
+    };
+    const palette = await renderPalette({ start: rename });
+    const frame = await palette.waitForFrame((f) => f.includes(" Rename Mobile "));
+    expect(frame).toContain("e.g. Mobile");
+    expect(frame).toContain("enter next  esc close");
+    palette.mockInput.pressEscape();
+    await Bun.sleep(30);
+    await palette.waitForFrame(() => palette.closed() === 1);
+    palette.renderer.destroy();
+
+    const again = await renderPalette({ start: rename });
+    await again.mockInput.typeText("Mobile Banking");
+    again.mockInput.pressEnter();
+    await again.waitForFrame(() => again.closed() === 1);
+    expect(ran).toEqual([["Mobile Banking"]]);
+  });
+
   test("a failed run stays open and says why", async () => {
     const palette = await renderPalette({
       entries: [

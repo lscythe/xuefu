@@ -7,7 +7,7 @@ import { approvalPrompt } from "../../../src/bootstrap/agent-host";
 import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
 import { mcpTools } from "../../../src/cli/mcp-tools";
 import type { Note, NoteBody } from "../../../src/domain/notes/note";
-import { storageError } from "../../../src/domain/shared/errors";
+import { confirmationRequired, storageError } from "../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
 import { err, ok } from "../../../src/domain/shared/result";
 import type { Timestamp } from "../../../src/domain/shared/time";
@@ -23,6 +23,7 @@ import { prPlugin } from "../../../src/plugins/pr/plugin";
 import { prView } from "../../../src/plugins/pr/tui/pr-view";
 import { cockpitSections, type Section } from "../../../src/tui/shell/sections";
 import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
+import type { ManageWorkspaces } from "../../../src/tui/shell/workspace-entries";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
 import { fakeJira, jiraChangesFor, jiraIssue } from "../../support/fake-jira";
@@ -333,6 +334,7 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
         loadTracked={() => ok({ spans: [], workspaces: new Map() })}
         onExternalChange={() => () => undefined}
         onQuit={() => undefined}
+        manage={UNCHANGED}
         {...props}
       />
     ),
@@ -341,6 +343,14 @@ async function shell(props: Partial<ShellProps> = {}, size = { width: 100, heigh
   await setup.renderOnce();
   return setup;
 }
+
+/** Workspaces as the cockpit manages them; the pictures only show the asking. */
+const UNCHANGED: ManageWorkspaces = {
+  add: () => Promise.resolve(err(storageError("not wired", "test"))),
+  rename: () => Promise.resolve(ok(undefined)),
+  group: () => Promise.resolve(ok(undefined)),
+  remove: () => Promise.resolve(ok(undefined)),
+};
 
 const NOW = Date.UTC(2026, 9, 6, 13, 59, 41);
 
@@ -1042,5 +1052,65 @@ describe("screenshots", () => {
     const screen = await shell();
     await openSwitcher(screen, "mob");
     expectScreenshot("switcher-filtered", screen.captureSpans());
+  });
+
+  test("switcher, renaming the highlighted workspace", async () => {
+    const screen = await shell();
+    await openSwitcher(screen, "auth");
+    screen.mockInput.pressKey("r", { ctrl: true });
+    await screen.waitForFrame((f) => f.includes(" Rename Auth Service "));
+    await screen.mockInput.typeText("Auth API");
+    await screen.waitForFrame((f) => f.includes("> Auth API"));
+    expectScreenshot("workspace-rename", screen.captureSpans());
+  });
+
+  test("palette, adding a workspace", async () => {
+    const screen = await shell();
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    await screen.mockInput.typeText("add work");
+    await screen.waitForFrame((f) => f.includes(": add work"));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Folder"));
+    await screen.mockInput.typeText("~/Projects/brimo-ns-android");
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Name (optional)"));
+    await screen.mockInput.typeText("BRImo");
+    await screen.waitForFrame((f) => f.includes("> BRImo"));
+    expectScreenshot("workspace-add", screen.captureSpans());
+  });
+
+  test("removing a workspace asks first", async () => {
+    const screen = await shell({
+      manage: {
+        ...UNCHANGED,
+        remove: (workspace, options) =>
+          options?.confirmation !== undefined
+            ? Promise.resolve(ok(undefined))
+            : Promise.resolve(
+                err(
+                  confirmationRequired(
+                    "workspace.remove",
+                    {
+                      title: "Remove workspace",
+                      severity: "confirm",
+                      details: [
+                        { label: "Workspace", value: `${workspace.name} (${workspace.id})` },
+                        { label: "Folder", value: workspace.path },
+                      ],
+                      consequence:
+                        "XueFu stops tracking this workspace. The folder and its recorded history are not deleted.",
+                      confirmLabel: "Remove",
+                    },
+                    "d",
+                  ),
+                ),
+              ),
+      },
+    });
+    await openSwitcher(screen, "deployd");
+    screen.mockInput.pressKey("d", { ctrl: true });
+    await screen.waitForFrame((f) => f.includes("Remove workspace?"));
+    expectScreenshot("workspace-remove", screen.captureSpans());
   });
 });

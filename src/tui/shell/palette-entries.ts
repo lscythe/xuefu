@@ -6,6 +6,7 @@ import { issueKey } from "../../domain/work/issue-key";
 import { issueTitle, type WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import type { PaletteEntry } from "../palette/palette-model";
+import { type WorkspaceEntryActions, workspaceEntries } from "./workspace-entries";
 
 /** What the cockpit shows right now; decides which entries apply. */
 export interface CockpitState {
@@ -32,6 +33,8 @@ export interface CockpitActions {
     readonly name: string;
     readonly ask: (question: string | null) => void;
   } | null;
+  /** Adding, renaming, grouping and removing workspaces; null when the cockpit cannot. */
+  readonly workspaces: WorkspaceEntryActions | null;
   readonly quit: () => void;
 }
 
@@ -118,6 +121,9 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
     fields: [],
     run: done(actions.openSwitcher),
   });
+  if (actions.workspaces !== null) {
+    entries.push(...workspaceEntries(state.workspace, actions.workspaces));
+  }
   if (state.workspace !== null) {
     entries.push({ title: "Close tab", keys: "alt+w", fields: [], run: actions.closeTab });
   }

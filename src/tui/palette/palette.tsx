@@ -17,6 +17,8 @@ export interface PaletteProps {
   readonly entries: readonly PaletteEntry[];
   readonly icons: IconSet;
   readonly onClose: () => void;
+  /** Opens on this entry's fields, as when it was chosen; Esc then closes the palette. */
+  readonly start?: PaletteEntry | undefined;
 }
 
 /** Choosing an entry, or filling in the fields of the chosen one. */
@@ -40,7 +42,11 @@ const titleOf = (entry: PaletteEntry) =>
 /** The command palette: find an action by name and run it, asking for any input it needs. */
 export function Palette(props: PaletteProps) {
   const dimensions = useTerminalDimensions();
-  const [stage, setStage] = createSignal<Stage>({ kind: "choose" });
+  const [stage, setStage] = createSignal<Stage>(
+    props.start === undefined
+      ? { kind: "choose" }
+      : { kind: "ask", entry: props.start, values: [] },
+  );
   const [query, setQuery] = createSignal("");
   const [input, setInput] = createSignal("");
   const [selected, setSelected] = createSignal(0);
@@ -111,7 +117,7 @@ export function Palette(props: PaletteProps) {
     switch (action.kind) {
       case "close":
         // Esc steps back out of the fields to the list before it closes the palette.
-        if (asking() === null) props.onClose();
+        if (asking() === null || props.start !== undefined) props.onClose();
         else {
           setStage({ kind: "choose" });
           setError(null);
@@ -237,7 +243,9 @@ export function Palette(props: PaletteProps) {
       <text fg={PALETTE.textMuted}>
         {asking() === null
           ? `${ascii() ? "up/down" : "↑↓"} move  enter run  esc close`
-          : "enter next  esc back"}
+          : props.start === undefined
+            ? "enter next  esc back"
+            : "enter next  esc close"}
       </text>
     </Dialog>
   );

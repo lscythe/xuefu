@@ -725,6 +725,7 @@ async function openCockpit(app: App, out: Output): Promise<number> {
     app,
     out.runtime.tui,
     out.runtime.cwd,
+    out.runtime.home,
     (text) => out.redactor.redactString(text),
     cockpitAgent(app, out),
   );

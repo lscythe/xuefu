@@ -29,10 +29,12 @@ import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { AgentDialog } from "../agent/agent-dialog";
+import { createAsking } from "../asking";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
 import { NoteEditor } from "../note-editor/note-editor";
 import { Palette } from "../palette/palette";
+import type { PaletteEntry } from "../palette/palette-model";
 import { Panel } from "../panel";
 import { Switcher } from "../switcher/switcher";
 import { PALETTE } from "../theme/palette";
@@ -53,6 +55,12 @@ import { fitsTerminal } from "./terminal-size";
 import { TodayPanel, todayTotal } from "./today-panel";
 import { TooSmall } from "./too-small";
 import { WorkPanel } from "./work-panel";
+import {
+  type ManageWorkspaces,
+  type WorkspaceChange,
+  type WorkspaceEntryActions,
+  workspaceEntry,
+} from "./workspace-entries";
 
 /** What the cockpit shows from storage, read again when another process changes it. */
 export interface CockpitSnapshot {
@@ -134,6 +142,8 @@ export interface ShellProps {
     holds: (origin: string) => boolean,
     first: Workspace,
   ) => Promise<Workspace | null>;
+  /** Adding, renaming, grouping and removing workspaces; without it the cockpit only switches. */
+  readonly manage?: ManageWorkspaces;
   /** IANA zone for the header clock; the host zone when omitted. */
   readonly timeZone?: string;
   readonly tickMs?: number;
@@ -163,6 +173,10 @@ export function Shell(props: ShellProps) {
   const [tabs, setTabs] = createSignal(props.tabs);
   const [switcherOpen, setSwitcherOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  // An entry the palette opens on, filling in its fields, such as a rename picked in the switcher.
+  const [paletteStart, setPaletteStart] = createSignal<PaletteEntry | null>(null);
+  // Asks before a workspace is removed.
+  const confirmation = createAsking();
   const [editing, setEditing] = createSignal<EditingNote | null>(null);
   // A conversation with the agent, about the workspace it was started in.
   const [asking, setAsking] = createSignal<AskingAgent | null>(null);
@@ -340,6 +354,49 @@ export function Shell(props: ShellProps) {
     };
   });
 
+  /** Reads tabs again once a workspace has changed, as its tab may show it. */
+  const thenReload = async (change: Promise<Result<unknown, AppError>>) => {
+    const changed = await change;
+    if (changed.ok) reload();
+    return changed;
+  };
+
+  const closePalette = () => {
+    setPaletteOpen(false);
+    setPaletteStart(null);
+  };
+
+  /** What adding, renaming, grouping and removing do; null without the means to. */
+  const workspaceActions = (): WorkspaceEntryActions | null => {
+    const manage = props.manage;
+    if (manage === undefined) return null;
+    return {
+      add: (folder, name, group) => changeTabs(manage.add(folder, name, group)),
+      rename: (target, name) => thenReload(manage.rename(target, name)),
+      group: (target, group) => thenReload(manage.group(target, group)),
+      remove: (target) => {
+        closePalette();
+        setSwitcherOpen(false);
+        const removed = confirmation.confirmed((options) => manage.remove(target, options));
+        report(thenReload(removed.then((answered) => answered ?? ok(null))));
+      },
+    };
+  };
+
+  /** A change picked in the switcher: its fields are asked in the palette; removing asks first. */
+  const changeFromSwitcher = (change: WorkspaceChange, target: Workspace | null) => {
+    const actions = workspaceActions();
+    const entry = actions === null ? null : workspaceEntry(change, target, actions);
+    if (entry === null) return;
+    setSwitcherOpen(false);
+    if (entry.fields.length === 0) {
+      void entry.run([]);
+      return;
+    }
+    setPaletteStart(entry);
+    setPaletteOpen(true);
+  };
+
   /** Opens the editor on the front workspace's note, or on the note on its work in progress. */
   const editNote = (on: "workspace" | "issue") => {
     const current = workspace();
@@ -372,7 +429,7 @@ export function Shell(props: ShellProps) {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
     // note editor, which asks before Ctrl+C drops unsaved text.
-    if (editing() !== null || asking() !== null || modal()) return;
+    if (editing() !== null || asking() !== null || modal() || confirmation.asking()) return;
     const overlay = switcherOpen() || paletteOpen();
     if (action === null || (overlay && action.kind !== "interrupt")) return;
     // In a section, the arrows, j and k, digits and Enter are its own.
@@ -526,7 +583,7 @@ export function Shell(props: ShellProps) {
                         width={areaWidth() - PANEL_CHROME_COLUMNS}
                         rows={panelRows()}
                         icons={props.icons}
-                        focused={inSection() && asking() === null}
+                        focused={inSection() && asking() === null && !confirmation.asking()}
                         setStatus={setPluginStatus}
                         setKeys={setPluginKeys}
                         setModal={setModal}
@@ -619,6 +676,7 @@ export function Shell(props: ShellProps) {
               return activated;
             }}
             onClose={() => setSwitcherOpen(false)}
+            onChange={props.manage === undefined ? undefined : changeFromSwitcher}
           />
         </Show>
         <Show when={paletteOpen()}>
@@ -652,13 +710,16 @@ export function Shell(props: ShellProps) {
                           });
                         },
                       },
+                workspaces: workspaceActions(),
                 quit: props.onQuit,
               },
             )}
             icons={props.icons}
-            onClose={() => setPaletteOpen(false)}
+            onClose={closePalette}
+            start={paletteStart() ?? undefined}
           />
         </Show>
+        <confirmation.AskingDialog icons={props.icons} />
         <Show when={editing()}>
           {(note: Accessor<EditingNote>) => (
             <NoteEditor

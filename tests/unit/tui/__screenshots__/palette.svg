@@ -175,17 +175,13 @@
 <text x="144" y="140" fill="#1b1d29">│</text>
 <rect x="153" y="126" width="9" height="18" fill="#0d0d12"/>
 <text x="153" y="140" fill="#6d4b34">│</text>
-<rect x="162" y="126" width="45" height="18" fill="#0d0d12"/>
-<rect x="207" y="126" width="72" height="18" fill="#0d0d12"/>
-<text x="207 216 225 234 243 252 261 270" y="140" fill="#534b6f" font-weight="bold">MOB-2841</text>
-<rect x="279" y="126" width="270" height="18" fill="#0d0d12"/>
-<text x="297 306 315 333 342 351 360 369 378 387 396 405 423 432 441 450 459 468 477 486 495 504 513 522 531 540" y="140" fill="#626369">Addbiometricauthentication</text>
-<rect x="549" y="126" width="45" height="18" fill="#0d0d12"/>
-<rect x="594" y="126" width="9" height="18" fill="#0d0d12"/>
-<text x="594" y="140" fill="#6d4b34">│</text>
-<rect x="603" y="126" width="9" height="18" fill="#0d0d12"/>
-<text x="603" y="140" fill="#1b1d29">│</text>
-<rect x="612" y="126" width="279" height="18" fill="#0d0d12"/>
+<rect x="162" y="126" width="18" height="18" fill="#272939"/>
+<text x="162 171" y="140" fill="#f2a774">┌─</text>
+<rect x="180" y="126" width="90" height="18" fill="#272939"/>
+<text x="189 198 207 216 225 234 243 252" y="140" fill="#b8a6f6">Commands</text>
+<rect x="270" y="126" width="468" height="18" fill="#272939"/>
+<text x="270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="140" fill="#f2a774">───────────────────────────────────────────────────┐</text>
+<rect x="738" y="126" width="153" height="18" fill="#0d0d12"/>
 <rect x="891" y="126" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="140" fill="#1b1d29">│</text>
 <rect x="0" y="144" width="9" height="18" fill="#0d0d12"/>
@@ -195,17 +191,17 @@
 <text x="144" y="158" fill="#1b1d29">│</text>
 <rect x="153" y="144" width="9" height="18" fill="#0d0d12"/>
 <text x="153" y="158" fill="#6d4b34">│</text>
-<rect x="162" y="144" width="63" height="18" fill="#0d0d12"/>
-<rect x="225" y="144" width="243" height="18" fill="#0d0d12"/>
-<text x="225 234 243 252 261 270 279 297 306 315 333 342 360 369 378 396 405 414 423 432 450" y="158" fill="#454752">StartedTue06Oct13:49·</text>
-<rect x="468" y="144" width="63" height="18" fill="#0d0d12"/>
-<text x="468 477 486 495 504 513 522" y="158" fill="#405f4a">running</text>
-<rect x="531" y="144" width="63" height="18" fill="#0d0d12"/>
-<rect x="594" y="144" width="9" height="18" fill="#0d0d12"/>
-<text x="594" y="158" fill="#6d4b34">│</text>
-<rect x="603" y="144" width="9" height="18" fill="#0d0d12"/>
-<text x="603" y="158" fill="#1b1d29">│</text>
-<rect x="612" y="144" width="279" height="18" fill="#0d0d12"/>
+<rect x="162" y="144" width="9" height="18" fill="#272939"/>
+<text x="162" y="158" fill="#f2a774">│</text>
+<rect x="171" y="144" width="9" height="18" fill="#272939"/>
+<rect x="180" y="144" width="18" height="18" fill="#272939"/>
+<text x="180" y="158" fill="#e8685c">:</text>
+<rect x="198" y="144" width="9" height="18" fill="#272939"/>
+<text x="198" y="158" fill="#b8a6f6">▏</text>
+<rect x="207" y="144" width="522" height="18" fill="#272939"/>
+<rect x="729" y="144" width="9" height="18" fill="#272939"/>
+<text x="729" y="158" fill="#f2a774">│</text>
+<rect x="738" y="144" width="153" height="18" fill="#0d0d12"/>
 <rect x="891" y="144" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="158" fill="#1b1d29">│</text>
 <rect x="0" y="162" width="9" height="18" fill="#0d0d12"/>
@@ -220,12 +216,18 @@
 <text x="144" y="176" fill="#1b1d29">│</text>
 <rect x="153" y="162" width="9" height="18" fill="#0d0d12"/>
 <text x="153" y="176" fill="#6d4b34">│</text>
-<rect x="162" y="162" width="18" height="18" fill="#272939"/>
-<text x="162 171" y="176" fill="#f2a774">┌─</text>
-<rect x="180" y="162" width="90" height="18" fill="#272939"/>
-<text x="189 198 207 216 225 234 243 252" y="176" fill="#b8a6f6">Commands</text>
-<rect x="270" y="162" width="468" height="18" fill="#272939"/>
-<text x="270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="176" fill="#f2a774">───────────────────────────────────────────────────┐</text>
+<rect x="162" y="162" width="9" height="18" fill="#272939"/>
+<text x="162" y="176" fill="#f2a774">│</text>
+<rect x="171" y="162" width="9" height="18" fill="#272939"/>
+<rect x="180" y="162" width="18" height="18" fill="#332f52"/>
+<text x="180" y="176" fill="#f2a774">▸</text>
+<rect x="198" y="162" width="153" height="18" fill="#332f52"/>
+<text x="198 207 216 225 234 252 261 270 279 288 306 315 324 333 342" y="176" fill="#dadcea" font-weight="bold">Startotherwork…</text>
+<rect x="351" y="162" width="360" height="18" fill="#332f52"/>
+<rect x="711" y="162" width="9" height="18" fill="#332f52"/>
+<rect x="720" y="162" width="9" height="18" fill="#272939"/>
+<rect x="729" y="162" width="9" height="18" fill="#272939"/>
+<text x="729" y="176" fill="#f2a774">│</text>
 <rect x="738" y="162" width="153" height="18" fill="#0d0d12"/>
 <rect x="891" y="162" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="176" fill="#1b1d29">│</text>
@@ -240,10 +242,10 @@
 <text x="162" y="194" fill="#f2a774">│</text>
 <rect x="171" y="180" width="9" height="18" fill="#272939"/>
 <rect x="180" y="180" width="18" height="18" fill="#272939"/>
-<text x="180" y="194" fill="#e8685c">:</text>
-<rect x="198" y="180" width="9" height="18" fill="#272939"/>
-<text x="198" y="194" fill="#b8a6f6">▏</text>
-<rect x="207" y="180" width="522" height="18" fill="#272939"/>
+<rect x="198" y="180" width="207" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 243 261 270 279 288 306 315 333 342 351 360 369 378 387 396" y="194" fill="#dadcea">FinishworkonMOB-2841</text>
+<rect x="405" y="180" width="306" height="18" fill="#272939"/>
+<rect x="711" y="180" width="18" height="18" fill="#272939"/>
 <rect x="729" y="180" width="9" height="18" fill="#272939"/>
 <text x="729" y="194" fill="#f2a774">│</text>
 <rect x="738" y="180" width="153" height="18" fill="#0d0d12"/>
@@ -264,13 +266,12 @@
 <rect x="162" y="198" width="9" height="18" fill="#272939"/>
 <text x="162" y="212" fill="#f2a774">│</text>
 <rect x="171" y="198" width="9" height="18" fill="#272939"/>
-<rect x="180" y="198" width="18" height="18" fill="#332f52"/>
-<text x="180" y="212" fill="#f2a774">▸</text>
-<rect x="198" y="198" width="153" height="18" fill="#332f52"/>
-<text x="198 207 216 225 234 252 261 270 279 288 306 315 324 333 342" y="212" fill="#dadcea" font-weight="bold">Startotherwork…</text>
-<rect x="351" y="198" width="360" height="18" fill="#332f52"/>
-<rect x="711" y="198" width="9" height="18" fill="#332f52"/>
-<rect x="720" y="198" width="9" height="18" fill="#272939"/>
+<rect x="180" y="198" width="18" height="18" fill="#272939"/>
+<rect x="198" y="198" width="243" height="18" fill="#272939"/>
+<text x="198 207 216 225 243 252 261 270 288 297 315 324 333 342 351 360 378 387 396 405 414 423 432" y="212" fill="#dadcea">EditnoteonMobileBanking</text>
+<rect x="441" y="198" width="270" height="18" fill="#272939"/>
+<text x="702" y="212" fill="#9a9db6">e</text>
+<rect x="711" y="198" width="18" height="18" fill="#272939"/>
 <rect x="729" y="198" width="9" height="18" fill="#272939"/>
 <text x="729" y="212" fill="#f2a774">│</text>
 <rect x="738" y="198" width="162" height="18" fill="#0d0d12"/>
@@ -284,9 +285,10 @@
 <text x="162" y="230" fill="#f2a774">│</text>
 <rect x="171" y="216" width="9" height="18" fill="#272939"/>
 <rect x="180" y="216" width="18" height="18" fill="#272939"/>
-<rect x="198" y="216" width="207" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 243 261 270 279 288 306 315 333 342 351 360 369 378 387 396" y="230" fill="#dadcea">FinishworkonMOB-2841</text>
-<rect x="405" y="216" width="306" height="18" fill="#272939"/>
+<rect x="198" y="216" width="189" height="18" fill="#272939"/>
+<text x="198 207 216 225 243 252 261 270 288 297 315 324 333 342 351 360 369 378" y="230" fill="#dadcea">EditnoteonMOB-2841</text>
+<rect x="387" y="216" width="324" height="18" fill="#272939"/>
+<text x="702" y="230" fill="#9a9db6">i</text>
 <rect x="711" y="216" width="18" height="18" fill="#272939"/>
 <rect x="729" y="216" width="9" height="18" fill="#272939"/>
 <text x="729" y="230" fill="#f2a774">│</text>
@@ -306,10 +308,10 @@
 <text x="162" y="248" fill="#f2a774">│</text>
 <rect x="171" y="234" width="9" height="18" fill="#272939"/>
 <rect x="180" y="234" width="18" height="18" fill="#272939"/>
-<rect x="198" y="234" width="243" height="18" fill="#272939"/>
-<text x="198 207 216 225 243 252 261 270 288 297 315 324 333 342 351 360 378 387 396 405 414 423 432" y="248" fill="#dadcea">EditnoteonMobileBanking</text>
-<rect x="441" y="234" width="270" height="18" fill="#272939"/>
-<text x="702" y="248" fill="#9a9db6">e</text>
+<rect x="198" y="234" width="99" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 252 261 270 279 288" y="248" fill="#dadcea">Pausetimer</text>
+<rect x="297" y="234" width="414" height="18" fill="#272939"/>
+<text x="702" y="248" fill="#9a9db6">t</text>
 <rect x="711" y="234" width="18" height="18" fill="#272939"/>
 <rect x="729" y="234" width="9" height="18" fill="#272939"/>
 <text x="729" y="248" fill="#f2a774">│</text>
@@ -327,10 +329,10 @@
 <text x="162" y="266" fill="#f2a774">│</text>
 <rect x="171" y="252" width="9" height="18" fill="#272939"/>
 <rect x="180" y="252" width="18" height="18" fill="#272939"/>
-<rect x="198" y="252" width="189" height="18" fill="#272939"/>
-<text x="198 207 216 225 243 252 261 270 288 297 315 324 333 342 351 360 369 378" y="266" fill="#dadcea">EditnoteonMOB-2841</text>
-<rect x="387" y="252" width="324" height="18" fill="#272939"/>
-<text x="702" y="266" fill="#9a9db6">i</text>
+<rect x="198" y="252" width="90" height="18" fill="#272939"/>
+<text x="198 207 216 225 243 252 261 270 279" y="266" fill="#dadcea">Stoptimer</text>
+<rect x="288" y="252" width="423" height="18" fill="#272939"/>
+<text x="702" y="266" fill="#9a9db6">T</text>
 <rect x="711" y="252" width="18" height="18" fill="#272939"/>
 <rect x="729" y="252" width="9" height="18" fill="#272939"/>
 <text x="729" y="266" fill="#f2a774">│</text>
@@ -346,10 +348,10 @@
 <text x="162" y="284" fill="#f2a774">│</text>
 <rect x="171" y="270" width="9" height="18" fill="#272939"/>
 <rect x="180" y="270" width="18" height="18" fill="#272939"/>
-<rect x="198" y="270" width="99" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 252 261 270 279 288" y="284" fill="#dadcea">Pausetimer</text>
-<rect x="297" y="270" width="414" height="18" fill="#272939"/>
-<text x="702" y="284" fill="#9a9db6">t</text>
+<rect x="198" y="270" width="144" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 243 261 270 279 288 297 306 315 324 333" y="284" fill="#dadcea">Switchworkspace</text>
+<rect x="342" y="270" width="369" height="18" fill="#272939"/>
+<text x="693 702" y="284" fill="#9a9db6">^W</text>
 <rect x="711" y="270" width="18" height="18" fill="#272939"/>
 <rect x="729" y="270" width="9" height="18" fill="#272939"/>
 <text x="729" y="284" fill="#f2a774">│</text>
@@ -365,10 +367,9 @@
 <text x="162" y="302" fill="#f2a774">│</text>
 <rect x="171" y="288" width="9" height="18" fill="#272939"/>
 <rect x="180" y="288" width="18" height="18" fill="#272939"/>
-<rect x="198" y="288" width="90" height="18" fill="#272939"/>
-<text x="198 207 216 225 243 252 261 270 279" y="302" fill="#dadcea">Stoptimer</text>
-<rect x="288" y="288" width="423" height="18" fill="#272939"/>
-<text x="702" y="302" fill="#9a9db6">T</text>
+<rect x="198" y="288" width="126" height="18" fill="#272939"/>
+<text x="198 207 216 234 243 252 261 270 279 288 297 306 315" y="302" fill="#dadcea">Addworkspace…</text>
+<rect x="324" y="288" width="387" height="18" fill="#272939"/>
 <rect x="711" y="288" width="18" height="18" fill="#272939"/>
 <rect x="729" y="288" width="9" height="18" fill="#272939"/>
 <text x="729" y="302" fill="#f2a774">│</text>
@@ -384,10 +385,9 @@
 <text x="162" y="320" fill="#f2a774">│</text>
 <rect x="171" y="306" width="9" height="18" fill="#272939"/>
 <rect x="180" y="306" width="18" height="18" fill="#272939"/>
-<rect x="198" y="306" width="144" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 243 261 270 279 288 297 306 315 324 333" y="320" fill="#dadcea">Switchworkspace</text>
-<rect x="342" y="306" width="369" height="18" fill="#272939"/>
-<text x="693 702" y="320" fill="#9a9db6">^W</text>
+<rect x="198" y="306" width="198" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 243 261 270 279 288 297 306 324 333 342 351 360 369 378 387" y="320" fill="#dadcea">RenameMobileBanking…</text>
+<rect x="396" y="306" width="315" height="18" fill="#272939"/>
 <rect x="711" y="306" width="18" height="18" fill="#272939"/>
 <rect x="729" y="306" width="9" height="18" fill="#272939"/>
 <text x="729" y="320" fill="#f2a774">│</text>
@@ -403,10 +403,9 @@
 <text x="162" y="338" fill="#f2a774">│</text>
 <rect x="171" y="324" width="9" height="18" fill="#272939"/>
 <rect x="180" y="324" width="18" height="18" fill="#272939"/>
-<rect x="198" y="324" width="81" height="18" fill="#272939"/>
-<text x="198 207 216 225 234 252 261 270" y="338" fill="#dadcea">Closetab</text>
-<rect x="279" y="324" width="432" height="18" fill="#272939"/>
-<text x="666 675 684 693 702" y="338" fill="#9a9db6">alt+w</text>
+<rect x="198" y="324" width="279" height="18" fill="#272939"/>
+<text x="198 207 216 225 243 252 261 270 279 288 306 315 324 333 342 351 360 378 387 405 423 432 441 450 459 468" y="338" fill="#dadcea">MoveMobileBankingtoagroup…</text>
+<rect x="477" y="324" width="234" height="18" fill="#272939"/>
 <rect x="711" y="324" width="18" height="18" fill="#272939"/>
 <rect x="729" y="324" width="9" height="18" fill="#272939"/>
 <text x="729" y="338" fill="#f2a774">│</text>
@@ -422,10 +421,9 @@
 <text x="162" y="356" fill="#f2a774">│</text>
 <rect x="171" y="342" width="9" height="18" fill="#272939"/>
 <rect x="180" y="342" width="18" height="18" fill="#272939"/>
-<rect x="198" y="342" width="36" height="18" fill="#272939"/>
-<text x="198 207 216 225" y="356" fill="#dadcea">Quit</text>
-<rect x="234" y="342" width="477" height="18" fill="#272939"/>
-<text x="702" y="356" fill="#9a9db6">q</text>
+<rect x="198" y="342" width="369" height="18" fill="#272939"/>
+<text x="198 207 216 225 243 252 261 270 279 288 306 315 324 333 342 351 360 378 387 396 414 423 441 450 459 468 477 486 495 513 522 531 540 549 558" y="356" fill="#dadcea">TakeMobileBankingoutofBankingClient</text>
+<rect x="567" y="342" width="144" height="18" fill="#272939"/>
 <rect x="711" y="342" width="18" height="18" fill="#272939"/>
 <rect x="729" y="342" width="9" height="18" fill="#272939"/>
 <text x="729" y="356" fill="#f2a774">│</text>
@@ -440,9 +438,11 @@
 <rect x="162" y="360" width="9" height="18" fill="#272939"/>
 <text x="162" y="374" fill="#f2a774">│</text>
 <rect x="171" y="360" width="9" height="18" fill="#272939"/>
-<rect x="180" y="360" width="261" height="18" fill="#272939"/>
-<text x="180 189 207 216 225 234 261 270 279 288 297 315 324 333 360 369 378 396 405 414 423 432" y="374" fill="#9a9db6">↑↓moveenterrunescclose</text>
-<rect x="441" y="360" width="288" height="18" fill="#272939"/>
+<rect x="180" y="360" width="18" height="18" fill="#272939"/>
+<rect x="198" y="360" width="189" height="18" fill="#272939"/>
+<text x="198 207 216 225 234 243 261 270 279 288 297 306 324 333 342 351 360 369 378" y="374" fill="#dadcea">RemoveMobileBanking</text>
+<rect x="387" y="360" width="324" height="18" fill="#272939"/>
+<rect x="711" y="360" width="18" height="18" fill="#272939"/>
 <rect x="729" y="360" width="9" height="18" fill="#272939"/>
 <text x="729" y="374" fill="#f2a774">│</text>
 <rect x="738" y="360" width="153" height="18" fill="#0d0d12"/>
@@ -453,8 +453,14 @@
 <rect x="9" y="378" width="135" height="18" fill="#0d0d12"/>
 <rect x="144" y="378" width="18" height="18" fill="#0d0d12"/>
 <text x="144 153" y="392" fill="#1b1d29">││</text>
-<rect x="162" y="378" width="576" height="18" fill="#272939"/>
-<text x="162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="392" fill="#f2a774">└──────────────────────────────────────────────────────────────┘</text>
+<rect x="162" y="378" width="9" height="18" fill="#272939"/>
+<text x="162" y="392" fill="#f2a774">│</text>
+<rect x="171" y="378" width="9" height="18" fill="#272939"/>
+<rect x="180" y="378" width="261" height="18" fill="#272939"/>
+<text x="180 189 207 216 225 234 261 270 279 288 297 315 324 333 360 369 378 396 405 414 423 432" y="392" fill="#9a9db6">↑↓moveenterrunescclose</text>
+<rect x="441" y="378" width="288" height="18" fill="#272939"/>
+<rect x="729" y="378" width="9" height="18" fill="#272939"/>
+<text x="729" y="392" fill="#f2a774">│</text>
 <rect x="738" y="378" width="153" height="18" fill="#0d0d12"/>
 <rect x="891" y="378" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="392" fill="#1b1d29">│</text>
@@ -463,10 +469,9 @@
 <rect x="9" y="396" width="135" height="18" fill="#0d0d12"/>
 <rect x="144" y="396" width="18" height="18" fill="#0d0d12"/>
 <text x="144 153" y="410" fill="#1b1d29">││</text>
-<rect x="162" y="396" width="432" height="18" fill="#0d0d12"/>
-<rect x="594" y="396" width="18" height="18" fill="#0d0d12"/>
-<text x="594 603" y="410" fill="#1b1d29">││</text>
-<rect x="612" y="396" width="279" height="18" fill="#0d0d12"/>
+<rect x="162" y="396" width="576" height="18" fill="#272939"/>
+<text x="162 171 180 189 198 207 216 225 234 243 252 261 270 279 288 297 306 315 324 333 342 351 360 369 378 387 396 405 414 423 432 441 450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711 720 729" y="410" fill="#f2a774">└──────────────────────────────────────────────────────────────┘</text>
+<rect x="738" y="396" width="153" height="18" fill="#0d0d12"/>
 <rect x="891" y="396" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="410" fill="#1b1d29">│</text>
 <rect x="0" y="414" width="9" height="18" fill="#0d0d12"/>
