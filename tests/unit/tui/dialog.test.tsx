@@ -3,7 +3,7 @@ import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show } from "solid-js";
-import { Dialog, outsideMask } from "../../../src/tui/dialog";
+import { Dialog, dialogWidth, outsideMask, readingWidth } from "../../../src/tui/dialog";
 import { PALETTE } from "../../../src/tui/theme/palette";
 
 let setup: TestRendererSetup | undefined;
@@ -23,6 +23,16 @@ function colourOf(view: TestRendererSetup, text: string): number[] {
 }
 
 const MIST = RGBA.fromHex(PALETTE.text).toInts().slice(0, 3);
+
+describe("dialog widths", () => {
+  test("a dialog to act in stays narrow; one to read in takes the room there is", () => {
+    expect(dialogWidth(200)).toBe(64);
+    expect(dialogWidth(60)).toBe(56);
+    expect(readingWidth(200)).toBe(110);
+    expect(readingWidth(100)).toBe(96);
+    expect(readingWidth(80)).toBe(76);
+  });
+});
 
 describe("outsideMask", () => {
   test("every cell but the box's, each at full strength", () => {

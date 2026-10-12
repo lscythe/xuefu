@@ -4,7 +4,7 @@ import type { AppError } from "../../../application/errors";
 import type { Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
-import { Dialog, dialogWidth } from "../../../tui/dialog";
+import { Dialog, readingWidth } from "../../../tui/dialog";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE, type PaletteToken } from "../../../tui/theme/palette";
 import type { IconSet } from "../../../tui/theme/status";
@@ -66,7 +66,7 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
     if (!reading.signal.aborted) setBuilds(result);
   });
 
-  const width = () => dialogWidth(dimensions().width);
+  const width = () => readingWidth(dimensions().width);
   // Inside the frame and its padding.
   const inner = () => width() - 4;
   const when = (at: number) => {

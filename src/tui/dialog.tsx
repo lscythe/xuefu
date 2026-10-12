@@ -34,6 +34,17 @@ export function dialogWidth(columns: number): number {
   return Math.min(MAX_WIDTH, columns - 4);
 }
 
+/** Widest a dialog for reading gets: room for prose and paths, still a comfortable line. */
+const MAX_READING_WIDTH = 110;
+
+/**
+ * For a dialog to read in, such as a pull request's or an issue's: as wide as the terminal allows,
+ * up to 110 columns, keeping a margin.
+ */
+export function readingWidth(columns: number): number {
+  return Math.min(MAX_READING_WIDTH, columns - 4);
+}
+
 /** Room left for a one-line message when there is nothing to list. */
 const MIN_LIST_ROWS = 2;
 
