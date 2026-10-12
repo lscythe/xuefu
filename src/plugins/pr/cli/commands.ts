@@ -38,6 +38,10 @@ const workspace = {
   description: "another workspace than this folder's",
 } as const;
 const yes = { type: "boolean", short: "y", description: "confirm without asking" } as const;
+const pull = {
+  name: "pullRequest",
+  description: "the pull request as PROJECT/repository#id; this branch's when left out",
+} as const;
 
 /** A command that changes a pull request: by default this branch's, asking first. */
 const change = (name: string, summary: string): PluginCommandSpec => ({
@@ -46,8 +50,10 @@ const change = (name: string, summary: string): PluginCommandSpec => ({
   usage: "[PROJECT/repository#id]",
   minArgs: 0,
   maxArgs: 1,
+  argument: pull,
   flags: { workspace, yes },
   summary,
+  changes: true,
 });
 
 export const PR_COMMANDS: readonly PluginCommandSpec[] = [
@@ -67,6 +73,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "[PROJECT/repository#id]",
     minArgs: 0,
     maxArgs: 1,
+    argument: pull,
     flags: { workspace, json },
     summary: "Show a pull request, by default this branch's, with its reviews and builds",
   },
@@ -76,6 +83,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "[PROJECT/repository#id]",
     minArgs: 0,
     maxArgs: 1,
+    argument: pull,
     flags: {
       workspace,
       stat: {
@@ -91,6 +99,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "[PROJECT/repository#id]",
     minArgs: 0,
     maxArgs: 1,
+    argument: pull,
     flags: { workspace, json },
     summary: "Show a pull request's comment threads, with where each is in the diff",
   },
@@ -104,6 +113,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "[PROJECT/repository#id]",
     minArgs: 0,
     maxArgs: 1,
+    argument: pull,
     flags: {
       message: { type: "string", short: "m", value: "<text>", description: "what to say" },
       file: { type: "string", value: "<path>", description: "on a line of this file, with --line" },
@@ -118,6 +128,7 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
       yes,
     },
     summary: "Comment on a pull request, on a line of its diff, or in reply to a comment",
+    changes: true,
   },
 ];
 

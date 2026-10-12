@@ -10,6 +10,7 @@ import { type JiraChanges, startWorkOnIssue } from "../application/start-work";
 import type { JiraIssue } from "../domain/issue";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
+const key = { name: "key", description: "the issue's key, such as MOB-123" } as const;
 
 export const JIRA_COMMANDS: readonly PluginCommandSpec[] = [
   {
@@ -31,6 +32,7 @@ export const JIRA_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "<key>",
     minArgs: 1,
     maxArgs: 1,
+    argument: key,
     flags: { json },
     summary: "Show a Jira issue",
   },
@@ -40,6 +42,7 @@ export const JIRA_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "<key>",
     minArgs: 1,
     maxArgs: 1,
+    argument: key,
     flags: {
       workspace: {
         type: "string",
@@ -50,6 +53,7 @@ export const JIRA_COMMANDS: readonly PluginCommandSpec[] = [
       yes: { type: "boolean", description: "also move the issue to in progress in Jira" },
     },
     summary: "Work on a Jira issue here and time it; --yes also moves it to in progress",
+    changes: true,
   },
 ];
 

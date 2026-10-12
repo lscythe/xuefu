@@ -46,6 +46,7 @@ xuefu pr comments                                              # its comment thr
 xuefu pr comment -m "Fall back to the PIN?" --file app/src/Login.kt --line 11  # or --reply 105
 xuefu pr approve MOB/mobile-banking#42 --yes                   # approve it; needs-work and unapprove too
 xuefu pr merge --yes                                           # merge this branch's, once Bitbucket allows
+xuefu mcp                                                      # serve these commands to AI agents (below)
 xuefu diagnostics                                              # paths, config sources, database state
 ```
 
@@ -210,6 +211,27 @@ it is kept, never the token itself: an environment variable, or the macOS keycha
 Service keyring on Linux (`security add-generic-password -s jira -a you -w` or
 `secret-tool store --label Jira service jira account you`). XueFu reads it only when it first
 asks Jira, never writes it to logs, and sends it only over HTTPS, unless Jira runs on this machine.
+
+## AI agents
+
+`xuefu mcp` serves XueFu's commands as tools over the [Model Context Protocol](https://modelcontextprotocol.io),
+so an agent in Claude Code, Codex, Cursor or any other MCP client can read your work, Jira issues,
+pull requests, their diffs and comments, and act on them. Add it once:
+
+```bash
+claude mcp add xuefu -- xuefu mcp                              # Claude Code
+codex mcp add xuefu -- xuefu mcp                               # Codex
+```
+
+Other clients take the same command in their MCP settings: `{"command": "xuefu", "args": ["mcp"]}`.
+
+Each tool is a command, named as typed with an underscore (`work_start`, `pr_diff`,
+`pr_comment`), and runs exactly as that command would, in the folder the agent runs in unless given
+a workspace. Plugins that are off or not set up add no tools. Reads, such as `pr_list` or
+`jira_show`, are marked as only reading, so a harness may run them without asking. Tools that
+change something are marked too, so the harness asks you first. Those that ask first on the command
+line also ask the agent: without `yes`, the tool answers with what it would do, and the agent is
+told to show you and call again with `yes` only once you agree.
 
 ## Development
 

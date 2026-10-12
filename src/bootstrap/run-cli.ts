@@ -25,6 +25,8 @@ import {
   timerSubject,
   workSubject,
 } from "../cli/format";
+import { type CommandRun, serveMcp } from "../cli/mcp-server";
+import { mcpTools } from "../cli/mcp-tools";
 import { type CliCommand, parseArgs } from "../cli/parse-args";
 import type { PluginInvocation } from "../cli/plugin-command";
 import { assertNever } from "../domain/shared/assert-never";
@@ -73,8 +75,15 @@ export interface CliRuntime {
   readonly cwd: string;
   readonly version: string;
   readonly tui: TuiHost;
-  /** Text piped in; `piped` is false when stdin is a terminal. */
-  readonly stdin: { readonly piped: boolean; read(): Promise<string> };
+  /**
+   * Text piped in: all of it with `read`, or as it arrives with `chunks`. `piped` is false when
+   * stdin is a terminal.
+   */
+  readonly stdin: {
+    readonly piped: boolean;
+    read(): Promise<string>;
+    chunks(): AsyncIterable<string> | Iterable<string>;
+  };
   readonly stdout: Writer;
   readonly stderr: Writer;
 }
@@ -82,6 +91,8 @@ export interface CliRuntime {
 interface Output {
   readonly runtime: CliRuntime;
   readonly redactor: Redactor;
+  /** How to confirm a command that asks first, said after what it would do. */
+  readonly confirm: string;
 }
 
 /** Credential-named environment variables are masked everywhere XueFu writes output. */
@@ -143,7 +154,7 @@ function withHint(error: AppError): AppError {
 function fail(out: Output, error: AppError): number {
   out.runtime.stderr.write(
     error.kind === "confirmation-required"
-      ? out.redactor.redactString(formatConfirmation(error.prompt, "Re-run with --yes to confirm."))
+      ? out.redactor.redactString(formatConfirmation(error.prompt, out.confirm))
       : `${formatError(withHint(error), out.redactor)}\n`,
   );
   return exitCodeFor(error);
@@ -657,10 +668,63 @@ async function openCockpit(app: App, out: Output): Promise<number> {
   return closed.ok ? EXIT.ok : fail(out, closed.error);
 }
 
+const NO_STDIN: CliRuntime["stdin"] = {
+  piped: false,
+  read: () => Promise.resolve(""),
+  chunks: () => [],
+};
+
+/** Runs a command line for an agent, keeping what it writes to hand back. */
+async function runForAgent(app: App, out: Output, argv: readonly string[]): Promise<CommandRun> {
+  let stdout = "";
+  let stderr = "";
+  const agent: Output = {
+    runtime: {
+      ...out.runtime,
+      stdin: NO_STDIN,
+      stdout: { write: (text) => (stdout += text) },
+      stderr: { write: (text) => (stderr += text) },
+    },
+    redactor: out.redactor,
+    confirm: "Show this to the user; once they agree, call the tool again with yes set to true.",
+  };
+  // Tools only build command lines that run a command, never the cockpit or this server.
+  const parsed = parseArgs(argv, PLUGIN_COMMANDS);
+  const code = !parsed.ok
+    ? fail(agent, parsed.error)
+    : parsed.value.kind === "run"
+      ? await runCommand(app, agent, parsed.value.command)
+      : EXIT.usage;
+  return { code, stdout, stderr };
+}
+
+/** Serves agents the commands as MCP tools until stdin closes; plugins left off add none. */
+async function serveAgents(app: App, out: Output): Promise<number> {
+  if (!out.runtime.stdin.piped) {
+    out.runtime.stderr.write(
+      "Serving XueFu's tools over MCP on stdin and stdout, for an agent's harness to start.\n" +
+        "Add it to Claude Code with: claude mcp add xuefu -- xuefu mcp\n",
+    );
+  }
+  const on = new Set(app.plugins.map(({ plugin }) => plugin.id));
+  await serveMcp(
+    {
+      version: out.runtime.version,
+      tools: mcpTools(PLUGIN_COMMANDS.filter((spec) => on.has(spec.group))),
+      run: (argv) => runForAgent(app, out, argv),
+      write: (text) => out.runtime.stdout.write(text),
+    },
+    out.runtime.stdin.chunks(),
+  );
+  return EXIT.ok;
+}
+
 function runCommand(app: App, out: Output, command: CliCommand): Promise<number> | number {
   switch (command.kind) {
     case "cockpit":
       return openCockpit(app, out);
+    case "mcp":
+      return serveAgents(app, out);
     case "diagnostics": {
       const report = diagnostics(app, out.runtime.version);
       return command.json ? printJson(out, report) : print(out, formatDiagnostics(report));
@@ -707,7 +771,11 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
 export async function runCli(runtime: CliRuntime): Promise<number> {
   const registry = new SecretRegistry();
   registerEnvironmentSecrets(runtime.env, registry);
-  const out: Output = { runtime, redactor: createRedactor(registry) };
+  const out: Output = {
+    runtime,
+    redactor: createRedactor(registry),
+    confirm: "Re-run with --yes to confirm.",
+  };
 
   const invocation = parseArgs(runtime.argv, PLUGIN_COMMANDS);
   if (!invocation.ok) {

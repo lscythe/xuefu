@@ -82,6 +82,7 @@ Commands:
                                   -w, --workspace <id>  only in this workspace
                                   -n, --limit <count>   how many entries (default 20)
                                   --json             machine-readable output
+  mcp                           Serve these commands to AI agents as MCP tools, over stdio
 ${pluginHelp(plugins)}
 Options:
   -h, --help                    Show this help
