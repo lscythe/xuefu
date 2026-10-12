@@ -1,9 +1,16 @@
+import { confirmationTokenFor } from "../../../application/commands/command";
+import type { DispatchOptions } from "../../../application/commands/command-bus";
 import type { AppError } from "../../../application/errors";
 import { table } from "../../../cli/format";
-import type { PluginCommandRunner, PluginCommandSpec } from "../../../cli/plugin-command";
+import type {
+  PluginCommandRunner,
+  PluginCommandSpec,
+  PluginInvocation,
+} from "../../../cli/plugin-command";
 import { ok, type Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
+import { type PrChanges, reviewInput } from "../application/actions";
 import {
   type BranchPullRequestDependencies,
   branchPullRequest,
@@ -14,10 +21,29 @@ import {
   type PullRequest,
   parsePullRequestRef,
   pullRequestRef,
+  type ReviewStatus,
   reviewSummary,
 } from "../domain/pull-request";
 
 const json = { type: "boolean", description: "machine-readable output" } as const;
+const workspace = {
+  type: "string",
+  short: "w",
+  value: "<id>",
+  description: "another workspace than this folder's",
+} as const;
+const yes = { type: "boolean", short: "y", description: "confirm without asking" } as const;
+
+/** A command that changes a pull request: by default this branch's, asking first. */
+const change = (name: string, summary: string): PluginCommandSpec => ({
+  group: "pr",
+  name,
+  usage: "[PROJECT/repository#id]",
+  minArgs: 0,
+  maxArgs: 1,
+  flags: { workspace, yes },
+  summary,
+});
 
 export const PR_COMMANDS: readonly PluginCommandSpec[] = [
   {
@@ -36,18 +62,19 @@ export const PR_COMMANDS: readonly PluginCommandSpec[] = [
     usage: "[PROJECT/repository#id]",
     minArgs: 0,
     maxArgs: 1,
-    flags: {
-      workspace: {
-        type: "string",
-        short: "w",
-        value: "<id>",
-        description: "another workspace than this folder's",
-      },
-      json,
-    },
+    flags: { workspace, json },
     summary: "Show a pull request, by default this branch's, with its reviews and builds",
   },
+  change("approve", "Approve a pull request"),
+  change("needs-work", "Ask for changes on a pull request"),
+  change("unapprove", "Withdraw your approval of, or request for changes on, a pull request"),
 ];
+
+const REVIEWED: Readonly<Record<string, readonly [ReviewStatus, string]>> = {
+  approve: ["approved", "Approved"],
+  "needs-work": ["needs-work", "Asked for changes on"],
+  unapprove: ["unapproved", "Withdrew your review of"],
+};
 
 const when = (at: number) => {
   const clock = wallClock(at as Timestamp);
@@ -109,43 +136,80 @@ function formatPullRequest(pull: PullRequest, builds: Result<BuildSummary, AppEr
   ].join("\n");
 }
 
-/** Runs `xuefu pr list` and `show`; each exits 1 when there is nothing to show. */
-export function prCommands(
+/**
+ * The pull request a command names, or else the one from the workspace's branch. Null when the
+ * branch has none, once it is said why and what to do instead.
+ */
+async function pullRequestFor(
   deps: BranchPullRequestDependencies,
-  maxResults: number,
-): PluginCommandRunner {
-  const { client } = deps;
+  invocation: PluginInvocation,
+  io: Parameters<PluginCommandRunner>[1],
+): Promise<Result<PullRequest | null, AppError>> {
+  const raw = invocation.args[0];
+  if (raw !== undefined) {
+    const ref = parsePullRequestRef(raw);
+    return ref.ok ? deps.client.pullRequest(ref.value.repository, ref.value.id) : ref;
+  }
+  const id = invocation.flags["workspace"];
+  const workspace = await io.workspace(typeof id === "string" ? id : null);
+  if (!workspace.ok) return workspace;
+  const branch = await branchPullRequest(deps, workspace.value.path);
+  if (!branch.ok) return branch;
+  if (branch.value.kind === "found") return ok(branch.value.pullRequest);
+  const why = whyNoPullRequest(branch.value, workspace.value.name, deps.host);
+  const name = "name one, as PROJECT/repository#42";
+  const fix =
+    branch.value.kind === "none"
+      ? ""
+      : branch.value.kind === "detached"
+        ? `; switch to a branch, or ${name}`
+        : `; ${name}`;
+  io.stderr(`${why}${fix}.\n`);
+  return ok(null);
+}
+
+/**
+ * Runs a command that asks first: run again approved with --yes, or else refused with its prompt,
+ * which the CLI prints with how to approve it.
+ */
+async function confirmed<Output>(
+  invoke: (options?: DispatchOptions) => Promise<Result<Output, AppError>>,
+  invocation: PluginInvocation,
+): Promise<Result<Output, AppError>> {
+  const asked = await invoke();
+  return !asked.ok &&
+    asked.error.kind === "confirmation-required" &&
+    invocation.flags["yes"] === true
+    ? invoke({ confirmation: confirmationTokenFor(asked.error) })
+    : asked;
+}
+
+/**
+ * Runs `xuefu pr list` and `show`, which exit 1 when there is nothing to show, and the commands
+ * that change a pull request, which ask first.
+ */
+export function prCommands(changes: PrChanges, maxResults: number): PluginCommandRunner {
+  const { client, invoke, actions } = changes;
   return async (invocation, io) => {
     const asJson = invocation.flags["json"] === true;
+    const reviewed = REVIEWED[invocation.name];
+    if (reviewed !== undefined) {
+      const found = await pullRequestFor(changes, invocation, io);
+      if (!found.ok || found.value === null) return found.ok ? ok(1) : found;
+      const pull = found.value;
+      const [status, done] = reviewed;
+      const sent = await confirmed(
+        (options) => invoke(actions.review, reviewInput(pull, status), options),
+        invocation,
+      );
+      if (!sent.ok) return sent;
+      io.stdout(`✓ ${done} ${pullRequestRef(pull)} (${pull.title})\n`);
+      return ok(0);
+    }
     if (invocation.name === "show") {
-      let found: PullRequest;
-      const raw = invocation.args[0];
-      if (raw === undefined) {
-        const id = invocation.flags["workspace"];
-        const workspace = await io.workspace(typeof id === "string" ? id : null);
-        if (!workspace.ok) return workspace;
-        const branch = await branchPullRequest(deps, workspace.value.path);
-        if (!branch.ok) return branch;
-        if (branch.value.kind !== "found") {
-          const why = whyNoPullRequest(branch.value, workspace.value.name, deps.host);
-          const name = "name one, as PROJECT/repository#42";
-          const fix =
-            branch.value.kind === "none"
-              ? ""
-              : branch.value.kind === "detached"
-                ? `; switch to a branch, or ${name}`
-                : `; ${name}`;
-          io.stderr(`${why}${fix}.\n`);
-          return ok(1);
-        }
-        found = branch.value.pullRequest;
-      } else {
-        const ref = parsePullRequestRef(raw);
-        if (!ref.ok) return ref;
-        const read = await client.pullRequest(ref.value.repository, ref.value.id);
-        if (!read.ok) return read;
-        found = read.value;
-      }
+      const read = await pullRequestFor(changes, invocation, io);
+      if (!read.ok || read.value === null) return read.ok ? ok(1) : read;
+      const found = read.value;
       const builds = await client.builds(found.commit);
       io.stdout(
         asJson

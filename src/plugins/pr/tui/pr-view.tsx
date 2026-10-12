@@ -13,23 +13,22 @@ import {
   Switch,
 } from "solid-js";
 import type { AppError } from "../../../application/errors";
+import { createAsking } from "../../../tui/asking";
+import { type Banner, BannerLine } from "../../../tui/banner-line";
 import { ErrorLine } from "../../../tui/error-line";
 import { cycle, scrollOffset } from "../../../tui/list-navigation";
 import { fitHints } from "../../../tui/shell/panel-status";
 import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE } from "../../../tui/theme/palette";
-import {
-  type BranchPullRequestDependencies,
-  branchPullRequest,
-  whyNoPullRequest,
-} from "../application/branch-pull-request";
-import type { PullRequest } from "../domain/pull-request";
+import { type PrChanges, reviewInput } from "../application/actions";
+import { branchPullRequest, whyNoPullRequest } from "../application/branch-pull-request";
+import type { PullRequest, ReviewStatus } from "../domain/pull-request";
 import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
 import { PullRequestDialog } from "./pull-request-dialog";
 
 /** Everything the section needs from the pull requests plugin. */
-export interface PrSection extends BranchPullRequestDependencies {
+export interface PrSection extends PrChanges {
   readonly maxResults: number;
   readonly refreshMs: number;
   /** The time zone dates are shown in; the host's unless given. */
@@ -44,15 +43,23 @@ interface Lists {
 const padded = (text: string, width: number) =>
   text + " ".repeat(Math.max(0, width - Bun.stringWidth(text)));
 
+/** What a review key says once the server has it. */
+const REVIEWED: Readonly<Record<ReviewStatus, string>> = {
+  approved: "Approved",
+  "needs-work": "Asked for changes on",
+  unapproved: "Withdrew your review of",
+};
+
 /**
  * The pull requests section: the one from the front workspace's branch, then yours, then those
  * waiting on your review, read when it opens and every `refreshMs` while it stays open. Reads
  * never overlap, and one still running when the section closes is stopped. A failed refresh keeps
  * what was last read and says why above it. With the keyboard, Enter shows the pull request under
- * the cursor and `r` reads everything again.
+ * the cursor; `a` approves it, `n` asks for changes and `u` withdraws either, each asking first;
+ * and `r` reads everything again.
  */
 export function prView(section: PrSection): Component<SectionProps> {
-  const { client, maxResults, refreshMs, timeZone } = section;
+  const { client, invoke, actions, maxResults, refreshMs, timeZone } = section;
   // The lists last read, so the section opens on them while it reads again.
   let last: Lists | null = null;
 
@@ -65,6 +72,9 @@ export function prView(section: PrSection): Component<SectionProps> {
     } | null>(null);
     const [cursor, setCursor] = createSignal(0);
     const [opened, setOpened] = createSignal<PullRequest | null>(null);
+    const [busy, setBusy] = createSignal(false);
+    const [banner, setBanner] = createSignal<Banner | null>(null);
+    const { asking, confirmed, AskingDialog } = createAsking();
     const ascii = () => props.icons === "ascii";
 
     let running: AbortController | null = null;
@@ -119,8 +129,8 @@ export function prView(section: PrSection): Component<SectionProps> {
       ),
     );
 
-    // The dialog has every key while it is open.
-    const modal = () => opened() !== null;
+    // A dialog of the section's has every key while it is open.
+    const modal = () => opened() !== null || asking();
     createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
       if (modal()) props.setModal(false);
@@ -168,8 +178,15 @@ export function prView(section: PrSection): Component<SectionProps> {
       props.setKeys(
         fitHints(
           [
-            ...(pulls().length > 0 ? [{ text: "enter details", rank: 0 }] : []),
-            { text: "r refresh", rank: 1 },
+            ...(pulls().length > 0
+              ? [
+                  { text: "enter details", rank: 0 },
+                  { text: "a approve", rank: 1 },
+                  { text: "n needs work", rank: 2 },
+                  { text: "u withdraw", rank: 4 },
+                ]
+              : []),
+            { text: "r refresh", rank: 3 },
           ],
           props.width - 2,
           ascii(),
@@ -177,8 +194,24 @@ export function prView(section: PrSection): Component<SectionProps> {
       );
     });
 
+    /** Sets your review of the pull request, asking first, then reads the lists again. */
+    const review = async (pull: PullRequest, status: ReviewStatus) => {
+      setBusy(true);
+      const sent = await confirmed((options) =>
+        invoke(actions.review, reviewInput(pull, status), options),
+      );
+      setBusy(false);
+      if (sent === null) return;
+      if (!sent.ok) {
+        props.report(sent.error);
+        return;
+      }
+      setBanner({ kind: "success", text: `${REVIEWED[status]} ${shortRef(pull)}.` });
+      void load();
+    };
+
     useKeyboard((key) => {
-      if (!props.focused || modal()) return;
+      if (!props.focused || modal() || busy()) return;
       const count = pulls().length;
       const at = Math.min(cursor(), Math.max(0, count - 1));
       switch (key.name) {
@@ -201,6 +234,15 @@ export function prView(section: PrSection): Component<SectionProps> {
           if (row !== null) setOpened(row.pull);
           return;
         }
+        case "a":
+        case "n":
+        case "u": {
+          const row = selected();
+          const status =
+            key.name === "a" ? "approved" : key.name === "n" ? "needs-work" : "unapproved";
+          if (row !== null) void review(row.pull, status);
+          return;
+        }
         case "r":
           void load();
           return;
@@ -209,8 +251,9 @@ export function prView(section: PrSection): Component<SectionProps> {
       }
     });
 
-    /** Rows for the list: one less when a failed refresh is said above it. */
-    const listRows = () => Math.max(1, props.rows - (failure() === null ? 0 : 1));
+    /** Rows for the list: fewer for each line said above it. */
+    const listRows = () =>
+      Math.max(1, props.rows - (failure() === null ? 0 : 1) - (banner() === null ? 0 : 1));
     const drawn = () => {
       const all = rows();
       const chosen = props.focused ? selected() : null;
@@ -238,6 +281,11 @@ export function prView(section: PrSection): Component<SectionProps> {
             <text fg={PALETTE.textMuted}>Reading your pull requests...</text>
           </Match>
           <Match when={true}>
+            <Show when={banner()}>
+              {(line: Accessor<Banner>) => (
+                <BannerLine banner={line()} width={props.width} icons={props.icons} />
+              )}
+            </Show>
             <Show when={failure()}>
               {(error: Accessor<AppError>) => (
                 <text>
@@ -299,6 +347,7 @@ export function prView(section: PrSection): Component<SectionProps> {
             />
           )}
         </Show>
+        <AskingDialog icons={props.icons} />
       </>
     );
   };

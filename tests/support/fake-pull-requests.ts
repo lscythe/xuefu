@@ -1,5 +1,6 @@
 import { notFound } from "../../src/domain/shared/errors";
 import { err, ok } from "../../src/domain/shared/result";
+import { type PrChanges, prActions } from "../../src/plugins/pr/application/actions";
 import type { Checkout, CheckoutReader } from "../../src/plugins/pr/application/checkout";
 import type {
   PullRequestClient,
@@ -10,11 +11,13 @@ import {
   type PullRequest,
   pullRequestRef,
 } from "../../src/plugins/pr/domain/pull-request";
+import { pluginContext } from "./plugin-context";
 
 /** An open pull request on MOB/mobile-banking, with what is not given filled in. */
 export const pullRequest = (id: number, extra: Partial<PullRequest> = {}): PullRequest => ({
   repository: { project: "MOB", slug: "mobile-banking" },
   id,
+  version: 0,
   title: `Change ${id}`,
   description: null,
   state: "open",
@@ -70,17 +73,35 @@ export function fakePullRequests(
           ) ?? null,
         ),
       ),
+    review: () => Promise.resolve(ok(undefined)),
     builds: () => Promise.resolve(ok(builds)),
     ...overrides,
   };
 }
 
 /** Every folder has `checkout`, by default a branch on MOB/mobile-banking. */
-export function fakeCheckouts(
+function fakeCheckouts(
   checkout: Checkout | null = {
     branch: "feature/MOB-2841-biometric-login",
     origin: "ssh://git@bitbucket.example.com:7999/mob/mobile-banking.git",
   },
 ): CheckoutReader {
   return { read: () => Promise.resolve(ok(checkout)) };
+}
+
+/** The plugin's changes over `client`, its actions on a real bus, reading `checkouts`. */
+export function prChanges(
+  client: PullRequestClient,
+  checkouts: CheckoutReader = fakeCheckouts(),
+): PrChanges {
+  const { bus } = pluginContext();
+  const actions = prActions(client);
+  for (const action of Object.values(actions)) bus.register(action);
+  return {
+    client,
+    checkouts,
+    host: "bitbucket.example.com",
+    invoke: (command, input, options) => bus.invoke(command, input, options),
+    actions,
+  };
 }

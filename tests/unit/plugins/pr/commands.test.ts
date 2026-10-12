@@ -10,7 +10,7 @@ import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/
 import type { Checkout, CheckoutReader } from "../../../../src/plugins/pr/application/checkout";
 import type { PullRequestClient } from "../../../../src/plugins/pr/application/pull-request-client";
 import { buildsText, prCommands, reviewsText } from "../../../../src/plugins/pr/cli/commands";
-import { fakePullRequests, pullRequest } from "../../../support/fake-pull-requests";
+import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -43,7 +43,7 @@ async function run(
     },
   };
   const code: Result<number, AppError> = await prCommands(
-    { client, checkouts, host: "bitbucket.example.com" },
+    prChanges(client, checkouts),
     options.max ?? 25,
   )(
     { group: "pr", name, args, flags },
@@ -226,6 +226,87 @@ describe("xuefu pr show", () => {
     expect(bad.code.ok ? null : bad.code.error.kind).toBe("validation");
     const missing = await run(fakePullRequests(), "show", ["MOB/mobile-banking#9"]);
     expect(missing.code.ok ? null : missing.code.error.kind).toBe("not-found");
+  });
+});
+
+describe("xuefu pr approve, needs-work and unapprove", () => {
+  /** A server that records each review it is sent. */
+  const reviewing = () => {
+    const sent: unknown[][] = [];
+    const client = fakePullRequests({ toReview: [pullRequest(42)] }, undefined, {
+      review: (repository, id, status, commit) => {
+        sent.push([repository, id, status, commit]);
+        return Promise.resolve(ok(undefined));
+      },
+    });
+    return { client, sent };
+  };
+
+  test("without --yes, asks first: nothing is sent, and the prompt says what would happen", async () => {
+    const { client, sent } = reviewing();
+    const asked = await run(client, "approve", ["MOB/mobile-banking#42"]);
+    expect(sent).toEqual([]);
+    const error = asked.code.ok ? null : asked.code.error;
+    expect(error?.kind).toBe("confirmation-required");
+    expect(error?.kind === "confirmation-required" ? error.prompt : null).toEqual({
+      title: "Approve MOB/mobile-banking#42",
+      severity: "confirm",
+      details: [
+        { label: "Pull request", value: "MOB/mobile-banking#42" },
+        { label: "Title", value: "Change 42" },
+        { label: "Commit", value: "c0ffee42" },
+      ],
+      consequence: "Approves it on Bitbucket, where its author and reviewers will see it.",
+      confirmLabel: "Approve",
+    });
+  });
+
+  test.each([
+    ["approve", "approved", "✓ Approved MOB/mobile-banking#42 (Change 42)\n"],
+    ["needs-work", "needs-work", "✓ Asked for changes on MOB/mobile-banking#42 (Change 42)\n"],
+    ["unapprove", "unapproved", "✓ Withdrew your review of MOB/mobile-banking#42 (Change 42)\n"],
+  ])("%s --yes sends it, of the commit that was read", async (name, status, said) => {
+    const { client, sent } = reviewing();
+    const done = await run(client, name, ["MOB/mobile-banking#42"], { yes: true });
+    expect(done.code).toEqual(ok(0));
+    expect(sent).toEqual([[{ project: "MOB", slug: "mobile-banking" }, 42, status, "c0ffee42"]]);
+    expect(done.stdout).toBe(said);
+  });
+
+  test("without a ref, this branch's; with none, says why and sends nothing", async () => {
+    const { client, sent } = reviewing();
+    expect((await run(client, "approve", [], { yes: true })).code).toEqual(ok(0));
+    expect(sent.map(([, id]) => id)).toEqual([42]);
+    const none = await run(
+      client,
+      "approve",
+      [],
+      { yes: true },
+      {
+        checkout: { ...ON_BITBUCKET, branch: "spike" },
+      },
+    );
+    expect(none.code).toEqual(ok(1));
+    expect(none.stderr).toBe("No open pull request from spike in MOB/mobile-banking.\n");
+    expect(sent).toHaveLength(1);
+  });
+
+  test("a review the server refuses is the failure", async () => {
+    const refused = remoteError(
+      "Bitbucket answered 409: You cannot approve your own pull request",
+      "bitbucket.example.com",
+      409,
+    );
+    const shown = await run(
+      fakePullRequests({ yours: [pullRequest(42)] }, undefined, {
+        review: () => Promise.resolve(err(refused)),
+      }),
+      "approve",
+      ["MOB/mobile-banking#42"],
+      { yes: true },
+    );
+    expect(shown.code).toEqual(err(refused));
+    expect(shown.stdout).toBe("");
   });
 });
 

@@ -3,6 +3,7 @@ import { RGBA } from "@opentui/core";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createSignal, Show, Suspense } from "solid-js";
+import type { AppError } from "../../../../src/application/errors";
 import { remoteError } from "../../../../src/domain/shared/errors";
 import type { WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { AbsolutePath } from "../../../../src/domain/shared/path";
@@ -18,7 +19,7 @@ import type {
 import { prPlugin } from "../../../../src/plugins/pr/plugin";
 import { prView } from "../../../../src/plugins/pr/tui/pr-view";
 import { PALETTE } from "../../../../src/tui/theme/palette";
-import { fakePullRequests, pullRequest } from "../../../support/fake-pull-requests";
+import { fakePullRequests, prChanges, pullRequest } from "../../../support/fake-pull-requests";
 import { fakeSecrets } from "../../../support/fake-secrets";
 import { pluginContext } from "../../../support/plugin-context";
 
@@ -69,16 +70,15 @@ async function render(
   const [front, setFront] = createSignal<Workspace | null>(
     options.workspace === undefined ? MOBILE : options.workspace,
   );
+  const reported: AppError[] = [];
   const View = prView({
-    client,
-    checkouts: {
+    ...prChanges(client, {
       read: (folder) => {
         checkoutsRead.push(folder);
         const by = options.checkouts?.[folder];
         return Promise.resolve(ok(by === undefined ? ON_BRANCH : by));
       },
-    },
-    host: "bitbucket.example.com",
+    }),
     maxResults: 25,
     refreshMs: options.refreshMs ?? 60_000,
     timeZone: "UTC",
@@ -97,7 +97,7 @@ async function render(
             setStatus={(status) => statuses.push(status)}
             setKeys={(next) => keys.push(next)}
             setModal={(open) => modal.push(open)}
-            report={() => undefined}
+            report={(error) => reported.push(error)}
           />
         </Show>
       </box>
@@ -110,6 +110,7 @@ async function render(
     keys,
     modal,
     checkoutsRead,
+    reported,
     close: () => setShown(false),
     front: setFront,
   });
@@ -254,7 +255,9 @@ describe("prView", () => {
       { focused: true },
     );
     await until(view, (f) => f.includes("To review (1)") && f.includes("This branch"));
-    expect(view.keys.at(-1)).toBe("enter details · r refresh");
+    expect(view.keys.at(-1)).toBe(
+      "enter details · a approve · n needs work · u withdraw · r refresh",
+    );
     await until(view, () => lit(view).startsWith("mobile-banking#42"));
     view.mockInput.pressArrow("up");
     await until(view, () => lit(view).startsWith("mobile-banking#40"));
@@ -296,6 +299,63 @@ describe("prView", () => {
     expect(frame).toContain("No description.");
     view.mockInput.pressKey("q");
     await until(view, (f) => !f.includes("No description."));
+  });
+
+  test("a approves the one under the cursor once confirmed, and says so", async () => {
+    const sent: unknown[][] = [];
+    const view = await render(
+      fakePullRequests({ yours: YOURS, toReview: TO_REVIEW }, undefined, {
+        review: (_repository, id, status, commit) => {
+          sent.push([id, status, commit]);
+          return Promise.resolve(ok(undefined));
+        },
+      }),
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("To review (1)") && f.includes("This branch"));
+    view.mockInput.pressArrow("up");
+    await until(view, () => lit(view).startsWith("mobile-banking#40"));
+    view.mockInput.pressKey("a");
+    const frame = await until(view, (f) => f.includes("Approve MOB/mobile-banking#40"));
+    expect(frame).toContain("Approves it on Bitbucket, where its author and reviewers");
+    expect(view.modal.at(-1)).toBe(true);
+    view.mockInput.pressKey("y");
+    await until(view, (f) => f.includes("✓ Approved mobile-banking#40."));
+    expect(sent).toEqual([[40, "approved", "c0ffee40"]]);
+    expect(view.modal.at(-1)).toBe(false);
+  });
+
+  test("n asks for changes and u withdraws; declined, nothing is sent; refused, it is reported", async () => {
+    const sent: unknown[][] = [];
+    const refused = remoteError("Bitbucket answered 409: changed", "bitbucket.example.com", 409);
+    const view = await render(
+      fakePullRequests({ yours: YOURS }, undefined, {
+        review: (_repository, id, status) => {
+          sent.push([id, status]);
+          return Promise.resolve(status === "unapproved" ? err(refused) : ok(undefined));
+        },
+      }),
+      { focused: true },
+    );
+    await until(view, (f) => f.includes("Yours (2)") && f.includes("This branch"));
+    view.mockInput.pressKey("n");
+    await until(view, (f) => f.includes("Ask for changes on MOB/mobile-banking#42"));
+    view.mockInput.pressKey("n");
+    await until(view, (f) => !f.includes("Ask for changes on"));
+    expect(sent).toEqual([]);
+    view.mockInput.pressKey("n");
+    await until(view, (f) => f.includes("Ask for changes on MOB/mobile-banking#42"));
+    view.mockInput.pressEnter();
+    await until(view, (f) => f.includes("✓ Asked for changes on mobile-banking#42."));
+    view.mockInput.pressKey("u");
+    await until(view, (f) => f.includes("Withdraw your review of MOB/mobile-banking#42"));
+    view.mockInput.pressKey("y");
+    await until(view, () => view.reported.length > 0);
+    expect(sent).toEqual([
+      [42, "needs-work"],
+      [42, "unapproved"],
+    ]);
+    expect(view.reported).toEqual([refused]);
   });
 
   test("closing the section with the dialog open hands the keys back", async () => {

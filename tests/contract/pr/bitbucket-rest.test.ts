@@ -12,14 +12,24 @@ const fixture = (name: string) => Bun.file(join(import.meta.dir, "fixtures", `${
 
 /** Each test says how the fake Bitbucket answers; requests are kept for checking what was sent. */
 let answer: (request: Request) => Response | Promise<Response> = () => new Response("unset");
-const requests: { readonly url: string; readonly authorization: string | null }[] = [];
+const requests: {
+  readonly method: string;
+  readonly url: string;
+  readonly authorization: string | null;
+  readonly body: string;
+}[] = [];
 let server: ReturnType<typeof Bun.serve>;
 
 beforeAll(() => {
   server = Bun.serve({
     port: 0,
-    fetch: (request) => {
-      requests.push({ url: request.url, authorization: request.headers.get("authorization") });
+    fetch: async (request) => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        authorization: request.headers.get("authorization"),
+        body: await request.text(),
+      });
       return answer(request);
     },
   });
@@ -62,6 +72,7 @@ describe("bitbucket REST 1.0: your pull requests", () => {
     expect(found.ok && found.value.pullRequests[1]).toEqual({
       repository: REPO,
       id: 40,
+      version: 3,
       title: "MOB-2790 Fix crash when rotating the transfer screen",
       description: null,
       state: "open",
@@ -146,6 +157,101 @@ describe("bitbucket REST 1.0: one pull request", () => {
       "/rest/build-status/1.0/commits/stats/4b8e2c9f",
     );
     expect(builds).toEqual(ok({ successful: 2, failed: 1, inProgress: 0 }));
+  });
+});
+
+/** Answers by path; any other path is not found. */
+const byPath =
+  (answers: Record<string, () => Response>) =>
+  (request: Request): Response =>
+    answers[new URL(request.url).pathname]?.() ?? Response.json({}, { status: 404 });
+
+describe("bitbucket REST 1.0: reviews", () => {
+  const PARTICIPANT =
+    "/rest/api/1.0/projects/MOB/repos/mobile-banking/pull-requests/42/participants";
+  const signedIn = (name: string) => () =>
+    Response.json({ version: "9.4.0" }, { headers: { "X-AUSERNAME": name } });
+  const users = () =>
+    Response.json({
+      values: [
+        { name: "dscully2", slug: "dscully2" },
+        { name: "Dana.Scully@fbi.gov", slug: "dana.scully_fbi.gov" },
+      ],
+      isLastPage: true,
+    });
+
+  test("sets your status, of the commit that was seen, as the user the token signs in", async () => {
+    requests.length = 0;
+    answer = byPath({
+      "/rest/api/1.0/application-properties": signedIn("Dana.Scully@fbi.gov"),
+      "/rest/api/1.0/users": users,
+      [`${PARTICIPANT}/dana.scully_fbi.gov`]: () => Response.json({ status: "APPROVED" }),
+    });
+    const bitbucket = client();
+    expect(await bitbucket.review(REPO, 42, "approved", "4b8e2c9f")).toEqual(ok(undefined));
+    expect(await bitbucket.review(REPO, 42, "needs-work", "4b8e2c9f")).toEqual(ok(undefined));
+    expect(requests.map((sent) => `${sent.method} ${new URL(sent.url).pathname}`)).toEqual([
+      "GET /rest/api/1.0/application-properties",
+      "GET /rest/api/1.0/users",
+      `PUT ${PARTICIPANT}/dana.scully_fbi.gov`,
+      // Who the token is was read once.
+      `PUT ${PARTICIPANT}/dana.scully_fbi.gov`,
+    ]);
+    expect(new URL(requests[1]?.url ?? "").searchParams.get("filter")).toBe("Dana.Scully@fbi.gov");
+    expect(requests.slice(2).map((sent) => JSON.parse(sent.body))).toEqual([
+      { status: "APPROVED", lastReviewedCommit: "4b8e2c9f" },
+      { status: "NEEDS_WORK", lastReviewedCommit: "4b8e2c9f" },
+    ]);
+    expect(requests.every((sent) => sent.authorization === `Bearer ${TOKEN}`)).toBe(true);
+  });
+
+  test("withdrawing a review sets you unapproved", async () => {
+    requests.length = 0;
+    answer = byPath({
+      "/rest/api/1.0/application-properties": signedIn("dscully2"),
+      "/rest/api/1.0/users": users,
+      [`${PARTICIPANT}/dscully2`]: () => Response.json({ status: "UNAPPROVED" }),
+    });
+    expect(await client().review(REPO, 42, "unapproved", "4b8e2c9f")).toEqual(ok(undefined));
+    expect(JSON.parse(requests.at(-1)?.body ?? "")).toMatchObject({ status: "UNAPPROVED" });
+  });
+
+  test("what Bitbucket says when it refuses, such as on your own pull request", async () => {
+    answer = byPath({
+      "/rest/api/1.0/application-properties": signedIn("dscully2"),
+      "/rest/api/1.0/users": users,
+      [`${PARTICIPANT}/dscully2`]: status(400, {
+        errors: [{ message: "Authors cannot review their own pull request." }],
+      }),
+    });
+    const refused = await client().review(REPO, 42, "approved", "4b8e2c9f");
+    expect(refused.ok ? null : refused.error.message).toBe(
+      "Bitbucket answered 400: Authors cannot review their own pull request.",
+    );
+  });
+
+  test("a pull request that is not there is not found", async () => {
+    answer = byPath({
+      "/rest/api/1.0/application-properties": signedIn("dscully2"),
+      "/rest/api/1.0/users": users,
+    });
+    const missing = await client().review(REPO, 42, "approved", "4b8e2c9f");
+    expect(missing.ok ? null : missing.error).toMatchObject({
+      kind: "not-found",
+      key: "MOB/mobile-banking#42",
+    });
+  });
+
+  test("an answer that does not say who signed in is a failure, and nothing is changed", async () => {
+    requests.length = 0;
+    answer = byPath({
+      "/rest/api/1.0/application-properties": () => Response.json({ version: "9.4.0" }),
+    });
+    const unknown = await client().review(REPO, 42, "approved", "4b8e2c9f");
+    expect(unknown.ok ? null : unknown.error.message).toBe(
+      "Bitbucket did not say whose the token is",
+    );
+    expect(requests.map((sent) => sent.method)).toEqual(["GET"]);
   });
 });
 

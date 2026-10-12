@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SecretRefSchema } from "../../application/security/secret-ref";
 import { serviceUrlSchema } from "../../application/security/service-url";
 import { definePlugin } from "../plugin";
+import { type PrChanges, prActions } from "./application/actions";
 import { PR_COMMANDS, prCommands } from "./cli/commands";
 import { bitbucketRest } from "./integrations/bitbucket-rest";
 import { gitCheckout } from "./integrations/git-checkout";
@@ -62,18 +63,22 @@ export const prPlugin = definePlugin({
       url: settings.url,
       token: () => context.secrets.resolve(settings.token),
     });
-    const deps = {
+    const actions = prActions(client);
+    const changes: PrChanges = {
       client,
       checkouts: gitCheckout(context.processes),
       host: new URL(settings.url).hostname,
+      invoke: (command, input, options) => context.bus.invoke(command, input, options),
+      actions,
     };
     return {
-      commands: prCommands(deps, settings.maxResults),
+      commands: prCommands(changes, settings.maxResults),
+      actions: [actions.review],
       view: lazy(async () => {
         const { prView } = await import("./tui/pr-view");
         return {
           default: prView({
-            ...deps,
+            ...changes,
             maxResults: settings.maxResults,
             refreshMs: settings.refreshSeconds * 1000,
           }),

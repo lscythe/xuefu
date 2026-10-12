@@ -21,7 +21,7 @@ import { Shell, type ShellProps } from "../../../src/tui/shell/shell";
 import { activityEntry, fakeActivity } from "../../support/fake-activity";
 import { fakeGit } from "../../support/fake-git";
 import { fakeJira, jiraChangesFor, jiraIssue } from "../../support/fake-jira";
-import { fakeCheckouts, fakePullRequests, pullRequest } from "../../support/fake-pull-requests";
+import { fakePullRequests, prChanges, pullRequest } from "../../support/fake-pull-requests";
 import { fakeTabs } from "../../support/fake-tabs";
 import { fakeTimer } from "../../support/fake-timer";
 import { gitSectionFor } from "../../support/git-section";
@@ -238,12 +238,12 @@ const prSection: Section = {
   label: prPlugin.label,
   icons: prPlugin.icons,
   view: prView({
-    client: fakePullRequests(
-      { yours: YOUR_PULLS, toReview: TO_REVIEW },
-      { successful: 2, failed: 0, inProgress: 1 },
+    ...prChanges(
+      fakePullRequests(
+        { yours: YOUR_PULLS, toReview: TO_REVIEW },
+        { successful: 2, failed: 0, inProgress: 1 },
+      ),
     ),
-    checkouts: fakeCheckouts(),
-    host: "bitbucket.example.com",
     maxResults: 25,
     refreshMs: 60_000,
     timeZone: "UTC",
