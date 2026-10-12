@@ -24,6 +24,7 @@ const LAUNCH: AgentLaunch = {
   mcp: { url: "http://127.0.0.1:4321/mcp", token: "t0ken" },
   readTools: ["pr_diff", "pr_comments"],
   approvalTool: "approval",
+  servers: [],
 };
 
 const line = (message: object) => JSON.stringify(message);
@@ -60,6 +61,23 @@ describe("claudeArgs", () => {
     expect(args).not.toContain("--model");
     expect(claudeArgs(LAUNCH, "opus").slice(-2)).toEqual(["--model", "opus"]);
   });
+
+  test("the read-only servers it is given run over stdio, every tool of theirs free", () => {
+    const args = claudeArgs(
+      {
+        ...LAUNCH,
+        servers: [{ name: "graf", command: "/bin/graf", args: ["serve", "--db", "/g"] }],
+      },
+      null,
+    );
+    const after = (flag: string) => args[args.indexOf(flag) + 1];
+    expect(JSON.parse(after("--mcp-config") ?? "").mcpServers.graf).toEqual({
+      type: "stdio",
+      command: "/bin/graf",
+      args: ["serve", "--db", "/g"],
+    });
+    expect(after("--allowedTools")).toBe("mcp__xuefu__pr_diff,mcp__xuefu__pr_comments,mcp__graf");
+  });
 });
 
 describe("claudeEvents", () => {
@@ -81,6 +99,7 @@ describe("claudeEvents", () => {
               { type: "text", text: "  " },
               { type: "tool_use", id: "t1", name: "mcp__xuefu__pr_diff", input: { stat: true } },
               { type: "tool_use", id: "t2", name: "Read", input: "not an object" },
+              { type: "tool_use", id: "t3", name: "mcp__graf__get_node", input: { id: "x" } },
               null,
             ],
           },
@@ -90,6 +109,7 @@ describe("claudeEvents", () => {
       { kind: "text", text: "Reading the diff." },
       { kind: "tool", name: "pr_diff", input: { stat: true } },
       { kind: "tool", name: "Read", input: {} },
+      { kind: "tool", name: "graf_get_node", input: { id: "x" } },
     ]);
     expect(
       claudeEvents(line({ type: "result", is_error: false, result: "ok", total_cost_usd: 0.04 })),

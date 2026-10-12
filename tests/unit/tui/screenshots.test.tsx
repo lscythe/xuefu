@@ -837,6 +837,16 @@ describe("screenshots", () => {
     name: "Claude",
     ask: (_question, { onEvent, approve }) => {
       queueMicrotask(() => {
+        onEvent({
+          kind: "step",
+          text: "The code graph of Mobile Banking is up to date (412 files).",
+          failed: false,
+        });
+        onEvent({
+          kind: "step",
+          text: "Using what Claude learned of Mobile Banking 2 days ago.",
+          failed: false,
+        });
         onEvent({ kind: "ready", model: "claude-opus-5-5" });
         onEvent({
           kind: "tool",
@@ -847,6 +857,11 @@ describe("screenshots", () => {
           kind: "tool",
           name: "pr_comments",
           input: { pullRequest: "MOB/mobile-banking#42" },
+        });
+        onEvent({
+          kind: "tool",
+          name: "graf_impact",
+          input: { target: "/work/mobile-banking/app/src/Login.kt" },
         });
         onEvent({
           kind: "tool",
@@ -879,7 +894,7 @@ describe("screenshots", () => {
           );
         }
       });
-      return ok({ send: () => undefined, stop: () => undefined });
+      return { send: () => undefined, stop: () => undefined };
     },
   });
 

@@ -621,7 +621,10 @@ export function Shell(props: ShellProps) {
                         name: props.agent?.name ?? "",
                         ask: (question) => {
                           setPaletteOpen(false);
-                          askAgent()?.({ title: "Question", prompt: question });
+                          askAgent()?.({
+                            title: question === null ? "Study" : "Question",
+                            prompt: question,
+                          });
                         },
                       },
                 quit: props.onQuit,
@@ -647,7 +650,7 @@ export function Shell(props: ShellProps) {
             <AgentDialog
               agent={question.agent}
               title={question.title}
-              cwd={question.workspace.path}
+              workspace={question.workspace}
               prompt={question.prompt}
               icons={props.icons}
               onClose={() => setAsking(null)}

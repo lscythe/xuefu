@@ -24,8 +24,14 @@ export interface CockpitActions {
   /** Opens the editor on the workspace's own note, or on the note on its work in progress. */
   readonly editNote: (on: "workspace" | "issue") => void;
   readonly closeTab: () => Promise<Result<unknown, AppError>>;
-  /** Asks the coding agent a question about the workspace; null when there is none to ask. */
-  readonly askAgent: { readonly name: string; readonly ask: (question: string) => void } | null;
+  /**
+   * Asks the coding agent a question about the workspace, or with null has it study the workspace
+   * again; null when there is no agent to ask.
+   */
+  readonly askAgent: {
+    readonly name: string;
+    readonly ask: (question: string | null) => void;
+  } | null;
   readonly quit: () => void;
 }
 
@@ -91,6 +97,12 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
         agent.ask(question ?? "");
         return Promise.resolve(ok(undefined));
       },
+    });
+    entries.push({
+      title: `Have ${agent.name} study ${state.workspace.name} again`,
+      keys: null,
+      fields: [],
+      run: done(() => agent.ask(null)),
     });
   }
   const toggle = timerToggle(state.timer?.timer ?? null, state.workspace?.id ?? null);

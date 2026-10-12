@@ -47,8 +47,9 @@ const mcpName = (tool: string) => `mcp__${SERVER}__${tool}`;
 
 /**
  * Claude Code's arguments: headless, reading and writing JSON a line at a time, with XueFu's tools
- * and no others. Its reads run freely; anything else is asked of XueFu's approval tool, which
- * asks the user. The session is not saved, so it stays out of Claude Code's own history.
+ * and the read-only servers it is given, and no others. Its reads run freely; anything else is
+ * asked of XueFu's approval tool, which asks the user. The session is not saved, so it stays out
+ * of Claude Code's own history.
  */
 export function claudeArgs(launch: AgentLaunch, model: string | null): string[] {
   const config = {
@@ -58,6 +59,12 @@ export function claudeArgs(launch: AgentLaunch, model: string | null): string[] 
         url: launch.mcp.url,
         headers: { Authorization: `Bearer ${launch.mcp.token}` },
       },
+      ...Object.fromEntries(
+        launch.servers.map((server) => [
+          server.name,
+          { type: "stdio", command: server.command, args: server.args },
+        ]),
+      ),
     },
   };
   return [
@@ -73,7 +80,11 @@ export function claudeArgs(launch: AgentLaunch, model: string | null): string[] 
     "--tools",
     BUILT_IN.join(","),
     "--allowedTools",
-    launch.readTools.map(mcpName).join(","),
+    // A server's name alone allows every tool it has.
+    [
+      ...launch.readTools.map(mcpName),
+      ...launch.servers.map((server) => `mcp__${server.name}`),
+    ].join(","),
     "--permission-prompt-tool",
     mcpName(launch.approvalTool),
     "--no-session-persistence",
@@ -116,7 +127,10 @@ export function claudeEvents(line: string): AgentEvent[] {
           return block["text"].trim() === "" ? [] : [{ kind: "text", text: block["text"] }];
         }
         if (block?.["type"] === "tool_use" && typeof block["name"] === "string") {
-          const name = block["name"].replace(`mcp__${SERVER}__`, "");
+          // XueFu's tools by their own names; another server's after its name, as graf_impact.
+          const name = block["name"]
+            .replace(`mcp__${SERVER}__`, "")
+            .replace(/^mcp__(.+?)__/u, "$1_");
           return [{ kind: "tool", name, input: record(block["input"]) ?? {} }];
         }
         return [];
