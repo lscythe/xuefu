@@ -132,6 +132,21 @@ export function assignGroup(
   });
 }
 
+/** Gives the workspace a new display name; its id, and so everything recorded in it, stays. */
+export function renameWorkspace(
+  registry: WorkspaceRegistry,
+  id: WorkspaceId,
+  name: WorkspaceName,
+): Result<RegistryChange, NotFoundError> {
+  const found = findWorkspace(registry, id);
+  if (!found.ok) return found;
+  const workspace: Workspace = Object.freeze({ ...found.value, name });
+  return ok({
+    registry: freeze(registry.workspaces.map((w) => (w.id === id ? workspace : w))),
+    workspace,
+  });
+}
+
 /** Records that the workspace was opened at `at`; order is unchanged. */
 export function activateWorkspace(
   registry: WorkspaceRegistry,

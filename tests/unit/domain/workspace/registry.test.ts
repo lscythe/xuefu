@@ -13,6 +13,7 @@ import {
   lastActiveWorkspace,
   type NewWorkspace,
   removeWorkspace,
+  renameWorkspace,
   type WorkspaceRegistry,
   workspaceAt,
 } from "../../../../src/domain/workspace/registry";
@@ -161,6 +162,22 @@ describe("assignGroup", () => {
 
   test("an unknown id is not found", () => {
     expect(assignGroup(EMPTY_REGISTRY, "ghost" as WorkspaceId, null).ok).toBe(false);
+  });
+});
+
+describe("renameWorkspace", () => {
+  test("changes the name only, keeping the id, folder and order", () => {
+    let registry = add(EMPTY_REGISTRY, candidate("/a", "A"));
+    registry = add(registry, candidate("/b", "B"));
+    const renamed = renameWorkspace(registry, "a" as WorkspaceId, "Alpha" as WorkspaceName);
+    if (!renamed.ok) throw new Error(renamed.error.message);
+    expect(renamed.value.workspace).toMatchObject({ id: "a", name: "Alpha", path: "/a" });
+    expect(ids(renamed.value.registry)).toEqual(["a", "b"]);
+  });
+
+  test("an unknown id is not found", () => {
+    const result = renameWorkspace(EMPTY_REGISTRY, "ghost" as WorkspaceId, "X" as WorkspaceName);
+    expect(result.ok).toBe(false);
   });
 });
 

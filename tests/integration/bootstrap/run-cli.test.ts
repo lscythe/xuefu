@@ -420,6 +420,15 @@ describe("runCli: workspaces", () => {
     );
   });
 
+  test("rename keeps the id", async () => {
+    await run(["workspace", "add", mobile]);
+    expect((await run(["workspace", "rename", "mobile", "Mobile Banking"])).stdout).toBe(
+      "✓ mobile is now named Mobile Banking\n",
+    );
+    const missing = await run(["workspace", "rename", "ghost", "x"]);
+    expect(missing.code).toBe(EXIT.noInput);
+  });
+
   test("which prints the workspace containing the folder, or exits 1", async () => {
     await run(["workspace", "add", mobile]);
     const nested = join(mobile, "app", "src");

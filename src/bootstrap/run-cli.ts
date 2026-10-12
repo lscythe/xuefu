@@ -301,6 +301,19 @@ async function groupWorkspace(
   );
 }
 
+async function renameWorkspace(
+  app: App,
+  out: Output,
+  command: Extract<CliCommand, { kind: "workspace.rename" }>,
+): Promise<number> {
+  const renamed = await app.commandBus.invoke(app.workspaceCommands.rename, {
+    id: command.id,
+    name: command.name,
+  });
+  if (!renamed.ok) return fail(out, renamed.error);
+  return print(out, `✓ ${renamed.value.id} is now named ${renamed.value.name}\n`);
+}
+
 async function whichWorkspace(
   app: App,
   out: Output,
@@ -791,6 +804,8 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return removeWorkspace(app, out, command);
     case "workspace.group":
       return groupWorkspace(app, out, command);
+    case "workspace.rename":
+      return renameWorkspace(app, out, command);
     case "workspace.which":
       return whichWorkspace(app, out, command);
     case "timer.status":

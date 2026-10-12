@@ -19,6 +19,7 @@ export type CliCommand =
     }
   | { readonly kind: "workspace.remove"; readonly id: string; readonly yes: boolean }
   | { readonly kind: "workspace.group"; readonly id: string; readonly group: string | null }
+  | { readonly kind: "workspace.rename"; readonly id: string; readonly name: string }
   | { readonly kind: "workspace.which"; readonly path: string | null; readonly json: boolean }
   | { readonly kind: "timer.status"; readonly json: boolean }
   | {
@@ -171,6 +172,13 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     maxArgs: 1,
     flags: [],
     build: (args) => ({ kind: "workspace.group", id: arg(args, 0), group: null }),
+  },
+  "workspace rename": {
+    usage: "<id> <name>",
+    minArgs: 2,
+    maxArgs: 2,
+    flags: [],
+    build: (args) => ({ kind: "workspace.rename", id: arg(args, 0), name: arg(args, 1) }),
   },
   "workspace which": {
     usage: "[path]",

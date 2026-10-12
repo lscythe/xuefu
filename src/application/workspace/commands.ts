@@ -16,6 +16,7 @@ import {
   assignGroup,
   findWorkspace,
   removeWorkspace,
+  renameWorkspace,
   type WorkspaceRegistry,
 } from "../../domain/workspace/registry";
 import { navigationKey } from "../../domain/workspace/session";
@@ -35,6 +36,7 @@ import type {
   WorkspaceAddedPayload,
   WorkspaceGroupAssignedPayload,
   WorkspaceRemovedPayload,
+  WorkspaceRenamedPayload,
   WorkspaceTabClosedPayload,
 } from "./events";
 import { type OpenTabs, viewTabs } from "./queries";
@@ -242,6 +244,40 @@ export function workspaceCommands(deps: WorkspaceCommandDependencies) {
       }),
   });
 
+  const rename = defineCommand({
+    name: "workspace.rename",
+    title: "Rename workspace",
+    category: CATEGORY,
+    safety: "safe",
+    input: z.strictObject({
+      id: domainString(workspaceId),
+      name: domainString(workspaceName),
+    }),
+    handler: (input, context) =>
+      unitOfWork.run((tx) => {
+        const loaded = repository.load();
+        if (!loaded.ok) return loaded;
+        const found = findWorkspace(loaded.value, input.id);
+        if (!found.ok) return found;
+        const from = found.value.name;
+        const renamed = changeRegistry(repository, (registry) =>
+          renameWorkspace(registry, input.id, input.name),
+        );
+        if (!renamed.ok) return renamed;
+        const { workspace } = renamed.value;
+        tx.record(
+          workspaceEvent<"WorkspaceRenamed", WorkspaceRenamedPayload>(
+            ids,
+            context,
+            "WorkspaceRenamed",
+            workspace.id,
+            { id: workspace.id, from, name: workspace.name },
+          ),
+        );
+        return ok(workspace);
+      }),
+  });
+
   const activate = defineCommand({
     name: "workspace.activate",
     title: "Switch to workspace",
@@ -316,7 +352,7 @@ export function workspaceCommands(deps: WorkspaceCommandDependencies) {
       }),
   });
 
-  return { add, remove, group, activate, closeTab: closeTabCommand, navigate } as const;
+  return { add, remove, group, rename, activate, closeTab: closeTabCommand, navigate } as const;
 }
 
 export type WorkspaceCommands = ReturnType<typeof workspaceCommands>;
@@ -331,6 +367,8 @@ export function registerWorkspaceCommands(
   if (!remove.ok) return remove;
   const group = bus.register(commands.group);
   if (!group.ok) return group;
+  const rename = bus.register(commands.rename);
+  if (!rename.ok) return rename;
   const activate = bus.register(commands.activate);
   if (!activate.ok) return activate;
   const close = bus.register(commands.closeTab);
