@@ -61,6 +61,8 @@ function scriptedAgent() {
     name: "Claude",
     ask: (question, given) => {
       expect(question.workspace).toBe(MOBILE);
+      // A branch is only checked out when one is given.
+      expect(question.branch).toBeNull();
       sent.push(question.prompt);
       handlers = given;
       return {

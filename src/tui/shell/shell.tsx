@@ -738,8 +738,12 @@ export function Shell(props: ShellProps) {
               title={question.title}
               workspace={question.workspace}
               prompt={question.prompt}
+              branch={question.branch ?? null}
               icons={props.icons}
               onClose={() => setAsking(null)}
+              onPutBack={(done) => {
+                if (!done.ok) setNotice(done.error);
+              }}
             />
           )}
         </Show>

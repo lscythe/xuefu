@@ -6,6 +6,8 @@ import type {
   AgentRunner,
   AgentServer,
   AgentSession,
+  BranchCheckout,
+  PutBack,
 } from "../application/ports/agent";
 import type { Clock } from "../application/ports/clock";
 import type {
@@ -104,6 +106,8 @@ export interface AgentHostOptions {
   readonly briefs: ProjectBriefs;
   /** An empty folder the agent works in when no workspace holds the code it is asked about. */
   readonly elsewhere: AbsolutePath;
+  /** Checks out the branch a question names, such as a pull request's, for the conversation. */
+  readonly checkout: BranchCheckout;
   readonly clock: Clock;
 }
 
@@ -260,11 +264,19 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       const tell = (event: AgentEvent) => {
         if (!ended) handlers.onEvent(event);
       };
+      /** Puts back what the branch checked out for the conversation replaced, once. */
+      let putBack: (() => Promise<PutBack>) | null = null;
+      const restore = () => {
+        const back = putBack;
+        putBack = null;
+        if (back !== null) void back().then(handlers.putBack);
+      };
       const end = (message: string | null) => {
         if (ended) return;
         tell({ kind: "exit", message });
         ended = true;
         endpoint.stop();
+        restore();
       };
       const step = (text: string, failed = false) => tell({ kind: "step", text, failed });
       const launch = (prompt: string, instructions: string, servers: readonly AgentServer[]) => ({
@@ -349,6 +361,20 @@ export function agentHost(options: AgentHostOptions): AgentHost {
           else
             converse(question.prompt, instructionsFor(null, null, false, options.clock.now()), []);
           return;
+        }
+        if (question.branch !== null) {
+          step(`Checking out ${question.branch} in ${workspace.name}…`);
+          putBack = await options.checkout.checkout(
+            workspace.path,
+            question.branch,
+            step,
+            preparing.signal,
+          );
+          if (ended) {
+            // Stopped while it was being checked out: put back at once.
+            restore();
+            return;
+          }
         }
         const servers: AgentServer[] = [];
         const setup = options.setup;

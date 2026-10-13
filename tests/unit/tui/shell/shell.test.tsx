@@ -5,9 +5,13 @@ import { testRender, useKeyboard } from "@opentui/solid";
 import { type Component, createEffect, createSignal, lazy } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
-import type { AgentHost } from "../../../../src/application/ports/agent";
+import type { AgentHandlers, AgentHost } from "../../../../src/application/ports/agent";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
-import { confirmationRequired, storageError } from "../../../../src/domain/shared/errors";
+import {
+  confirmationRequired,
+  processError,
+  storageError,
+} from "../../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
@@ -940,14 +944,22 @@ describe("Shell agent", () => {
   function quietAgent() {
     const asked: string[] = [];
     let stopped = 0;
+    let handlers: AgentHandlers | null = null;
     const agent: AgentHost = {
       name: "Claude",
-      ask: (question) => {
-        asked.push(`${question.prompt} in ${question.workspace?.path ?? "no workspace"}`);
+      ask: (question, given) => {
+        handlers = given;
+        const on = question.branch === null ? "" : ` on ${question.branch}`;
+        asked.push(`${question.prompt} in ${question.workspace?.path ?? "no workspace"}${on}`);
         return { send: () => undefined, stop: () => stopped++ };
       },
     };
-    return { agent, asked, stopped: () => stopped };
+    return {
+      agent,
+      asked,
+      stopped: () => stopped,
+      handlers: () => handlers as AgentHandlers | null,
+    };
   }
 
   /** A view that asks the agent on a, and shows the keys it gets and whether it can ask. */
@@ -961,6 +973,7 @@ describe("Shell agent", () => {
           title: "Review OPS/deployd#7",
           prompt: "Review that",
           repository: { name: "OPS/deployd", holds: (origin) => origin === "deployd-origin" },
+          branch: "feature/OPS-7",
         });
       }
       setPressed((all) => [...all, key.name]);
@@ -995,7 +1008,29 @@ describe("Shell agent", () => {
     await shell.waitForFrame((f) => f.includes(" Claude · Review OPS/deployd#7 "));
     // The one in front is tried first; the code is in deployd.
     expect(tried).toEqual(["mobile-banking"]);
-    expect(asked).toEqual([`Review that in ${DEPLOYD.path}`]);
+    expect(asked).toEqual([`Review that in ${DEPLOYD.path} on feature/OPS-7`]);
+  });
+
+  test("a branch checked out for it that cannot be put back is reported once it closes", async () => {
+    const { agent, handlers } = quietAgent();
+    const shell = await renderShell({
+      sections: cockpitSections([PRS]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent,
+      workspaceWith: (_holds, first) => Promise.resolve(first),
+    });
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey("r");
+    await shell.waitForFrame((f) => f.includes(" Claude · Review OPS/deployd#7 "));
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Claude · Review OPS/deployd#7 "));
+    handlers()?.putBack(ok("Back on main."));
+    await shell.renderOnce();
+    expect(shell.captureCharFrame()).not.toContain("✗");
+    handlers()?.putBack(
+      err(processError("feature/OPS-7 was left checked out, as it has changes", "git", null)),
+    );
+    await shell.waitForFrame((f) => f.includes("✗ feature/OPS-7 was left checked out"));
   });
 
   test("a question about a repository no workspace holds is asked in none", async () => {
@@ -1009,7 +1044,7 @@ describe("Shell agent", () => {
     shell.mockInput.pressTab();
     shell.mockInput.pressKey("r");
     await shell.waitForFrame((f) => f.includes(" Claude · Review OPS/deployd#7 "));
-    expect(asked).toEqual(["Review that in no workspace"]);
+    expect(asked).toEqual(["Review that in no workspace on feature/OPS-7"]);
   });
 
   test("a section asks about the workspace in front; the conversation has the keys", async () => {

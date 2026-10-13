@@ -6,6 +6,7 @@ import type {
   AgentSession,
   DraftComment,
   DraftReview,
+  PutBack,
 } from "../../application/ports/agent";
 import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -26,8 +27,12 @@ export interface AgentDialogProps {
   readonly workspace: Workspace | null;
   /** The first message, sent as the dialog opens; null has it study the workspace again. */
   readonly prompt: string | null;
+  /** A branch to check out in the workspace while the agent works; null leaves it be. */
+  readonly branch?: string | null;
   readonly icons: IconSet;
   readonly onClose: () => void;
+  /** How the workspace was put back once the conversation closed, after a branch was checked out. */
+  readonly onPutBack?: (done: PutBack) => void;
 }
 
 /** What the agent is waiting on the user for: whether it may act, or what of a review to post. */
@@ -126,8 +131,8 @@ export function AgentDialog(props: AgentDialogProps) {
     });
 
   const session: AgentSession = props.agent.ask(
-    { workspace: props.workspace, prompt: props.prompt },
-    { onEvent, approve, review },
+    { workspace: props.workspace, prompt: props.prompt, branch: props.branch ?? null },
+    { onEvent, approve, review, putBack: (done) => props.onPutBack?.(done) },
   );
   onCleanup(() => {
     // Whatever it still waits on is declined, so it never acts after the dialog is gone.

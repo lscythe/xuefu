@@ -23,12 +23,14 @@ export function reviewQuestion(pull: PullRequest, host: string): AgentQuestionAb
         );
       },
     },
+    branch: pull.from,
     prompt: [
       `Review the pull request ${ref}, "${pull.title}", from ${pull.from} into ${pull.to}.`,
       `Read its diff and comment threads with XueFu's pr_diff and pr_comments tools, passing ` +
-        `pullRequest "${ref}". When this folder is a clone of the repository, read the code ` +
-        "around the changes here; it may have another branch checked out, so what changes is " +
-        "what the diff says.",
+        `pullRequest "${ref}". When this folder is a clone of the repository, XueFu checks out ` +
+        `${pull.from} here as it is on origin before you start, so read the code around the ` +
+        "changes here. Should that have failed, another branch is checked out, so what changes " +
+        "is always what the diff says.",
       "Then review it with me. Number your findings, bugs and risks first, then questions for " +
         "the author, then smaller points; give each the file and the line of the diff it is " +
         "on, and the code you would suggest when you have a fix. Say so if it looks good.",

@@ -40,6 +40,7 @@ import { clockDuration } from "../domain/shared/time";
 import { elapsed } from "../domain/timesheet/timer";
 import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
+import { gitCheckout } from "../infrastructure/agent/branch-checkout";
 import { briefFiles } from "../infrastructure/agent/brief-files";
 import { claudeCode } from "../infrastructure/agent/claude-code";
 import { findGraf, grafGraph, grafSetup } from "../infrastructure/agent/graf";
@@ -706,6 +707,7 @@ function cockpitAgent(app: App, out: Output): AgentHost | null {
         : null,
     briefs: briefFiles(join(app.paths.dataDir, "briefs")),
     elsewhere: emptyFolder(join(app.paths.dataDir, "agent")),
+    checkout: gitCheckout(app.processes),
     clock: systemClock,
   });
 }

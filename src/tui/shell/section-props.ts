@@ -53,4 +53,9 @@ export interface AgentQuestionAbout {
    * holds a clone of it, whichever is in front, or in none when no workspace does.
    */
   readonly repository?: AgentRepository;
+  /**
+   * A branch of that repository to check out while the agent works, such as a pull request's;
+   * the workspace is put back as it was when the conversation is closed.
+   */
+  readonly branch?: string;
 }

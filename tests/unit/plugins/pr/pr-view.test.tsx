@@ -328,6 +328,9 @@ describe("prView", () => {
     expect(view.asked[0]?.prompt).toContain('pullRequest "MOB/mobile-banking#40"');
     expect(view.asked[0]?.prompt).toContain("call post_comments once with the comments we settled");
     expect(view.asked[0]?.prompt).toContain("Do not post, approve or merge anything before I say");
+    // Its branch is checked out while it is reviewed, and Claude is told so.
+    expect(view.asked[0]?.branch).toBe("feature/change-40");
+    expect(view.asked[0]?.prompt).toContain("XueFu checks out feature/change-40 here");
     // Asked in the workspace holding a clone of its repository, over SSH or HTTPS.
     const repository = view.asked[0]?.repository;
     expect(repository?.name).toBe("MOB/mobile-banking");
