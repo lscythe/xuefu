@@ -25,7 +25,7 @@ import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import type { AbsolutePath } from "../domain/shared/path";
 import { ok } from "../domain/shared/result";
 import { briefAge, freshBrief, INSTRUCTIONS, instructionsFor, studyPrompt } from "./agent-context";
-import { canPost, draftReview, POST, POST_TOOL, postReview } from "./review-post";
+import { canPost, draftReview, POST, POST_TOOL, placeReview, postReview } from "./review-post";
 
 /** The tool Claude Code asks before using any other, as `--permission-prompt-tool`. */
 const APPROVAL = "approval";
@@ -200,7 +200,9 @@ export function agentHost(options: AgentHostOptions): AgentHost {
     }
     if (message?.["method"] === "tools/call" && params?.["name"] === POST && canPost(tools)) {
       // The user chooses what is posted in XueFu's own dialog, which is their approval of it.
-      const draft = draftReview(params["arguments"]);
+      // Each comment is placed on the diff first, so the user is shown only what can be posted.
+      const drafted = draftReview(params["arguments"]);
+      const draft = typeof drafted === "string" ? drafted : await placeReview(tools, drafted);
       const said =
         typeof draft === "string"
           ? draft

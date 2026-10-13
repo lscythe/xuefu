@@ -196,10 +196,43 @@ const FRESH: ProjectBrief = {
 /** XueFu's own `pr comment`, as agents get it. */
 const COMMENT = mcpTools(PLUGIN_COMMANDS).find((tool) => tool.name === "pr_comment") as McpTool;
 
-/** XueFu's tools, `pr comment` among them if `commenting`; a run fails when `fails` says. */
+/** The pull request's diff, as `pr diff` prints it: what the reviews below comment on. */
+const PULL_DIFF = [
+  "diff --git a/app/src/main/java/Login.kt b/app/src/main/java/Login.kt",
+  "--- a/app/src/main/java/Login.kt",
+  "+++ b/app/src/main/java/Login.kt",
+  "@@ -10,2 +10,3 @@",
+  " fun login() {",
+  "+    authenticate()",
+  "     prompt()",
+  "diff --git a/app/src/Pin.kt b/app/src/Pin.kt",
+  "--- a/app/src/Pin.kt",
+  "+++ b/app/src/Pin.kt",
+  "@@ -4,1 +3,0 @@",
+  "-    limit(3)",
+  "diff --git a/README.md b/README.md",
+  "--- a/README.md",
+  "+++ b/README.md",
+  "@@ -1,1 +1,2 @@",
+  " # App",
+  "+Link docs.",
+  "diff --git a/a.kt b/a.kt",
+  "--- a/a.kt",
+  "+++ b/a.kt",
+  "@@ -98,1 +98,2 @@",
+  " x",
+  "+y",
+  "",
+].join("\n");
+
+/**
+ * XueFu's tools, `pr comment` among them if `commenting`; a run fails when `fails` says, and
+ * `pr diff` prints `diff`.
+ */
 function tools(
   commenting = false,
   fails: (argv: readonly string[]) => boolean = () => false,
+  diff: string | null = PULL_DIFF,
 ): McpTools & { ran: (readonly string[])[] } {
   const ran: (readonly string[])[] = [];
   return {
@@ -208,6 +241,13 @@ function tools(
     ran,
     run: (argv) => {
       ran.push(argv);
+      if (argv[1] === "diff") {
+        return Promise.resolve(
+          diff === null
+            ? { code: 69, stdout: "", stderr: "Bitbucket answered 406\n" }
+            : { code: 0, stdout: diff, stderr: "" },
+        );
+      }
       return Promise.resolve(
         fails(argv)
           ? {
@@ -232,6 +272,8 @@ interface Setup {
   /** XueFu's PR commands are on, so reviews can be posted. */
   readonly commenting?: boolean;
   readonly runFails?: (argv: readonly string[]) => boolean;
+  /** What `pr diff` prints; null when it cannot be read. */
+  readonly diff?: string | null;
   /** What the user posts of a drafted review; all of it by default. */
   readonly pick?: (draft: DraftReview) => readonly DraftComment[];
   /** Where the question is asked; Mobile by default, null for no workspace. */
@@ -295,7 +337,7 @@ function fakeSetup(options: { declined?: boolean; installs?: boolean; remembers?
 function asking(setup: Setup = {}) {
   const answers = setup.answers ?? [];
   const fake = fakeRunner(setup.fails);
-  const served = tools(setup.commenting, setup.runFails);
+  const served = tools(setup.commenting, setup.runFails, setup.diff);
   const memory = memoryBriefs(setup.kept === undefined ? FRESH : setup.kept, setup.broken);
   const clock = new ManualClock();
   const asked: ConfirmationPrompt[] = [];
@@ -406,6 +448,7 @@ describe("agentHost", () => {
 
   test("a settled review is shown to the user, and what they choose is posted on its lines", async () => {
     const LOGIN = {
+      // Cut short, as agents write paths: the diff has it under app/src/main/java.
       file: "app/src/Login.kt",
       line: 11,
       text: "Await authenticate() before prompt().",
@@ -432,7 +475,7 @@ describe("agentHost", () => {
       {
         pullRequest: "MOB/app#42",
         comments: [
-          { ...LOGIN, old: false },
+          { ...LOGIN, file: "app/src/main/java/Login.kt", old: false },
           {
             file: "app/src/Pin.kt",
             line: 4,
@@ -445,11 +488,13 @@ describe("agentHost", () => {
       },
     ]);
     expect(served.ran).toEqual([
+      // Each comment is placed on the diff before the user is shown them.
+      ["pr", "diff", "--", "MOB/app#42"],
       [
         "pr",
         "comment",
         "--message=Await authenticate() before prompt().\n\n```suggestion\n    authenticate().await()\n```",
-        "--file=app/src/Login.kt",
+        "--file=app/src/main/java/Login.kt",
         "--line=11",
         "--yes",
         "--",
@@ -472,7 +517,7 @@ describe("agentHost", () => {
         {
           type: "text",
           text:
-            "Posted on app/src/Login.kt:11.\nPosted on app/src/Pin.kt:4.\n" +
+            "Posted on app/src/main/java/Login.kt:11.\nPosted on app/src/Pin.kt:4.\n" +
             "The user left out 1 of them.",
         },
       ],
@@ -490,7 +535,7 @@ describe("agentHost", () => {
         { type: "text", text: "The user posted none of them. Ask what they would change." },
       ],
     });
-    expect(none.served.ran).toEqual([]);
+    expect(none.served.ran).toEqual([["pr", "diff", "--", "MOB/app#42"]]);
     none.fake.emit({ kind: "exit", message: null });
 
     const failing = await session([], { commenting: true, runFails: () => true });
@@ -502,6 +547,43 @@ describe("agentHost", () => {
       "Could not post on a.kt:99: line: line 99 is not in the diff",
     );
     failing.fake.emit({ kind: "exit", message: null });
+  });
+
+  test("comments off the diff go back to the agent, saying what would place them", async () => {
+    const { call, reviewed, served, fake } = await session([], { commenting: true });
+    const said = await call("post_comments", {
+      pullRequest: "MOB/app#42",
+      comments: [
+        { file: "README.md", line: 2, text: "Fine." },
+        { file: "feature/…/Login.kt", line: 40, text: "Off the diff." },
+        { file: "app/src/Pin.kt", line: 9, old: true, text: "Not removed." },
+        { file: "Settings.kt", line: 1, text: "Not changed." },
+      ],
+    });
+    expect(said["isError"]).toBe(true);
+    expect((said["content"] as { text: string }[])[0]?.text).toBe(
+      [
+        "Nothing was shown to the user yet. Put each of these on a line the diff shows, with its",
+        "whole path, then call post_comments again with all the comments:",
+        "comment 2: feature/…/Login.kt is not in the diff; did you mean app/src/main/java/Login.kt?",
+        "comment 3: line 9 of app/src/Pin.kt as it was is not removed in the diff, which removes lines 4",
+        "comment 4: Settings.kt is not in the diff",
+      ].join("\n"),
+    );
+    // The user is asked nothing, and nothing is posted.
+    expect(reviewed).toEqual([]);
+    expect(served.ran).toEqual([["pr", "diff", "--", "MOB/app#42"]]);
+    fake.emit({ kind: "exit", message: null });
+  });
+
+  test("without the diff, the review is shown as drafted, and posting says what fails", async () => {
+    const { call, reviewed, fake } = await session([], { commenting: true, diff: null });
+    await call("post_comments", {
+      pullRequest: "MOB/app#42",
+      comments: [{ file: "app/src/Login.kt", line: 11, text: "Hm." }],
+    });
+    expect(reviewed[0]?.comments[0]?.file).toBe("app/src/Login.kt");
+    fake.emit({ kind: "exit", message: null });
   });
 
   test("a review drafted wrong is sent back, saying what is wrong", async () => {

@@ -35,9 +35,9 @@ export function reviewQuestion(pull: PullRequest, host: string): AgentQuestionAb
         "the author, then smaller points; give each the file and the line of the diff it is " +
         "on, and the code you would suggest when you have a fix. Say so if it looks good.",
       "We will go through them together. When I say to post, call post_comments once with " +
-        "the comments we settled on, each on its line, written for the author, with your " +
-        "suggestion as the code that line should become. Do not post, approve or merge " +
-        "anything before I say so.",
+        "the comments we settled on, each on a line the diff shows, with the file's whole path " +
+        "as the diff names it, written for the author, with your suggestion as the code that " +
+        "line should become. Do not post, approve or merge anything before I say so.",
     ].join("\n\n"),
   };
 }
