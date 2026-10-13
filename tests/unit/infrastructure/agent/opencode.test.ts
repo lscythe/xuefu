@@ -147,6 +147,7 @@ const log = (entry) => appendFileSync(process.env.OPENCODE_FAKE_LOG, JSON.string
 const send = (message) => console.log(JSON.stringify({ jsonrpc: "2.0", ...message }));
 const update = (change) => send({ method: "session/update", params: { sessionId: "s1", update: change } });
 const say = (text) => update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
+const think = (text) => update({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text } });
 log({ leaked: process.env.BITBUCKET_TOKEN !== undefined, config: process.env.OPENCODE_CONFIG_CONTENT, cwd: process.cwd() });
 const SESSION = {
   sessionId: "s1",
@@ -194,6 +195,9 @@ const answer = (message) => {
         send({ id, result: { stopReason: "max_tokens" } });
         return;
       }
+      think("Read ");
+      think("the diff.");
+      update({ sessionUpdate: "agent_thought_chunk", content: { type: "image", data: "" } });
       say("you said ");
       say(text + " in " + params.prompt.length + " blocks");
       update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "xuefu_pr_diff", rawInput: {} });
@@ -203,6 +207,7 @@ const answer = (message) => {
       update({ sessionUpdate: "tool_call_update", toolCallId: "t2", status: "completed" });
       update({ sessionUpdate: "usage_update", used: 10, size: 100, cost: { amount: 0.02, currency: "USD" } });
       update({ sessionUpdate: "plan", entries: [] });
+      think("Nothing more to say.");
       send({ id, result: { stopReason: "end_turn" } });
       return;
     }
@@ -322,14 +327,19 @@ describe("openCode", () => {
     const events = await exited;
     expect(events).toEqual([
       { kind: "ready", model: "anthropic/claude-sonnet" },
+      // What it thought, whole, before what it then says.
+      { kind: "thinking", text: "Read the diff." },
       // The instructions come first, in a block of their own.
       { kind: "text", text: "you said hello in 2 blocks" },
       { kind: "tool", name: "pr_diff", input: { pullRequest: "MOB/app#42" } },
       { kind: "tool", name: "read", input: {} },
+      { kind: "thinking", text: "Nothing more to say." },
       { kind: "turn", costUsd: 0.02, failed: null },
+      { kind: "thinking", text: "Read the diff." },
       { kind: "text", text: "you said again in 1 blocks" },
       { kind: "tool", name: "pr_diff", input: { pullRequest: "MOB/app#42" } },
       { kind: "tool", name: "read", input: {} },
+      { kind: "thinking", text: "Nothing more to say." },
       { kind: "turn", costUsd: 0.02, failed: null },
       { kind: "exit", message: null },
     ]);
