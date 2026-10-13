@@ -329,7 +329,11 @@ describe("bitbucket REST 1.0: the diff", () => {
   test("streams it raw, with three lines of context as git shows", async () => {
     requests.length = 0;
     const raw = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n";
-    answer = () => new Response(raw, { headers: { "Content-Type": "text/plain" } });
+    // As Bitbucket does: the raw diff is text only, and a request for anything else is refused.
+    answer = (request) =>
+      request.headers.get("accept") === "text/plain"
+        ? new Response(raw, { headers: { "Content-Type": "text/plain" } })
+        : new Response(null, { status: 406 });
     expect(await client().diff(REPO, 42)).toEqual(ok(raw));
     const sent = new URL(requests[0]?.url ?? "");
     expect(sent.pathname).toBe(
