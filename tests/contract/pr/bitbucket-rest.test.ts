@@ -80,7 +80,7 @@ describe("bitbucket REST 1.0: your pull requests", () => {
       to: "main",
       commit: "9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d",
       author: "Fox Mulder",
-      reviewers: [{ name: "Dana Scully", status: "needs-work" }],
+      reviewers: [{ name: "Dana Scully", status: "needs-work", lastReviewedCommit: "e3f1a2b" }],
       created: 1759650000000,
       updated: 1759700000000,
       comments: 5,
@@ -98,6 +98,15 @@ describe("bitbucket REST 1.0: your pull requests", () => {
 });
 
 describe("bitbucket REST 1.0: one pull request", () => {
+  test("preserves last-reviewed commits without inventing missing history", async () => {
+    const raw = await fixture("pull-request").json();
+    raw.reviewers[0].lastReviewedCommit = "older-commit";
+    raw.reviewers[1].lastReviewedCommit = null;
+    answer = status(200, raw);
+    const found = await client().pullRequest(REPO, 42);
+    expect(found.ok && found.value.reviewers[0]?.lastReviewedCommit).toBe("older-commit");
+    expect(found.ok && found.value.reviewers[1]?.lastReviewedCommit).toBeNull();
+  });
   test("reads it with its reviews, to-dos and merge outcome", async () => {
     requests.length = 0;
     answer = () => new Response(fixture("pull-request"));

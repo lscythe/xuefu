@@ -1,5 +1,5 @@
 import type { PaletteToken } from "../../../tui/theme/palette";
-import { type PullRequest, reviewSummary } from "../domain/pull-request";
+import { type PullRequest, reviewFreshness, reviewSummary } from "../domain/pull-request";
 
 /** One row of the section: a heading, a line of text, or a pull request to pick. */
 export type PrRow =
@@ -27,6 +27,9 @@ export function reviewBadge(pull: PullRequest): {
 } {
   const { approved, reviewers, needsWork } = reviewSummary(pull);
   if (needsWork > 0) return { text: "needs work", tone: "warning" };
+  if (pull.reviewers.some((reviewer) => reviewFreshness(reviewer, pull.commit) === "outdated")) {
+    return { text: "outdated review", tone: "warning" };
+  }
   if (reviewers === 0) return { text: "no reviewers", tone: "textMuted" };
   return {
     text: `${approved}/${reviewers} approved`,

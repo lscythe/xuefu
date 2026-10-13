@@ -290,6 +290,15 @@ conversation is not saved to Claude Code's history.
 
 ## Development
 
+In the PR list, `/` searches loaded PRs by title, author, repository, or number. Enter
+applies the query; Esc cancels editing. `f` cycles All, To review, Needs work, and Outdated
+reviews. Search and filters combine; Esc outside the search clears both. Filtering does
+not fetch additional pages beyond the configured PR limit.
+
+An outdated-review warning compares Bitbucket's `lastReviewedCommit` with the PR's current
+source commit. Details identify the affected reviewer. Missing commit history is unknown,
+not evidence of an outdated review; review status and freshness are separate.
+
 Configure each workspace's review voice in its root `PERSONA.md`: language, tone, and
 examples of the comments you want. XueFu reads that file and the workspace's root
 `AGENTS.md` fresh for each conversation, and includes them in the instructions for both

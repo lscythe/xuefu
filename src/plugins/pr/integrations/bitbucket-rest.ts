@@ -28,6 +28,7 @@ const RefSchema = z.object({
 const ParticipantSchema = z.object({
   user: z.object({ displayName: z.string() }),
   status: z.string().optional(),
+  lastReviewedCommit: z.string().nullish(),
 });
 
 /** A pull request as REST 1.0 sends it; only what XueFu shows is read, the rest is ignored. */
@@ -206,6 +207,9 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       reviewers: raw.reviewers.map((reviewer) => ({
         name: reviewer.user.displayName,
         status: REVIEWS[reviewer.status ?? ""] ?? "unapproved",
+        ...(reviewer.lastReviewedCommit === undefined
+          ? {}
+          : { lastReviewedCommit: reviewer.lastReviewedCommit }),
       })),
       created: raw.createdDate,
       updated: raw.updatedDate,

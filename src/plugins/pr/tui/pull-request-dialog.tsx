@@ -10,7 +10,12 @@ import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE, type PaletteToken } from "../../../tui/theme/palette";
 import type { IconSet } from "../../../tui/theme/status";
 import { wrapText } from "../../../tui/wrap";
-import { type BuildSummary, type PullRequest, pullRequestRef } from "../domain/pull-request";
+import {
+  type BuildSummary,
+  type PullRequest,
+  pullRequestRef,
+  reviewFreshness,
+} from "../domain/pull-request";
 import { reviewBadge } from "./pr-rows";
 
 export interface PullRequestDialogProps {
@@ -92,12 +97,14 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
       ["Reviews", review.text, review.tone],
       ...pull.reviewers.map((reviewer): [string, string, PaletteToken] => [
         "",
-        `${reviewer.name}${reviewer.status === "unapproved" ? "" : `, ${reviewer.status.replace("-", " ")}`}`,
-        reviewer.status === "approved"
-          ? "success"
-          : reviewer.status === "needs-work"
-            ? "warning"
-            : "textMuted",
+        `${reviewer.name}${reviewer.status === "unapproved" ? "" : `, ${reviewer.status.replace("-", " ")}`}${reviewFreshness(reviewer, pull.commit) === "outdated" ? ", outdated review" : ""}`,
+        reviewFreshness(reviewer, pull.commit) === "outdated"
+          ? "warning"
+          : reviewer.status === "approved"
+            ? "success"
+            : reviewer.status === "needs-work"
+              ? "warning"
+              : "textMuted",
       ]),
       ["Builds", built.text, built.tone],
       [
