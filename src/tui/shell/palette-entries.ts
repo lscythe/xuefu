@@ -45,20 +45,26 @@ const done = (act: () => void) => (): Promise<Result<unknown, AppError>> => {
 
 const TOGGLE_TITLES = { start: "Start timer", pause: "Pause timer", resume: "Resume timer" };
 
+/** Starting work on an issue in the workspace in front, which finishes any work in progress. */
+export function startWorkEntry(
+  work: WorkContext | null,
+  startWork: CockpitActions["startWork"],
+): PaletteEntry {
+  return {
+    title: work === null ? "Start work" : "Start other work",
+    keys: "s",
+    fields: [
+      { label: "Issue key", example: "MOB-2841", optional: false, check: issueKey },
+      { label: "Title", example: "Add biometric login", optional: true, check: issueTitle },
+    ],
+    run: ([issue, title]) => startWork(issue ?? "", title ?? null),
+  };
+}
+
 /** The palette's entries for the cockpit as it is, most specific to the workspace first. */
 export function paletteEntries(state: CockpitState, actions: CockpitActions): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
-  if (state.workspace !== null) {
-    entries.push({
-      title: state.work === null ? "Start work" : "Start other work",
-      keys: null,
-      fields: [
-        { label: "Issue key", example: "MOB-2841", optional: false, check: issueKey },
-        { label: "Title", example: "Add biometric login", optional: true, check: issueTitle },
-      ],
-      run: ([issue, title]) => actions.startWork(issue ?? "", title ?? null),
-    });
-  }
+  if (state.workspace !== null) entries.push(startWorkEntry(state.work, actions.startWork));
   if (state.work !== null) {
     entries.push({
       title: `Finish work on ${state.work.issueKey}`,

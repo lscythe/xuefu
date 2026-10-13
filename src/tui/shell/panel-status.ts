@@ -5,7 +5,7 @@ import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 
 /** What the timer key does, set into the Work panel's frame. */
-export function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | null {
+function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | null {
   const and = ascii ? " | " : " · ";
   switch (toggle) {
     case null:
@@ -19,6 +19,15 @@ export function timerKeys(toggle: TimerToggle | null, ascii: boolean): string | 
     default:
       return assertNever(toggle);
   }
+}
+
+/** The Work panel's keys: starting work, with a workspace in front, then the timer's. */
+export function workKeys(
+  workspace: boolean,
+  toggle: TimerToggle | null,
+  ascii: boolean,
+): string | null {
+  return panelKeys([workspace ? "s start work" : null, timerKeys(toggle, ascii)], ascii);
 }
 
 /** What the note keys do, set into the Notes panel's frame. */

@@ -47,8 +47,8 @@ import { KeyBar } from "./key-bar";
 import { actionFor, keyHints } from "./keymap";
 import { Nav, navWidth } from "./nav";
 import { type LoadedNotes, NotesPanel } from "./notes-panel";
-import { paletteEntries } from "./palette-entries";
-import { noteKeys, sectionStatus, timerKeys } from "./panel-status";
+import { paletteEntries, startWorkEntry } from "./palette-entries";
+import { noteKeys, sectionStatus, workKeys } from "./panel-status";
 import type { AgentQuestionAbout, SectionProps } from "./section-props";
 import type { Section } from "./sections";
 import { fitsTerminal } from "./terminal-size";
@@ -432,8 +432,8 @@ export function Shell(props: ShellProps) {
     if (editing() !== null || asking() !== null || modal() || confirmation.asking()) return;
     const overlay = switcherOpen() || paletteOpen();
     if (action === null || (overlay && action.kind !== "interrupt")) return;
-    // In a section, the arrows, j and k, digits and Enter are its own.
-    const own = ["nav", "panel.jump", "panel.open"];
+    // In a section, the arrows, j and k, digits, Enter and s are its own.
+    const own = ["nav", "panel.jump", "panel.open", "work.start"];
     if (inSection() && own.includes(action.kind)) return;
     // What the cockpit acts on stops here, so a section never acts on the same key.
     key.stopPropagation();
@@ -483,6 +483,14 @@ export function Shell(props: ShellProps) {
           // The editor takes focus at once; without this the "e" would be typed into it.
           key.preventDefault();
           editNote(action.on);
+        }
+        return;
+      case "work.start":
+        if (workspace() !== null) {
+          // The palette takes focus at once; without this the "s" would be typed into it.
+          key.preventDefault();
+          setPaletteStart(startWorkEntry(work(), startWork));
+          setPaletteOpen(true);
         }
         return;
       case "timer.toggle":
@@ -541,7 +549,7 @@ export function Shell(props: ShellProps) {
                 width={areaWidth()}
                 rows={panelRows() + 2}
                 focused={panel()}
-                timerKeys={timerKeys(toggle(), props.icons === "ascii")}
+                workKeys={workKeys(workspace() !== null, toggle(), props.icons === "ascii")}
               />
             }
           >
@@ -565,7 +573,7 @@ export function Shell(props: ShellProps) {
                     ? pluginKeys()
                     : null
                   : section()?.id === "work"
-                    ? timerKeys(toggle(), props.icons === "ascii")
+                    ? workKeys(workspace() !== null, toggle(), props.icons === "ascii")
                     : section()?.id === "notes" && workspace() !== null
                       ? noteKeys(work(), props.icons === "ascii")
                       : null

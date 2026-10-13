@@ -36,8 +36,8 @@ export interface DashboardProps {
   readonly rows: number;
   /** Index into DASHBOARD_PANELS. */
   readonly focused: number;
-  /** What the timer key does, for the Work panel's frame. */
-  readonly timerKeys: string | null;
+  /** What the work and timer keys do, for the Work panel's frame. */
+  readonly workKeys: string | null;
 }
 
 /** The panel's frame and padding. */
@@ -79,7 +79,7 @@ export function Dashboard(props: DashboardProps) {
           focused={focused("work")}
           flexGrow={1}
           status={status("work")}
-          keys={panelKeys([props.timerKeys, open()], props.ascii)}
+          keys={panelKeys([props.workKeys, open()], props.ascii)}
         >
           <WorkPanel
             clock={props.clock}

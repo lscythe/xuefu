@@ -20,6 +20,8 @@ export type ShellAction =
   | { readonly kind: "section.leave" }
   /** Where notes are shown: e edits the workspace's note, i the note on its work in progress. */
   | { readonly kind: "note.edit"; readonly on: "workspace" | "issue" }
+  /** Asks for an issue to start work on in the workspace in front. */
+  | { readonly kind: "work.start" }
   | { readonly kind: "quit" }
   /** Ctrl+C: quits from anywhere, including while an overlay owns the keyboard. */
   | { readonly kind: "interrupt" };
@@ -62,6 +64,7 @@ const BINDINGS: readonly (readonly [chord: string, action: ShellAction])[] = [
   ["escape", { kind: "section.leave" }],
   ["e", { kind: "note.edit", on: "workspace" }],
   ["i", { kind: "note.edit", on: "issue" }],
+  ["s", { kind: "work.start" }],
   ["t", { kind: "timer.toggle" }],
   ["shift+t", { kind: "timer.stop" }],
   ["q", { kind: "quit" }],
