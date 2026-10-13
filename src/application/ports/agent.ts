@@ -69,6 +69,30 @@ interface AgentQuestion {
    * it, and to say what it learned.
    */
   readonly prompt: string | null;
+  /**
+   * A branch to check out in the workspace while the agent works, such as a pull request's under
+   * review; the workspace is put back as it was when the conversation ends. Null leaves it be.
+   */
+  readonly branch: string | null;
+}
+
+/** How putting a workspace back went: what was done, or what could not be and why. */
+export type PutBack = Result<string, ProcessError>;
+
+/** Checks out a branch in a clone for a conversation, then puts the clone back as it was. */
+export interface BranchCheckout {
+  /**
+   * Checks out `branch` as it is on origin in the clone at `folder`, stashing uncommitted
+   * changes first; `say` tells what it does as it does it, failing or not. Resolves to how to put
+   * back the branch it was on and the changes stashed, or null when there is nothing to put back.
+   * Cancelling stops it fetching.
+   */
+  checkout(
+    folder: AbsolutePath,
+    branch: string,
+    say: (text: string, failed: boolean) => void,
+    signal: AbortSignal,
+  ): Promise<(() => Promise<PutBack>) | null>;
 }
 
 /** A comment on a line of a pull request's diff, as the agent drafts it. */
@@ -97,6 +121,11 @@ export interface AgentHandlers {
   readonly approve: (prompt: ConfirmationPrompt) => Promise<boolean>;
   /** Shows the user a drafted review; resolves to the comments they chose to post, maybe none. */
   readonly review: (draft: DraftReview) => Promise<readonly DraftComment[]>;
+  /**
+   * How the workspace was put back once the conversation ended, when a branch was checked out
+   * for it; told after the conversation's last event.
+   */
+  readonly putBack: (done: PutBack) => void;
 }
 
 /**
