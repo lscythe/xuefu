@@ -250,7 +250,12 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
     method: HttpRequest["method"],
     path: string,
     signal: AbortSignal | undefined,
-    extra: { readonly body?: unknown; readonly maxBodyBytes?: number } = {},
+    extra: {
+      readonly body?: unknown;
+      readonly maxBodyBytes?: number;
+      /** What it is asked for, when not JSON. */
+      readonly accept?: string;
+    } = {},
   ): Promise<Result<HttpResponse, PullRequestFailure>> => {
     const token = await options.token();
     if (!token.ok) return token;
@@ -258,7 +263,11 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
       {
         method,
         url: `${url}${path}`,
-        headers: { Authorization: `Bearer ${token.value.reveal()}` },
+        headers: {
+          Authorization: `Bearer ${token.value.reveal()}`,
+          // In lower case, so it takes the place of the client's own rather than joining it.
+          ...(extra.accept === undefined ? {} : { accept: extra.accept }),
+        },
         ...(extra.body === undefined ? {} : { body: extra.body }),
       },
       {
@@ -431,7 +440,8 @@ export function bitbucketRest(options: BitbucketRestOptions): PullRequestClient 
         "GET",
         `${repoPath(repository)}/pull-requests/${id}.diff?${query}`,
         signal,
-        { maxBodyBytes: MAX_DIFF_BYTES },
+        // Bitbucket serves the raw diff as text alone, answering 406 to a request for JSON.
+        { maxBodyBytes: MAX_DIFF_BYTES, accept: "text/plain" },
       );
       if (!answered.ok) return answered;
       return answered.value.status === 200
