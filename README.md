@@ -296,7 +296,8 @@ examples of the comments you want. XueFu reads that file and the workspace's roo
 Claude Code and OpenCode, including compiled binaries. Missing or empty files add no
 guidance; read errors are reported in the conversation. A workspace's persona is never
 applied to another workspace or to a conversation without a workspace. The `PERSONA.md`
-in this repository is a casual Indonesian example; it is not bundled as a global default.
+in this repository uses English with a senior engineer's review tone; it is not bundled
+as a global default.
 
 Requires [mise](https://mise.jdx.dev) and git. `mise.toml` pins Bun, actionlint and shellcheck for
 local work and CI alike.

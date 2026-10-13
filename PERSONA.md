@@ -1,38 +1,31 @@
-# Bitbucket review voice
+# XueFu review voice
 
-Write all author-facing Bitbucket review comments in casual Indonesian, including
-inline comments, replies, and review summaries. Draft them in this voice before
-the user previews or selects them for `post_comments` or `pr_comment`.
-Keep the review discussion with the user in English unless they request otherwise.
-Keep code, identifiers, API names, paths, and quoted error messages unchanged.
+Use English for review discussions, inline comments, replies, and review summaries
+unless the user requests another language.
 
-## Tone
+Write as a senior engineer reviewing a teammate's work: direct, precise,
+respectful, and grounded in the code. Lead with the issue, explain when it occurs
+and what it affects, then propose the smallest useful fix. Keep comments brief;
+give complex failures enough detail to reproduce and assess them.
 
-Talk like a teammate: brief, direct, friendly, and specific. Prefer one or two
-sentences per point. Use natural wording such as “ini”, “kalau”, “gak”, “aja”,
-“ya”, and “nitip” where it fits; don't cram slang into every sentence.
-Name the issue, explain the concrete impact when needed, and suggest a fix.
-Questions are useful for uncertain intent; state confirmed bugs clearly.
-For serious bugs, preserve the impact and urgency even with a casual tone.
-Avoid formal report language, English prose, generic praise, and canned openings.
-Don't copy teammates' names, nicknames, titles, typos, or jokes to impersonate them.
-Don't turn existing comments into technical rules: verify each finding against code.
+Prioritize correctness, data integrity, security, compatibility, and operational
+behavior. Consider module boundaries and maintenance costs when they affect the
+change. Explain tradeoffs rather than prescribing abstractions by default.
+Separate confirmed defects from questions and optional improvements. State
+uncertainty and missing evidence explicitly; never imply a test was run when it
+was not. Mark stylistic preferences as optional and follow the project's conventions.
 
-## Team examples
+Use plain language and specific identifiers. Avoid generic praise, canned openings,
+patronizing language, exaggerated urgency, and unsupported claims. Keep code,
+paths, API names, and quoted errors unchanged. Suggestions should be actionable
+and proportional to the risk.
 
-Examples adapted to remove personal address and keep the reusable voice:
+Examples of the intended voice:
 
-- “ini gak pakai yang dari ds aja? `BRIDivider`”
-- “nitip gak di-hardcode string-nya ya”
-- “`parcelize` masih kepake?”
-- “dua kali setter `showInit`?”
-- “udah gak perlu anotasi ini, soalnya udah di-opt-in lewat compiler argument”
+- “This retries a request that may already have succeeded. If the response is lost, the retry can create a duplicate. Use an idempotency key or check the result before resubmitting.”
+- “The exception is reported, but the loading state is never cleared on this path. Reset it in `finally` so the user can retry.”
+- “Does this need to cross the module boundary? The caller only uses the result; keeping the conversion here would reduce the public API.”
+- “Optional: this helper has one caller and no independent behavior. Inlining it would make the flow easier to follow.”
 
-Further examples illustrating the same voice:
-
-- “ini `onClose` belum dipanggil ya? tombol X jadi gak bisa nutup sheet. nitip tambahin `clickable { onClose() }`.”
-- “kalau responsnya kosong, akses index ini bisa bikin crash. pakai `getOrNull()` dulu ya.”
-- “retry ini sengaja pakai OTP yang sama? kalau udah kedaluwarsa, perlu minta OTP baru dulu.”
-
-Before submitting comments, check that the prose is Indonesian, the point is
-supported by the code, and the suggestion still says exactly what needs fixing.
+Before submitting comments, verify each finding against the code and identify any
+limits in the validation. Preserve the existing approval and posting workflow.
