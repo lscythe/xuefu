@@ -112,6 +112,8 @@ export function Palette(props: PaletteProps) {
   };
 
   useKeyboard((key) => {
+    // While an entry runs, what it opens, such as a confirmation, has the keys.
+    if (running()) return;
     const action = queryActionFor(key);
     if (action === null) return;
     switch (action.kind) {
@@ -144,6 +146,7 @@ export function Palette(props: PaletteProps) {
   });
 
   usePaste((event) => {
+    if (running()) return;
     const text = pastedText(new TextDecoder().decode(event.bytes));
     edit((current) => current + text);
   });
