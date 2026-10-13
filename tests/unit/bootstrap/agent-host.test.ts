@@ -17,6 +17,7 @@ import type {
   CodeGraphSetup,
   ProjectBrief,
   ProjectBriefs,
+  WorkspaceGuidance,
 } from "../../../src/application/ports/project-context";
 import { agentHost, approvalPrompt } from "../../../src/bootstrap/agent-host";
 import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
@@ -262,6 +263,7 @@ function tools(
 }
 
 interface Setup {
+  readonly guidance?: WorkspaceGuidance;
   readonly answers?: boolean[];
   readonly prompt?: string | null;
   readonly graph?: CodeGraph | null;
@@ -351,6 +353,7 @@ function asking(setup: Setup = {}) {
     graph: setup.graph ?? null,
     setup: setup.setup ?? null,
     briefs: memory.briefs,
+    guidance: setup.guidance ?? { read: () => ok(null) },
     elsewhere: ELSEWHERE,
     checkout: setup.checkout ?? fakeCheckout().checkout,
     clock,
@@ -422,6 +425,49 @@ const decision = (result: Record<string, unknown>) =>
   JSON.parse((result["content"] as { text: string }[])[0]?.text ?? "");
 
 describe("agentHost", () => {
+  test("loads project guidance and persona fresh for each conversation", async () => {
+    let persona = "Use casual Indonesian comments.";
+    const guidance: WorkspaceGuidance = {
+      read: (_root, name) => ok(name === "AGENTS.md" ? "Use TDD." : persona),
+    };
+    const current = await session([], { guidance });
+    expect(current.launch.instructions).toContain("Use TDD.");
+    expect(current.launch.instructions).toContain(persona);
+    current.fake.emit({ kind: "exit", message: null });
+    persona = "Use English comments.";
+    current.ask([]);
+    await until(() => current.fake.launches.length === 2);
+    expect(current.fake.launches[1]?.instructions).toContain(persona);
+    expect(current.fake.launches[1]?.instructions).not.toContain("Use casual Indonesian comments.");
+    current.fake.emit({ kind: "exit", message: null });
+  });
+
+  test("reports unreadable guidance and keeps the other file", async () => {
+    const current = await session([], {
+      guidance: {
+        read: (_root, name) =>
+          name === "AGENTS.md"
+            ? err(fileSystemError("Unable to read AGENTS.md", "/tmp/AGENTS.md", "read"))
+            : ok("Use Indonesian comments."),
+      },
+    });
+    expect(steps(current.events)).toContain("! Unable to read AGENTS.md");
+    expect(current.launch.instructions).toContain("Use Indonesian comments.");
+    current.fake.emit({ kind: "exit", message: null });
+  });
+
+  test("without a workspace, no project guidance or persona is read", async () => {
+    const current = await session([], {
+      workspace: null,
+      guidance: {
+        read: () => {
+          throw new Error("must not read another workspace");
+        },
+      },
+    });
+    expect(current.launch.instructions).not.toContain("PERSONA.md");
+    current.fake.emit({ kind: "exit", message: null });
+  });
   test("starts the agent with its own endpoint, its reads free and the rest asked", async () => {
     const { host, launch, rpc, fake, events } = await session();
     expect(host.name).toBe("Claude");
@@ -1051,6 +1097,7 @@ describe("choosing the agent", () => {
       graph: null,
       setup: null,
       briefs: memoryBriefs(FRESH).briefs,
+      guidance: { read: () => ok(null) },
       elsewhere: ELSEWHERE,
       checkout: fakeCheckout().checkout,
       clock: new ManualClock(),

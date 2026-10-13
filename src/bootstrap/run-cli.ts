@@ -45,6 +45,7 @@ import { briefFiles } from "../infrastructure/agent/brief-files";
 import { choiceFile } from "../infrastructure/agent/choice-file";
 import { claudeCode } from "../infrastructure/agent/claude-code";
 import { findGraf, grafGraph, grafSetup } from "../infrastructure/agent/graf";
+import { guidanceFiles } from "../infrastructure/agent/guidance-files";
 import { openCode } from "../infrastructure/agent/opencode";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
@@ -725,6 +726,7 @@ function cockpitAgent(app: App, out: Output): AgentHost | null {
           })
         : null,
     briefs: briefFiles(join(app.paths.dataDir, "briefs")),
+    guidance: guidanceFiles(),
     elsewhere,
     checkout: gitCheckout(app.processes),
     clock: systemClock,

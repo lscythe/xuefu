@@ -62,11 +62,15 @@ export function instructionsFor(
   brief: ProjectBrief | null,
   withGraph: boolean,
   now: Timestamp,
+  persona: string | null = null,
+  agents: string | null = null,
 ): string {
   if (workspace === null) return [INSTRUCTIONS, NO_CODE].join("\n\n");
   return [
     INSTRUCTIONS,
     ...(withGraph ? [GRAPH] : []),
+    ...(agents?.trim() ? ["Project guidance from this workspace's AGENTS.md:", agents.trim()] : []),
+    ...(persona?.trim() ? ["Review voice from this workspace's PERSONA.md:", persona.trim()] : []),
     ...(brief === null
       ? []
       : [

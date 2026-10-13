@@ -59,6 +59,15 @@ describe("studyPrompt", () => {
 });
 
 describe("instructionsFor", () => {
+  test("applies only the selected workspace's persona", () => {
+    const persona = "Write Bitbucket comments in casual Indonesian.";
+    expect(instructionsFor(MOBILE, null, false, NOW, persona)).toContain(persona);
+    expect(instructionsFor(MOBILE, null, false, NOW, "  ")).toBe(INSTRUCTIONS);
+    expect(instructionsFor(null, null, false, NOW, persona)).not.toContain(persona);
+    const both = instructionsFor(MOBILE, null, false, NOW, persona, "Use TDD.");
+    expect(both).toContain("Use TDD.");
+    expect(both.indexOf("Use TDD.")).toBeLessThan(both.indexOf(persona));
+  });
   test("where it runs, how to use the graph, and what it learned", () => {
     expect(instructionsFor(MOBILE, null, false, NOW)).toBe(INSTRUCTIONS);
     const nowhere = instructionsFor(null, written(2), true, NOW);
