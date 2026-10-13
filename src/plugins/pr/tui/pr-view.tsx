@@ -1,4 +1,4 @@
-import { useKeyboard } from "@opentui/solid";
+import { useKeyboard, usePaste } from "@opentui/solid";
 import {
   type Accessor,
   type Component,
@@ -17,6 +17,8 @@ import { createAsking } from "../../../tui/asking";
 import { type Banner, BannerLine } from "../../../tui/banner-line";
 import { ErrorLine } from "../../../tui/error-line";
 import { cycle, scrollOffset } from "../../../tui/list-navigation";
+import { eraseChar, eraseWord, pastedText } from "../../../tui/query-input/edit";
+import { queryActionFor } from "../../../tui/query-input/keys";
 import { fitHints } from "../../../tui/shell/panel-status";
 import type { SectionProps } from "../../../tui/shell/section-props";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
@@ -25,6 +27,7 @@ import { mergeInput, type PrChanges, reviewInput } from "../application/actions"
 import { branchPullRequest, whyNoPullRequest } from "../application/branch-pull-request";
 import { readyToMerge } from "../application/merge";
 import type { PullRequest, ReviewStatus } from "../domain/pull-request";
+import { FILTER_LABELS, filterPrLists, PR_FILTERS, type PrFilter } from "./pr-filter";
 import { type PrLists, type PullRow, prColumns, prRows, reviewBadge, shortRef } from "./pr-rows";
 import { PullRequestDialog } from "./pull-request-dialog";
 import { ReviewDialog } from "./review-dialog";
@@ -74,6 +77,15 @@ export function prView(section: PrSection): Component<SectionProps> {
       readonly shown: PullRequest | string;
     } | null>(null);
     const [cursor, setCursor] = createSignal(0);
+    const [query, setQuery] = createSignal("");
+    const [filter, setFilter] = createSignal<PrFilter>("all");
+    const [searching, setSearching] = createSignal(false);
+    let previousQuery = "";
+    const filtering = () => query().trim() !== "" || filter() !== "all";
+    const editQuery = (text: string) => {
+      setQuery(Array.from(text).slice(0, 256).join(""));
+      setCursor(0);
+    };
     const [opened, setOpened] = createSignal<PullRequest | null>(null);
     const [reviewing, setReviewing] = createSignal<PullRequest | null>(null);
     const [busy, setBusy] = createSignal(false);
@@ -134,7 +146,7 @@ export function prView(section: PrSection): Component<SectionProps> {
     );
 
     // A dialog of the section's has every key while it is open.
-    const modal = () => opened() !== null || reviewing() !== null || asking();
+    const modal = () => opened() !== null || reviewing() !== null || asking() || searching();
     createEffect(on(modal, (open) => props.setModal(open), { defer: true }));
     onCleanup(() => {
       if (modal()) props.setModal(false);
@@ -154,7 +166,19 @@ export function prView(section: PrSection): Component<SectionProps> {
         yours: read?.yours ?? null,
         toReview: read?.toReview ?? null,
       };
-      return prRows(shown);
+      const filtered = filterPrLists(shown, query(), filter());
+      const all = prRows(filtered);
+      if (!filtering()) return all;
+      if (filtered.branch === null || typeof filtered.branch === "string") all.splice(0, 2);
+      return read !== null && !all.some((row) => row.kind === "pull")
+        ? [
+            {
+              kind: "note" as const,
+              text: "No loaded PRs match. / search · f filter · Esc reset",
+              tone: "textMuted" as const,
+            },
+          ]
+        : all;
     });
     const pulls = createMemo(() => rows().filter((row): row is PullRow => row.kind === "pull"));
     /** The pull request under the cursor, kept in range as the lists change. */
@@ -165,18 +189,27 @@ export function prView(section: PrSection): Component<SectionProps> {
 
     createEffect(() => {
       const read = lists();
+      const matches = new Set(
+        pulls().map((row) => `${row.pull.repository.project}/${shortRef(row.pull)}`),
+      ).size;
       props.setStatus(
-        read === null
-          ? null
-          : read.toReview.length > 0
-            ? `${read.toReview.length} to review`
-            : `${read.yours.length} yours`,
+        filtering() && read !== null
+          ? `${matches} ${matches === 1 ? "match" : "matches"}`
+          : read === null
+            ? null
+            : read.toReview.length > 0
+              ? `${read.toReview.length} to review`
+              : `${read.yours.length} yours`,
       );
     });
 
     createEffect(() => {
       if (!props.focused) {
         props.setKeys(null);
+        return;
+      }
+      if (searching()) {
+        props.setKeys("enter apply · esc cancel · ctrl+u clear");
         return;
       }
       props.setKeys(
@@ -250,7 +283,26 @@ export function prView(section: PrSection): Component<SectionProps> {
     };
 
     useKeyboard((key) => {
-      if (!props.focused || modal() || busy()) return;
+      if (!props.focused || busy()) return;
+      if (searching()) {
+        const action = queryActionFor(key);
+        if (action === null) return;
+        if (action.kind === "close") {
+          editQuery(previousQuery);
+          setSearching(false);
+        } else if (action.kind === "choose") setSearching(false);
+        else if (action.kind === "type") editQuery(query() + action.text);
+        else if (action.kind === "erase")
+          editQuery(
+            action.unit === "char"
+              ? eraseChar(query())
+              : action.unit === "word"
+                ? eraseWord(query())
+                : "",
+          );
+        return;
+      }
+      if (modal()) return;
       const count = pulls().length;
       const at = Math.min(cursor(), Math.max(0, count - 1));
       if (key.shift && key.name === "a") {
@@ -259,6 +311,18 @@ export function prView(section: PrSection): Component<SectionProps> {
         return;
       }
       switch (key.name) {
+        case "/":
+          previousQuery = query();
+          setSearching(true);
+          return;
+        case "f":
+          setFilter(PR_FILTERS[(PR_FILTERS.indexOf(filter()) + 1) % PR_FILTERS.length] ?? "all");
+          setCursor(0);
+          return;
+        case "escape":
+          editQuery("");
+          setFilter("all");
+          return;
         case "up":
         case "k":
           if (count > 0) setCursor(cycle(at, -1, count));
@@ -305,9 +369,14 @@ export function prView(section: PrSection): Component<SectionProps> {
       }
     });
 
+    usePaste((event) => {
+      if (props.focused && searching() && !busy())
+        editQuery(query() + pastedText(new TextDecoder().decode(event.bytes)));
+    });
+
     /** Rows for the list: fewer for each line said above it. */
     const listRows = () =>
-      Math.max(1, props.rows - (failure() === null ? 0 : 1) - (banner() === null ? 0 : 1));
+      Math.max(1, props.rows - 1 - (failure() === null ? 0 : 1) - (banner() === null ? 0 : 1));
     const drawn = () => {
       const all = rows();
       const chosen = props.focused ? selected() : null;
@@ -337,6 +406,14 @@ export function prView(section: PrSection): Component<SectionProps> {
             <text fg={PALETTE.textMuted}>Reading your pull requests...</text>
           </Match>
           <Match when={true}>
+            <text fg={searching() ? PALETTE.accentSecondary : PALETTE.textMuted} flexShrink={0}>
+              {truncateToWidth(
+                searching()
+                  ? `Search loaded PRs: ${query()}▏  Enter apply · Esc cancel`
+                  : `Filter: ${FILTER_LABELS[filter()]}${query().trim() ? ` · Search: ${query()}` : ""} · / search · f filter${filtering() ? " · Esc reset" : ""}`,
+                props.width,
+              )}
+            </text>
             <Show when={banner()}>
               {(line: Accessor<Banner>) => (
                 <BannerLine banner={line()} width={props.width} icons={props.icons} />

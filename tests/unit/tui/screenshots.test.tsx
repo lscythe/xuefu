@@ -199,7 +199,7 @@ const YOUR_PULLS = [
     title: "MOB-2841 Add biometric login",
     from: "feature/MOB-2841-biometric-login",
     reviewers: [
-      { name: "Fox Mulder", status: "approved" },
+      { name: "Fox Mulder", status: "approved", lastReviewedCommit: "previous-head" },
       { name: "Walter Skinner", status: "unapproved" },
     ],
     comments: 3,
@@ -801,6 +801,25 @@ describe("screenshots", () => {
     screen.mockInput.pressArrow("down");
     await screen.waitForFrame((f) => f.includes("enter details"));
     expectScreenshot("pr", screen.captureSpans());
+  });
+
+  test("pull requests, searching within a quick filter", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+    });
+    await screen.waitForFrame((frame) => frame.includes("shared-sdk#12"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("f");
+    await screen.waitForFrame((frame) => frame.includes("Filter: To review"));
+    screen.mockInput.pressKey("/");
+    await screen.waitForFrame((frame) => frame.includes("Search loaded PRs:"));
+    await screen.mockInput.typeText("Fox");
+    await screen.waitForFrame((frame) => frame.includes("Search loaded PRs: Fox"));
+    expectScreenshot("pr-search-editing", screen.captureSpans());
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((frame) => frame.includes("Filter: To review · Search: Fox"));
+    expectScreenshot("pr-search", screen.captureSpans());
   });
 
   test("pull requests, one's details", async () => {

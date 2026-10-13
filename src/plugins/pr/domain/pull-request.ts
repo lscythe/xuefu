@@ -12,9 +12,18 @@ export type PullRequestState = "open" | "merged" | "declined";
 /** Where a reviewer stands: approved, asking for changes, or not yet either. */
 export type ReviewStatus = "approved" | "needs-work" | "unapproved";
 
-interface Reviewer {
+export interface Reviewer {
   readonly name: string;
   readonly status: ReviewStatus;
+  readonly lastReviewedCommit?: string | null;
+}
+
+export function reviewFreshness(
+  reviewer: Reviewer,
+  commit: string,
+): "current" | "outdated" | "unknown" {
+  if (!reviewer.lastReviewedCommit || !commit) return "unknown";
+  return reviewer.lastReviewedCommit === commit ? "current" : "outdated";
 }
 
 export interface PullRequest {

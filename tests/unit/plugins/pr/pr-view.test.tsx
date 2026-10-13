@@ -149,6 +149,55 @@ const lit = (view: TestRendererSetup) =>
     .join("");
 
 describe("prView", () => {
+  test("outdated reviews warn in the list and identify the reviewer in details", async () => {
+    const pull = pullRequest(42, {
+      reviewers: [{ name: "Fox Mulder", status: "approved", lastReviewedCommit: "old" }],
+    });
+    const view = await render(fakePullRequests({ yours: [pull] }), { focused: true });
+    await until(view, (frame) => frame.includes("outdated review"));
+    view.mockInput.pressEnter();
+    const details = await until(view, (frame) =>
+      frame.includes("Fox Mulder, approved, outdated review"),
+    );
+    expect(details).toContain("outdated review");
+  });
+  test("search filters loaded PRs and typing action keys cannot approve them", async () => {
+    const sent: unknown[] = [];
+    const view = await render(
+      fakePullRequests({ yours: YOURS, toReview: TO_REVIEW }, undefined, {
+        review: (...args) => {
+          sent.push(args);
+          return Promise.resolve(ok(undefined));
+        },
+      }),
+      { focused: true },
+    );
+    await until(view, (frame) => frame.includes("To review (1)"));
+    view.mockInput.pressKey("/");
+    await view.renderOnce();
+    await view.mockInput.typeText("rotate");
+    const frame = await until(view, (frame) => frame.includes("Search loaded PRs: rotate"));
+    expect(frame).toContain("Fix rotate crash");
+    expect(frame).not.toContain("Add biometric login");
+    view.mockInput.pressEnter();
+    await view.renderOnce();
+    expect(sent).toEqual([]);
+    view.mockInput.pressKey("f");
+    const filtered = await until(view, (frame) => frame.includes("Filter: To review"));
+    expect(filtered).toContain("mobile-banking#40");
+  });
+
+  test("an unmatched search has its own empty state and Esc restores the previous query", async () => {
+    const view = await render(fakePullRequests({ yours: YOURS }), { focused: true });
+    await until(view, (frame) => frame.includes("Yours (2)"));
+    view.mockInput.pressKey("/");
+    await view.renderOnce();
+    await view.mockInput.typeText("zzzzzz");
+    await until(view, (frame) => frame.includes("No loaded PRs match"));
+    view.mockInput.pressEscape();
+    const restored = await until(view, (frame) => frame.includes("Add biometric login"));
+    expect(restored).not.toContain("zzzzzz");
+  });
   test("long authors fit the list and remain readable in details", async () => {
     const author = "Wahyu Dwi Hartarto With A Long Name";
     const pull = pullRequest(42, { author, title: "Fix cancellation" });
@@ -184,7 +233,7 @@ describe("prView", () => {
       (f) => f.includes("To review (1)") && f.includes("This branch"),
     );
     const lines = frame.split("\n").map((line) => line.trimEnd());
-    expect(lines.slice(0, 2)).toEqual([
+    expect(lines.slice(1, 3)).toEqual([
       "This branch",
       "mobile-banking#42  0/1 approved  Dana Scully  Add biometric login",
     ]);
