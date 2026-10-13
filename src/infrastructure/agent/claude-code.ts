@@ -137,6 +137,12 @@ export function claudeEvents(line: string): AgentEvent[] {
         if (block?.["type"] === "text" && typeof block["text"] === "string") {
           return block["text"].trim() === "" ? [] : [{ kind: "text", text: block["text"] }];
         }
+        // Thinking it keeps to itself comes empty, or redacted: nothing to show.
+        if (block?.["type"] === "thinking" && typeof block["thinking"] === "string") {
+          return block["thinking"].trim() === ""
+            ? []
+            : [{ kind: "thinking", text: block["thinking"] }];
+        }
         if (block?.["type"] === "tool_use" && typeof block["name"] === "string") {
           // XueFu's tools by their own names; another server's after its name, as graf_impact.
           const name = block["name"]

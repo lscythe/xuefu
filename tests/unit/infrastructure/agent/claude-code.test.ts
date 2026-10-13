@@ -93,6 +93,9 @@ describe("claudeEvents", () => {
           message: {
             content: [
               { type: "thinking", thinking: "hmm" },
+              // Kept to itself: empty, or redacted.
+              { type: "thinking", thinking: "", signature: "x" },
+              { type: "redacted_thinking", data: "x" },
               { type: "text", text: "Reading the diff." },
               { type: "text", text: "  " },
               { type: "tool_use", id: "t1", name: "mcp__xuefu__pr_diff", input: { stat: true } },
@@ -104,6 +107,7 @@ describe("claudeEvents", () => {
         }),
       ),
     ).toEqual([
+      { kind: "thinking", text: "hmm" },
       { kind: "text", text: "Reading the diff." },
       { kind: "tool", name: "pr_diff", input: { stat: true } },
       { kind: "tool", name: "Read", input: {} },

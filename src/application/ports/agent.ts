@@ -72,6 +72,8 @@ export type AgentEvent =
   | { readonly kind: "ready"; readonly model: string | null }
   /** Something it says. */
   | { readonly kind: "text"; readonly text: string }
+  /** What it thinks before it answers or acts, when it shows it. */
+  | { readonly kind: "thinking"; readonly text: string }
   /** A tool it uses, by name, with what it passed. */
   | {
       readonly kind: "tool";

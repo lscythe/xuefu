@@ -234,13 +234,15 @@ change something are marked too, so the harness asks you first. Those that ask f
 line also ask the agent: without `yes`, the tool answers with what it would do, and the agent is
 told to show you and call again with `yes` only once you agree.
 
-### Claude in the cockpit
+### Agents in the cockpit
 
 With [Claude Code](https://claude.com/claude-code) on your PATH, the cockpit asks it directly, as
-you are signed in to it, with nothing to set up. In PRs, `A` asks Claude to review the pull request
-under the cursor; from the palette, "Ask Claude" takes any question about the workspace in front.
-The conversation opens in a dialog: what Claude says and each tool it uses show as it works, and
-once it has answered, Enter sends a follow-up. Esc closes it and stops Claude.
+you are signed in to it, with nothing to set up. In PRs, `A` asks the agent to review the pull
+request under the cursor; from the palette, "Ask the agent" takes any question about the workspace
+in front. The conversation opens in a dialog: what the agent thinks, what it says and each tool it
+uses show as it works, its answers with their Markdown drawn. Its thinking is folded to its first
+lines, and Ctrl+T shows it whole. Once it has answered, Enter sends a follow-up. Esc closes it and
+stops the agent.
 
 "Choose the agent and model" in the palette lists every agent installed, each with the models it
 can run, and the one you pick answers from then on, after a restart too. Claude Code runs on its
@@ -263,7 +265,7 @@ studies it: its README, CLAUDE.md or AGENTS.md, its lint, build and test configu
 central files. It then writes itself a short brief of the project's architecture, conventions and
 what a reviewer should watch for. XueFu keeps that brief in its data folder, and every later
 conversation about the workspace starts from it, with no study needed, until it is two weeks old.
-"Have Claude study <workspace> again" in the palette renews it sooner.
+"Have the agent study <workspace> again" in the palette renews it sooner.
 
 With [graf](https://github.com/ctxrs/graf) installed, XueFu brings a graph of the workspace's code
 up to date before each conversation: a full index the first time, then only what changed. Claude

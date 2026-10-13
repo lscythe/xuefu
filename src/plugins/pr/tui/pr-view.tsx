@@ -190,7 +190,7 @@ export function prView(section: PrSection): Component<SectionProps> {
                   { text: "n needs work", rank: 3 },
                   { text: "m merge", rank: 4 },
                   { text: "u withdraw", rank: 6 },
-                  ...(props.askAgent == null ? [] : [{ text: "A ask claude", rank: 7 }]),
+                  ...(props.askAgent == null ? [] : [{ text: "A ask agent", rank: 7 }]),
                 ]
               : []),
             { text: "r refresh", rank: 5 },

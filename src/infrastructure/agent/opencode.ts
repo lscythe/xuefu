@@ -282,6 +282,8 @@ export function openCode(options: OpenCodeOptions): AgentRunner {
       let stopped = false;
       /** Why it was stopped before it could start, said when it exits. */
       let failure: string | null = null;
+      /** What it thinks, in pieces, until it says something, uses a tool or ends its answer. */
+      let thinking = "";
       /** What it says, in pieces, until a tool or the end of its answer. */
       let saying = "";
       /** What it has spent in the session, in dollars, when it says. */
@@ -289,7 +291,12 @@ export function openCode(options: OpenCodeOptions): AgentRunner {
       /** Each tool it uses by its call, until it is shown with what it was passed. */
       const calls = new Map<string, { readonly name: string; shown: boolean }>();
 
+      const thought = () => {
+        if (thinking.trim() !== "") onEvent({ kind: "thinking", text: thinking });
+        thinking = "";
+      };
       const said = () => {
+        thought();
         if (saying.trim() !== "") onEvent({ kind: "text", text: saying });
         saying = "";
       };
@@ -309,7 +316,16 @@ export function openCode(options: OpenCodeOptions): AgentRunner {
           case "agent_message_chunk": {
             const content = record(change["content"]);
             if (content?.["type"] === "text" && typeof content["text"] === "string") {
+              // What it thought comes before what it then says.
+              thought();
               saying += content["text"];
+            }
+            return;
+          }
+          case "agent_thought_chunk": {
+            const content = record(change["content"]);
+            if (content?.["type"] === "text" && typeof content["text"] === "string") {
+              thinking += content["text"];
             }
             return;
           }

@@ -29,10 +29,7 @@ export interface CockpitActions {
    * Asks the coding agent a question about the workspace, or with null has it study the workspace
    * again; null when there is no agent to ask.
    */
-  readonly askAgent: {
-    readonly name: string;
-    readonly ask: (question: string | null) => void;
-  } | null;
+  readonly askAgent: ((question: string | null) => void) | null;
   /** Opens the choice of agent and model; null when there is nothing to choose. */
   readonly chooseAgent: (() => void) | null;
   /** Adding, renaming, grouping and removing workspaces; null when the cockpit cannot. */
@@ -91,10 +88,11 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
       run: done(() => actions.editNote("issue")),
     });
   }
-  const agent = actions.askAgent;
-  if (agent !== null && state.workspace !== null) {
+  // Whichever agent is chosen: named here, it would be one more thing to change.
+  const ask = actions.askAgent;
+  if (ask !== null && state.workspace !== null) {
     entries.push({
-      title: `Ask ${agent.name}`,
+      title: "Ask the agent",
       keys: null,
       fields: [
         {
@@ -105,15 +103,15 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
         },
       ],
       run: ([question]) => {
-        agent.ask(question ?? "");
+        ask(question ?? "");
         return Promise.resolve(ok(undefined));
       },
     });
     entries.push({
-      title: `Have ${agent.name} study ${state.workspace.name} again`,
+      title: `Have the agent study ${state.workspace.name} again`,
       keys: null,
       fields: [],
-      run: done(() => agent.ask(null)),
+      run: done(() => ask(null)),
     });
   }
   if (actions.chooseAgent !== null) {

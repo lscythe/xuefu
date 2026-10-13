@@ -176,7 +176,7 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
     const at = more
       ? `  ${Math.min(description().length, top() + room())}/${description().length}`
       : "";
-    const ask = props.onAsk == null ? "" : "A ask claude  ";
+    const ask = props.onAsk == null ? "" : "A ask agent  ";
     return `${more ? (ascii() ? "j/k scroll  " : "↑↓ scroll  ") : ""}d diff  ${ask}esc close${at}`;
   };
 
