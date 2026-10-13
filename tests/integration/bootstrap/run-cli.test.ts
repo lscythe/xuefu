@@ -344,6 +344,54 @@ describe("runCli: workspaces", () => {
     expect((await running).code).toBe(EXIT.ok);
   });
 
+  test("the cockpit adds, renames, groups and removes workspaces", async () => {
+    const terminal = headlessTerminal();
+    const running = run([], {}, dir.path, terminal.host);
+    const screen = await terminal.screen;
+    const header = async () =>
+      (await screen.waitForFrame((f) => f.includes("血符"))).split("\n")[0];
+    const command = async (title: string) => {
+      await screen.mockInput.typeText(":");
+      await screen.waitForFrame((f) => f.includes(" Commands "));
+      await screen.mockInput.typeText(title);
+      await screen.waitForFrame((f) => f.includes(title));
+      screen.mockInput.pressEnter();
+    };
+    const answer = async (label: string, text: string) => {
+      await screen.waitForFrame((f) => f.includes(label));
+      await screen.mockInput.typeText(text);
+      screen.mockInput.pressEnter();
+    };
+    await header();
+
+    screen.mockInput.pressKey("w", { ctrl: true });
+    await screen.waitForFrame((f) => f.includes("Add one with ctrl+a"));
+    screen.mockInput.pressKey("a", { ctrl: true });
+    await answer("Folder", "~/projects/mobile");
+    await answer("Name (optional)", "Mobile");
+    await answer("Group (optional)", "");
+    await screen.waitForFrame((f) => (f.split("\n")[0] ?? "").includes(" 1 Mobile "));
+
+    await command("Rename Mobile");
+    await answer("Name", "Mobile Banking");
+    await screen.waitForFrame((f) => (f.split("\n")[0] ?? "").includes(" 1 Mobile Banking "));
+
+    await command("Move Mobile Banking to a group");
+    await answer("Group", "Client");
+    await screen.waitForFrame((f) => !f.includes(" Move Mobile Banking to a group "));
+    expect(JSON.parse((await run(["workspace", "list", "--json"])).stdout)).toMatchObject([
+      { id: "mobile", name: "Mobile Banking", path: mobile, group: "Client" },
+    ]);
+
+    await command("Remove Mobile Banking");
+    await screen.waitForFrame((f) => f.includes("Remove workspace?"));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => !(f.split("\n")[0] ?? "").includes("Mobile Banking"));
+    expect(JSON.parse((await run(["workspace", "list", "--json"])).stdout)).toEqual([]);
+    screen.mockInput.pressKey("q");
+    expect((await running).code).toBe(EXIT.ok);
+  });
+
   test("outside every workspace, the cockpit reopens the tabs left open", async () => {
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
     await run(["workspace", "add", join(projects, "api"), "--name", "Payments API"]);
@@ -418,6 +466,15 @@ describe("runCli: workspaces", () => {
     expect((await run(["workspace", "ungroup", "mobile"])).stdout).toBe(
       "✓ mobile is no longer in a group\n",
     );
+  });
+
+  test("rename keeps the id", async () => {
+    await run(["workspace", "add", mobile]);
+    expect((await run(["workspace", "rename", "mobile", "Mobile Banking"])).stdout).toBe(
+      "✓ mobile is now named Mobile Banking\n",
+    );
+    const missing = await run(["workspace", "rename", "ghost", "x"]);
+    expect(missing.code).toBe(EXIT.noInput);
   });
 
   test("which prints the workspace containing the folder, or exits 1", async () => {

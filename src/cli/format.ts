@@ -53,6 +53,7 @@ Commands:
                                   -y, --yes          confirm without asking
   workspace group <id> <group>  Put a workspace in a group
   workspace ungroup <id>        Take a workspace out of its group
+  workspace rename <id> <name>  Change a workspace's display name; its id stays
   workspace which [path]        Print the workspace that contains a folder
                                   --json             machine-readable output
   timer [status]                Show the running or paused timer

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { CliRenderer } from "@opentui/core";
 import type { AppError } from "../application/errors";
 import type { AgentHost } from "../application/ports/agent";
@@ -7,9 +8,11 @@ import { unexpected } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
 import type { Workspace } from "../domain/workspace/workspace";
+import { expandHome } from "../infrastructure/filesystem/safe-path";
 import { systemClock } from "../infrastructure/system/clock";
 import { cockpitSections } from "../tui/shell/sections";
 import type { CockpitSnapshot } from "../tui/shell/shell";
+import type { ManageWorkspaces } from "../tui/shell/workspace-entries";
 import type { App } from "./start-app";
 import { workspaceWith } from "./workspace-with";
 
@@ -53,11 +56,32 @@ async function startingTabs(app: App, cwd: string): Promise<Result<OpenTabs, App
   return here.value === null ? app.workspaces.tabs() : activate(app, here.value);
 }
 
+/** Adding, renaming, grouping and removing workspaces, from the cockpit. */
+function manageWorkspaces(app: App, cwd: string, home: string): ManageWorkspaces {
+  const commands = app.workspaceCommands;
+  return {
+    add: async (folder, name, group) => {
+      const added = await app.commandBus.invoke(commands.add, {
+        path: resolve(cwd, expandHome(folder, home)),
+        ...(name === null ? {} : { name }),
+        ...(group === null ? {} : { group }),
+      });
+      return added.ok ? activate(app, added.value.workspace) : added;
+    },
+    rename: (workspace, name) => app.commandBus.invoke(commands.rename, { id: workspace.id, name }),
+    group: (workspace, group) => app.commandBus.invoke(commands.group, { id: workspace.id, group }),
+    remove: (workspace, options) =>
+      app.commandBus.invoke(commands.remove, { id: workspace.id }, options),
+  };
+}
+
 /** Runs the cockpit until the user quits or the renderer is torn down by a signal. */
 export async function runTui(
   app: App,
   host: TuiHost,
   cwd: string,
+  /** For folders given as `~/…` when a workspace is added. */
+  home: string,
   /** Masks credentials in text shown on screen, as the CLI does in what it prints. */
   redact: (text: string) => string,
   /** A coding agent to ask about workspaces; null when none is installed. */
@@ -155,6 +179,7 @@ export async function runTui(
       onQuit: () => renderer.destroy(),
       agent,
       workspaceWith: workspaceWith({ workspaces: app.workspaces, processes: app.processes }),
+      manage: manageWorkspaces(app, cwd, home),
     });
   } catch (thrown) {
     renderer.destroy();

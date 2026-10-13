@@ -34,6 +34,11 @@ describe("describeEvent", () => {
       action: "Taken out of its group",
       subject: null,
     });
+    expect(describes("WorkspaceRenamed", { id: "m", from: "M", name: "Mobile" })).toEqual({
+      action: "Renamed to",
+      subject: { kind: "name", text: "Mobile" },
+      detail: "was M",
+    });
     expect(describes("WorkspaceActivated", { id: "m" })).toMatchObject({ action: "Opened" });
     expect(describes("WorkspaceTabClosed", { id: "m" })).toMatchObject({
       action: "Closed its tab",
@@ -119,6 +124,7 @@ describe("describeEvent", () => {
       WorkspaceAdded: { id: "m", name: "M", path: "/m", group: null },
       WorkspaceRemoved: { id: "m", name: "M", path: "/m" },
       WorkspaceGroupAssigned: { id: "m", group: null },
+      WorkspaceRenamed: { id: "m", from: "M", name: "Mobile" },
       WorkspaceActivated: { id: "m" },
       WorkspaceTabClosed: { id: "m" },
       WorkStarted: { workId: "w", workspaceId: "m", issueKey: "MOB-1", title: null },

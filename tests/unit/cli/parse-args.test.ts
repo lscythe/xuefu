@@ -93,6 +93,10 @@ describe("parseArgs: workspace", () => {
       { kind: "workspace.group", id: "mob", group: "Client A" },
     ],
     [["workspace", "ungroup", "mob"], { kind: "workspace.group", id: "mob", group: null }],
+    [
+      ["workspace", "rename", "mob", "Mobile"],
+      { kind: "workspace.rename", id: "mob", name: "Mobile" },
+    ],
     [["workspace", "which"], { kind: "workspace.which", path: null, json: false }],
     [
       ["workspace", "which", "/tmp", "--json"],
@@ -106,6 +110,7 @@ describe("parseArgs: workspace", () => {
     [["workspace", "launch"], "Unknown workspace command: launch"],
     [["workspace", "remove"], "workspace remove expects <id>"],
     [["workspace", "group", "mob"], "workspace group expects <id> <group>"],
+    [["workspace", "rename", "mob"], "workspace rename expects <id> <name>"],
     [["workspace", "add", "a", "b"], "workspace add expects [path]"],
     [["workspace", "list", "--yes"], "--yes does not apply to workspace list"],
     [["diagnostics", "--name", "x"], "--name does not apply to diagnostics"],

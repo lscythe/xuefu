@@ -7,7 +7,7 @@ import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
 import type { AgentHost } from "../../../../src/application/ports/agent";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
-import { storageError } from "../../../../src/domain/shared/errors";
+import { confirmationRequired, storageError } from "../../../../src/domain/shared/errors";
 import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
@@ -17,6 +17,7 @@ import { bigClockRows } from "../../../../src/tui/big-clock";
 import type { SectionProps } from "../../../../src/tui/shell/section-props";
 import { cockpitSections } from "../../../../src/tui/shell/sections";
 import { type CockpitSnapshot, Shell, type ShellProps } from "../../../../src/tui/shell/shell";
+import type { ManageWorkspaces } from "../../../../src/tui/shell/workspace-entries";
 import { PALETTE } from "../../../../src/tui/theme/palette";
 import { activityEntry, fakeActivity } from "../../../support/fake-activity";
 import { fakeTabs } from "../../../support/fake-tabs";
@@ -1329,6 +1330,198 @@ describe("Shell refresh", () => {
     shell.renderer.destroy();
     setup = undefined;
     expect(outside.listening()).toBe(0);
+  });
+});
+
+describe("Shell workspaces", () => {
+  /** Records what is asked of it; removing asks first, as the real command does. */
+  function fakeManage(tabs = fakeTabs(VIEWS, "mobile-banking")) {
+    const calls: string[] = [];
+    const removeFails = { now: false };
+    const manage: ManageWorkspaces = {
+      add: (folder, name, group) => {
+        calls.push(`add ${folder} ${name} ${group}`);
+        return tabs.activate(VIEWS[1]?.workspace as Workspace);
+      },
+      rename: (workspace, name) => {
+        calls.push(`rename ${workspace.id} ${name}`);
+        return Promise.resolve(ok(undefined));
+      },
+      group: (workspace, group) => {
+        calls.push(`group ${workspace.id} ${group}`);
+        return Promise.resolve(ok(undefined));
+      },
+      remove: (workspace, options) => {
+        if (options?.confirmation === undefined) {
+          const prompt = {
+            title: "Remove workspace",
+            severity: "confirm" as const,
+            details: [{ label: "Workspace", value: workspace.name }],
+            consequence: "XueFu stops tracking this workspace.",
+            confirmLabel: "Remove",
+          };
+          return Promise.resolve(err(confirmationRequired("workspace.remove", prompt, "d")));
+        }
+        calls.push(`remove ${workspace.id}`);
+        return Promise.resolve(
+          removeFails.now ? err(storageError("Unable to save workspaces", "w")) : ok(undefined),
+        );
+      },
+    };
+    return { manage, calls, removeFails, tabs };
+  }
+
+  async function manageShell() {
+    const fake = fakeManage();
+    let reloads = 0;
+    const shell = await renderShell({
+      manage: fake.manage,
+      activateWorkspace: fake.tabs.activate,
+      reload: () => {
+        reloads += 1;
+        return ok({ tabs: fake.tabs.initial, timer: null, work: new Map() });
+      },
+    });
+    return Object.assign(shell, { ...fake, reloads: () => reloads });
+  }
+
+  async function palette(shell: TestRendererSetup, query: string) {
+    await shell.mockInput.typeText(":");
+    await shell.waitForFrame((f) => f.includes(" Commands "));
+    await shell.mockInput.typeText(query);
+    await shell.waitForFrame((f) => f.includes(`: ${query}`));
+    shell.mockInput.pressEnter();
+  }
+
+  async function answer(shell: TestRendererSetup, label: string, text: string) {
+    await shell.waitForFrame((f) => f.includes(label));
+    await shell.mockInput.typeText(text);
+    shell.mockInput.pressEnter();
+  }
+
+  test("the palette offers to add one and to change the one in front", async () => {
+    const shell = await manageShell();
+    await shell.mockInput.typeText(":");
+    const frame = await shell.waitForFrame((f) => f.includes(" Commands "));
+    for (const title of [
+      "Add workspace…",
+      "Rename Mobile Banking…",
+      "Move Mobile Banking to a group…",
+      "Take Mobile Banking out of Banking Client",
+      "Remove Mobile Banking",
+    ]) {
+      expect(frame).toContain(title);
+    }
+  });
+
+  test("without the means to, the palette offers none of it", async () => {
+    const shell = await renderShell();
+    await shell.mockInput.typeText(":");
+    const frame = await shell.waitForFrame((f) => f.includes(" Commands "));
+    expect(frame).not.toContain("Add workspace");
+    expect(frame).not.toContain("Rename");
+  });
+
+  test("renaming, grouping and ungrouping read the tabs again", async () => {
+    const shell = await manageShell();
+    await palette(shell, "rename");
+    await answer(shell, "e.g. Mobile Banking", "Mobile");
+    await shell.waitForFrame((f) => !f.includes(" Rename Mobile Banking "));
+    await palette(shell, "move mobile");
+    await answer(shell, "e.g. Banking Client", "Client");
+    await shell.waitForFrame((f) => !f.includes(" Move Mobile Banking to a group "));
+    await palette(shell, "take mobile");
+    await shell.waitForFrame((f) => !f.includes(" Commands "));
+    expect(shell.calls).toEqual([
+      "rename mobile-banking Mobile",
+      "group mobile-banking Client",
+      "group mobile-banking null",
+    ]);
+    expect(shell.reloads()).toBe(3);
+  });
+
+  test("adding opens the new workspace in a tab", async () => {
+    const shell = await manageShell();
+    await palette(shell, "add workspace");
+    await answer(shell, "Folder", "~/Projects/sdk");
+    await answer(shell, "Name (optional)", "");
+    await answer(shell, "Group (optional)", "Client");
+    await shell.waitForFrame((f) => header(f).includes(" 2 deployd "));
+    expect(shell.calls).toEqual(["add ~/Projects/sdk null Client"]);
+  });
+
+  test("the switcher's keys change the highlighted workspace, its fields asked in the palette", async () => {
+    const shell = await manageShell();
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    await shell.mockInput.typeText("auth");
+    await shell.waitForFrame((f) => f.includes("1 of 3"));
+    shell.mockInput.pressKey("r", { ctrl: true });
+    const frame = await shell.waitForFrame((f) => f.includes(" Rename Auth Service "));
+    expect(frame).not.toContain("Switch workspace");
+    expect(frame).toContain("esc close");
+    await shell.mockInput.typeText("Auth");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => !f.includes(" Rename Auth Service "));
+    expect(shell.calls).toEqual(["rename auth-service Auth"]);
+
+    // Esc leaves the fields without changing anything, and the palette opens on its list again.
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    shell.mockInput.pressKey("a", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes(" Add workspace "));
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Add workspace "));
+    await shell.mockInput.typeText(":");
+    await shell.waitForFrame((f) => f.includes(" Commands "));
+  });
+
+  test("removing asks first; declined, nothing is removed", async () => {
+    const shell = await manageShell();
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Switch workspace"));
+    shell.mockInput.pressKey("d", { ctrl: true });
+    const asked = await shell.waitForFrame((f) => f.includes("Remove workspace?"));
+    expect(asked).not.toContain("Switch workspace");
+    // The cockpit's keys wait for the answer.
+    shell.mockInput.pressKey("j");
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes("Remove workspace?"));
+    expect(showing("Dashboard")(shell.captureCharFrame())).toBe(true);
+    expect(shell.calls).toEqual([]);
+
+    await palette(shell, "remove");
+    await shell.waitForFrame((f) => f.includes("Remove workspace?"));
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame(() => shell.calls.length === 1);
+    expect(shell.calls).toEqual(["remove mobile-banking"]);
+  });
+
+  test("a removal that fails is reported", async () => {
+    const shell = await manageShell();
+    shell.removeFails.now = true;
+    await palette(shell, "remove");
+    await shell.waitForFrame((f) => f.includes("Remove workspace?"));
+    shell.mockInput.pressKey("y");
+    await shell.waitForFrame((f) => f.includes("✗ Unable to save workspaces"));
+  });
+
+  test("with no workspace in front, the switcher's keys only add", async () => {
+    const fake = fakeManage(fakeTabs(VIEWS));
+    const shell = await renderShell({
+      manage: fake.manage,
+      tabs: fake.tabs.initial,
+      loadWorkspaces: () => Promise.resolve(ok([])),
+    });
+    shell.mockInput.pressKey("w", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes("Add one with ctrl+a"));
+    shell.mockInput.pressKey("r", { ctrl: true });
+    await shell.renderOnce();
+    expect(shell.captureCharFrame()).toContain("Switch workspace");
+    await shell.mockInput.typeText(":");
+    await shell.renderOnce();
+    shell.mockInput.pressKey("a", { ctrl: true });
+    await shell.waitForFrame((f) => f.includes(" Add workspace "));
   });
 });
 

@@ -12,6 +12,7 @@ import { Highlighted } from "../highlighted";
 import { cycle, scrollOffset } from "../list-navigation";
 import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
 import { queryActionFor } from "../query-input/keys";
+import type { WorkspaceChange } from "../shell/workspace-entries";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { type SwitcherRow, switcherRows } from "./switcher-model";
@@ -24,7 +25,20 @@ export interface SwitcherProps {
   /** Switches to the workspace; on failure the switcher stays open and shows the error. */
   readonly onChoose: (workspace: Workspace) => Promise<Result<unknown, AppError>>;
   readonly onClose: () => void;
+  /**
+   * Adds a workspace, or renames, groups or removes the highlighted one; without it the switcher
+   * only switches.
+   */
+  readonly onChange?: ((change: WorkspaceChange, workspace: Workspace | null) => void) | undefined;
 }
+
+/** Ctrl and a letter, as the query takes every plain key. */
+const CHANGE_KEYS: Readonly<Record<string, WorkspaceChange>> = {
+  a: "add",
+  r: "rename",
+  g: "group",
+  d: "remove",
+};
 
 type WorkspaceRow = Extract<SwitcherRow, { kind: "workspace" }>;
 const isWorkspaceRow = (row: SwitcherRow): row is WorkspaceRow => row.kind === "workspace";
@@ -70,6 +84,11 @@ export function Switcher(props: SwitcherProps) {
   };
 
   useKeyboard((key) => {
+    const change = key.ctrl && !key.meta ? CHANGE_KEYS[key.name] : undefined;
+    if (change !== undefined && props.onChange !== undefined) {
+      props.onChange(change, choices()[selected()]?.view.workspace ?? null);
+      return;
+    }
     const action = queryActionFor(key);
     if (action === null) return;
     switch (action.kind) {
@@ -134,7 +153,11 @@ export function Switcher(props: SwitcherProps) {
             {(error: Accessor<AppError>) => <ErrorLine error={error()} ascii={ascii()} />}
           </Match>
           <Match when={views().length === 0}>
-            <text fg={PALETTE.textMuted}>No workspaces yet. Add one with:</text>
+            <text fg={PALETTE.textMuted}>
+              {props.onChange === undefined
+                ? "No workspaces yet. Add one with:"
+                : "No workspaces yet. Add one with ctrl+a, or:"}
+            </text>
             <text fg={PALETTE.text}>{"  xuefu workspace add [path]"}</text>
           </Match>
           <Match when={rows().length === 0}>
@@ -192,6 +215,9 @@ export function Switcher(props: SwitcherProps) {
         {ascii() ? "up/down move" : "↑↓ move"}
         {"  enter switch  esc close"}
       </text>
+      <Show when={props.onChange !== undefined}>
+        <text fg={PALETTE.textMuted}>{"^a add  ^r rename  ^g group  ^d remove"}</text>
+      </Show>
     </Dialog>
   );
 }

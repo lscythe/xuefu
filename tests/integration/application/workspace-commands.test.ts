@@ -249,6 +249,27 @@ describe("workspace.group.assign", () => {
   });
 });
 
+describe("workspace.rename", () => {
+  beforeEach(async () => {
+    probe.dir("/work/a");
+    await bus.dispatch("workspace.add", { path: "/work/a" });
+  });
+
+  test("changes the name and records what it was", async () => {
+    const renamed = await bus.dispatch("workspace.rename", { id: "a", name: " Alpha " });
+    expect(renamed).toMatchObject({ ok: true, value: { id: "a", name: "Alpha" } });
+    expect(ledgerTypes()).toEqual(["WorkspaceAdded", "WorkspaceRenamed"]);
+  });
+
+  test("an unknown workspace is not found", async () => {
+    expectError(await bus.dispatch("workspace.rename", { id: "ghost", name: "x" }), "not-found");
+  });
+
+  test("a blank name is a validation error", async () => {
+    expectError(await bus.dispatch("workspace.rename", { id: "a", name: " " }), "validation");
+  });
+});
+
 describe("workspace tabs", () => {
   beforeEach(async () => {
     probe.dir("/work/a").dir("/work/b").dir("/work/c");

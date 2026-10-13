@@ -234,6 +234,39 @@ describe("Switcher", () => {
     expect(frame).toContain("xuefu workspace add");
   });
 
+  test("ctrl and a letter add, or rename, group or remove the highlighted workspace", async () => {
+    const changes: [string, string | null][] = [];
+    const screen = await renderSwitcher({
+      onChange: (change, workspace) => changes.push([change, workspace?.id ?? null]),
+    });
+    expect(screen.frame()).toContain("^a add  ^r rename  ^g group  ^d remove");
+    for (const key of ["a", "r", "g", "d"]) screen.mockInput.pressKey(key, { ctrl: true });
+    await screen.type("zzz");
+    screen.mockInput.pressKey("r", { ctrl: true });
+    expect(changes).toEqual([
+      ["add", "mobile-banking"],
+      ["rename", "mobile-banking"],
+      ["group", "mobile-banking"],
+      ["remove", "mobile-banking"],
+      ["rename", null],
+    ]);
+    expect(screen.frame()).toContain("> zzz");
+  });
+
+  test("without the means to change workspaces, those keys do nothing", async () => {
+    const screen = await renderSwitcher();
+    expect(screen.frame()).not.toContain("^a add");
+    screen.mockInput.pressKey("r", { ctrl: true });
+    await screen.renderOnce();
+    expect(screen.closed()).toBe(0);
+    screen.renderer.destroy();
+    const empty = await renderSwitcher({
+      load: () => Promise.resolve<Loaded>(ok([])),
+      onChange: () => undefined,
+    });
+    expect(empty.frame()).toContain("No workspaces yet. Add one with ctrl+a, or:");
+  });
+
   test("a failed load shows the error instead of a list", async () => {
     const failed = err(storageError("Unable to read workspaces", "workspaces.read"));
     const frame = (await renderSwitcher({ load: () => Promise.resolve<Loaded>(failed) })).frame();

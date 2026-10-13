@@ -14,6 +14,7 @@ import {
   type WorkspaceAddedPayload,
   type WorkspaceGroupAssignedPayload,
   type WorkspaceRemovedPayload,
+  type WorkspaceRenamedPayload,
 } from "../workspace/events";
 
 /** Every event XueFu records, for reading the ledger back. */
@@ -58,6 +59,8 @@ const DESCRIPTIONS: Readonly<Record<string, (payload: never) => ActivityDescript
   WorkspaceRemoved: (p: WorkspaceRemovedPayload) => said("Removed", null, p.path),
   WorkspaceGroupAssigned: (p: WorkspaceGroupAssignedPayload) =>
     p.group === null ? said("Taken out of its group") : said("Moved to group", name(p.group)),
+  WorkspaceRenamed: (p: WorkspaceRenamedPayload) =>
+    said("Renamed to", name(p.name), `was ${p.from}`),
   WorkspaceActivated: () => said("Opened"),
   WorkspaceTabClosed: () => said("Closed its tab"),
   WorkStarted: (p: WorkStartedPayload) => said("Started work on", issue(p.issueKey), p.title),
