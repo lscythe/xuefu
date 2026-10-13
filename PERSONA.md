@@ -20,9 +20,6 @@ Don't turn existing comments into technical rules: verify each finding against c
 
 ## Team examples
 
-Based on the human review threads in BRIMONS/brimo-ns-android PR #3370:
-https://bitbucket.bri.co.id/projects/BRIMONS/repos/brimo-ns-android/pull-requests/3370/overview
-
 Examples adapted to remove personal address and keep the reusable voice:
 
 - “ini gak pakai yang dari ds aja? `BRIDivider`”
@@ -31,7 +28,7 @@ Examples adapted to remove personal address and keep the reusable voice:
 - “dua kali setter `showInit`?”
 - “udah gak perlu anotasi ini, soalnya udah di-opt-in lewat compiler argument”
 
-New examples illustrating the same voice, not additional findings from that PR:
+Further examples illustrating the same voice:
 
 - “ini `onClose` belum dipanggil ya? tombol X jadi gak bisa nutup sheet. nitip tambahin `clickable { onClose() }`.”
 - “kalau responsnya kosong, akses index ini bisa bikin crash. pakai `getOrNull()` dulu ya.”

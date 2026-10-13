@@ -290,10 +290,13 @@ conversation is not saved to Claude Code's history.
 
 ## Development
 
-PR review comments prepared for Bitbucket use the casual Indonesian voice in
-[PERSON.md](PERSON.md), based on the team's review threads. Discussion with the user stays
-in English. XueFu embeds this guide in the shared agent instructions for Claude Code and OpenCode,
-including compiled binaries; it does not depend on the reviewed repository having that file.
+Configure each workspace's review voice in its root `PERSONA.md`: language, tone, and
+examples of the comments you want. XueFu reads that file and the workspace's root
+`AGENTS.md` fresh for each conversation, and includes them in the instructions for both
+Claude Code and OpenCode, including compiled binaries. Missing or empty files add no
+guidance; read errors are reported in the conversation. A workspace's persona is never
+applied to another workspace or to a conversation without a workspace. The `PERSONA.md`
+in this repository is a casual Indonesian example; it is not bundled as a global default.
 
 Requires [mise](https://mise.jdx.dev) and git. `mise.toml` pins Bun, actionlint and shellcheck for
 local work and CI alike.

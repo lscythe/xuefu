@@ -18,6 +18,7 @@ import type {
   CodeGraphSetup,
   ProjectBrief,
   ProjectBriefs,
+  WorkspaceGuidance,
 } from "../application/ports/project-context";
 import { type McpTools, mcpReply } from "../cli/mcp-server";
 import type { McpTool } from "../cli/mcp-tools";
@@ -111,6 +112,7 @@ export interface AgentHostOptions {
   readonly setup: CodeGraphSetup | null;
   /** What the agent learned of each workspace, kept between conversations. */
   readonly briefs: ProjectBriefs;
+  readonly guidance: WorkspaceGuidance;
   /** An empty folder the agent works in when no workspace holds the code it is asked about. */
   readonly elsewhere: AbsolutePath;
   /** Checks out the branch a question names, such as a pull request's, for the conversation. */
@@ -453,6 +455,14 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         }
         const withGraph = servers.length > 0;
 
+        const readGuidance = (name: "AGENTS.md" | "PERSONA.md") => {
+          const read = options.guidance.read(workspace.path, name);
+          if (!read.ok) step(read.error.message, true);
+          return read.ok ? read.value : null;
+        };
+        const agents = readGuidance("AGENTS.md");
+        const persona = readGuidance("PERSONA.md");
+
         const kept = options.briefs.find(workspace.id);
         if (!kept.ok)
           step(`What ${runner.name} learned could not be read: ${kept.error.message}`, true);
@@ -464,7 +474,13 @@ export function agentHost(options: AgentHostOptions): AgentHost {
           step(
             `Studying ${workspace.name} first; what ${runner.name} learns is kept for next time.`,
           );
-          const studied = await study(launch(studyPrompt(withGraph), INSTRUCTIONS, servers));
+          const studied = await study(
+            launch(
+              studyPrompt(withGraph),
+              instructionsFor(workspace, null, false, now, persona, agents),
+              servers,
+            ),
+          );
           current = null;
           if (ended) return;
           if (studied.text === null) {
@@ -494,7 +510,14 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         const later = options.clock.now();
         converse(
           question.prompt,
-          instructionsFor(workspace, freshBrief(brief, later) ? brief : null, withGraph, later),
+          instructionsFor(
+            workspace,
+            freshBrief(brief, later) ? brief : null,
+            withGraph,
+            later,
+            persona,
+            agents,
+          ),
           servers,
         );
       })();

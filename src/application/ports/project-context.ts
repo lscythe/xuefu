@@ -1,5 +1,6 @@
 import type { FileSystemError } from "../../domain/shared/errors";
 import type { WorkspaceId } from "../../domain/shared/ids";
+import type { AbsolutePath } from "../../domain/shared/path";
 import type { Result } from "../../domain/shared/result";
 import type { Timestamp } from "../../domain/shared/time";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -51,4 +52,11 @@ export interface ProjectBrief {
 export interface ProjectBriefs {
   find(workspace: WorkspaceId): Result<ProjectBrief | null, FileSystemError>;
   save(brief: ProjectBrief): Result<void, FileSystemError>;
+}
+
+export interface WorkspaceGuidance {
+  read(
+    root: AbsolutePath,
+    name: "AGENTS.md" | "PERSONA.md",
+  ): Result<string | null, FileSystemError>;
 }
