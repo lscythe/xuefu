@@ -4,6 +4,7 @@ import type { AppError } from "../../../application/errors";
 import type { Result } from "../../../domain/shared/result";
 import type { Timestamp } from "../../../domain/shared/time";
 import { wallClock } from "../../../domain/shared/wall-clock";
+import { markdownLines } from "../../../tui/agent/styled-text";
 import { Dialog, readingWidth } from "../../../tui/dialog";
 import { truncateToWidth } from "../../../tui/shell/tab-labels";
 import { PALETTE, type PaletteToken } from "../../../tui/theme/palette";
@@ -118,7 +119,7 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
   });
   const description = createMemo(() => {
     const text = props.pull.description?.trim() ?? "";
-    return text === "" ? [] : wrapText(text, inner());
+    return text === "" ? [] : markdownLines(text, inner(), props.icons === "ascii");
   });
   const room = () =>
     Math.max(
@@ -207,7 +208,24 @@ export function PullRequestDialog(props: PullRequestDialogProps) {
       >
         <box height={Math.min(room(), description().length)} flexDirection="column">
           <For each={description().slice(top(), top() + room())}>
-            {(line) => <text fg={PALETTE.text}>{line === "" ? " " : line}</text>}
+            {(line) => (
+              <text fg={PALETTE.text}>
+                {line.length === 0 ? (
+                  " "
+                ) : (
+                  <For each={line}>
+                    {(span) => {
+                      const text = () => (span.italic ? <i>{span.text}</i> : span.text);
+                      return (
+                        <span style={{ fg: PALETTE[span.tone] }}>
+                          {span.bold ? <b>{text()}</b> : text()}
+                        </span>
+                      );
+                    }}
+                  </For>
+                )}
+              </text>
+            )}
           </For>
         </box>
       </Show>

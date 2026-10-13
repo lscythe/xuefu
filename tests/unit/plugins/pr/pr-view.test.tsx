@@ -149,6 +149,34 @@ const lit = (view: TestRendererSetup) =>
     .join("");
 
 describe("prView", () => {
+  test("long authors fit the list and remain readable in details", async () => {
+    const author = "Wahyu Dwi Hartarto With A Long Name";
+    const pull = pullRequest(42, { author, title: "Fix cancellation" });
+    const view = await render(fakePullRequests({ yours: [pull] }), { focused: true });
+    const frame = await until(view, (f) => f.includes("Yours (1)"));
+    expect(frame).toContain("Wahyu Dwi Hartar…");
+    expect(frame).toContain("Fix cancellation");
+    expect(frame).not.toContain(author);
+    view.mockInput.pressEnter();
+    const details = await until(view, (f) => f.includes("Author"));
+    expect(details).toContain(author);
+  });
+  test("renders the details description as Markdown", async () => {
+    const pull = pullRequest(42, {
+      description:
+        "# Description\n\n**Migration** to `PinActivity`.\n\n- Keep cancellation safe\n\n> Check the retry path\n\n```kotlin\nfinish()\n```",
+    });
+    const view = await render(fakePullRequests({ yours: [pull] }), { focused: true });
+    await until(view, (f) => f.includes("Yours (1)"));
+    view.mockInput.pressEnter();
+    const frame = await until(view, (f) => f.includes("Description"));
+    expect(frame).toContain("Migration to PinActivity.");
+    expect(frame).not.toContain("# Description");
+    expect(frame).not.toContain("**Migration**");
+    expect(frame).not.toContain("```kotlin");
+    expect(frame).toContain("• Keep cancellation safe");
+    expect(frame).toContain("▎ Check the retry path");
+  });
   test("this branch's pull request, yours, and those to review, with the count to review", async () => {
     const view = await render(fakePullRequests({ yours: YOURS, toReview: TO_REVIEW }));
     const frame = await until(
@@ -158,9 +186,9 @@ describe("prView", () => {
     const lines = frame.split("\n").map((line) => line.trimEnd());
     expect(lines.slice(0, 2)).toEqual([
       "This branch",
-      "mobile-banking#42  0/1 approved  Add biometric login",
+      "mobile-banking#42  0/1 approved  Dana Scully  Add biometric login",
     ]);
-    expect(frame).toContain("mobile-banking#40  needs work    Fix rotate crash");
+    expect(frame).toContain("mobile-banking#40  needs work    Dana Scully  Fix rotate crash");
     expect(view.statuses.at(-1)).toBe("1 to review");
     expect(view.checkoutsRead).toEqual(["/work/mobile"]);
   });

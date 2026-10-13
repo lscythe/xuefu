@@ -54,8 +54,11 @@
 <rect x="342" y="72" width="108" height="18" fill="#171525"/>
 <text x="342 351 360 378 387 396 405 414 423 432 441" y="86" fill="#454752">1/2approved</text>
 <rect x="450" y="72" width="18" height="18" fill="#171525"/>
-<rect x="468" y="72" width="414" height="18" fill="#171525"/>
-<text x="468 477 486 495 504 513 522 531 549 558 567 585 594 603 612 621 630 639 648 657 675 684 693 702 711" y="86" fill="#626369">MOB-2841Addbiometriclogin</text>
+<rect x="468" y="72" width="108" height="18" fill="#171525"/>
+<text x="468 477 486 495 513 522 531 540 549 558" y="86" fill="#454752">DanaScully</text>
+<rect x="576" y="72" width="18" height="18" fill="#171525"/>
+<rect x="594" y="72" width="288" height="18" fill="#171525"/>
+<text x="594 603 612 621 630 639 648 657 675 684 693 711 720 729 738 747 756 765 774 783 801 810 819 828 837" y="86" fill="#626369">MOB-2841Addbiometriclogin</text>
 <rect x="882" y="72" width="9" height="18" fill="#0d0d12"/>
 <rect x="891" y="72" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="86" fill="#6d4b34">│</text>
@@ -108,9 +111,12 @@
 <rect x="342" y="126" width="108" height="18" fill="#0d0d12"/>
 <text x="342 351 360 378 387 396 405 414 423 432 441" y="140" fill="#454752">1/2approved</text>
 <rect x="450" y="126" width="18" height="18" fill="#0d0d12"/>
-<rect x="468" y="126" width="252" height="18" fill="#0d0d12"/>
-<text x="468 477 486 495 504 513 522 531 549 558 567 585 594 603 612 621 630 639 648 657 675 684 693 702 711" y="140" fill="#626369">MOB-2841Addbiometriclogin</text>
-<rect x="720" y="126" width="171" height="18" fill="#0d0d12"/>
+<rect x="468" y="126" width="108" height="18" fill="#0d0d12"/>
+<text x="468 477 486 495 513 522 531 540 549 558" y="140" fill="#454752">DanaScully</text>
+<rect x="576" y="126" width="18" height="18" fill="#0d0d12"/>
+<rect x="594" y="126" width="252" height="18" fill="#0d0d12"/>
+<text x="594 603 612 621 630 639 648 657 675 684 693 711 720 729 738 747 756 765 774 783 801 810 819 828 837" y="140" fill="#626369">MOB-2841Addbiometriclogin</text>
+<rect x="846" y="126" width="45" height="18" fill="#0d0d12"/>
 <rect x="891" y="126" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="140" fill="#6d4b34">│</text>
 <rect x="0" y="144" width="9" height="18" fill="#0d0d12"/>
@@ -127,8 +133,11 @@
 <rect x="342" y="144" width="108" height="18" fill="#0d0d12"/>
 <text x="342 351 360 378 387 396 405 414 423 432 441" y="158" fill="#405f4a">2/2approved</text>
 <rect x="450" y="144" width="18" height="18" fill="#0d0d12"/>
-<rect x="468" y="144" width="414" height="18" fill="#0d0d12"/>
-<text x="468 477 486 495 504 513 522 531 549 558 567 576 585 594 603 621 630 639 657 666 675 684 693 702 711 720 729 738 756 765 774 783 792 810 819 837 846 855 864 873" y="158" fill="#626369">MOB-2755UpgradethenetworkingstacktoOkHt…</text>
+<rect x="468" y="144" width="108" height="18" fill="#0d0d12"/>
+<text x="468 477 486 495 513 522 531 540 549 558" y="158" fill="#454752">DanaScully</text>
+<rect x="576" y="144" width="18" height="18" fill="#0d0d12"/>
+<rect x="594" y="144" width="288" height="18" fill="#0d0d12"/>
+<text x="594 603 612 621 630 639 648 657 675 684 693 702 711 720 729 747 756 765 783 792 801 810 819 828 837 846 855 864 873" y="158" fill="#626369">MOB-2755Upgradethenetworking…</text>
 <rect x="882" y="144" width="9" height="18" fill="#0d0d12"/>
 <rect x="891" y="144" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="158" fill="#6d4b34">│</text>
@@ -188,7 +197,7 @@
 <rect x="729" y="198" width="9" height="18" fill="#272939"/>
 <text x="729" y="212" fill="#f2a774">│</text>
 <rect x="738" y="198" width="144" height="18" fill="#0d0d12"/>
-<text x="738 747 765 774 783 801 810 819 828 837 846 855 864 873" y="212" fill="#626369">ngthetransfer…</text>
+<text x="738 747 765 774 783 792 810 819 828 837 846 855 864 873" y="212" fill="#626369">shwhenrotatin…</text>
 <rect x="882" y="198" width="9" height="18" fill="#0d0d12"/>
 <rect x="891" y="198" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="212" fill="#6d4b34">│</text>
@@ -209,9 +218,9 @@
 <rect x="558" y="216" width="171" height="18" fill="#272939"/>
 <rect x="729" y="216" width="9" height="18" fill="#272939"/>
 <text x="729" y="230" fill="#f2a774">│</text>
-<rect x="738" y="216" width="117" height="18" fill="#0d0d12"/>
-<text x="738 747 756 765 783 792 801 810 819 828 837 846" y="230" fill="#626369">reshcallback</text>
-<rect x="855" y="216" width="36" height="18" fill="#0d0d12"/>
+<rect x="738" y="216" width="144" height="18" fill="#0d0d12"/>
+<text x="738 747 765 774 783 792 801 810 819 837 846 855 864 873" y="230" fill="#626369">hesessionrefr…</text>
+<rect x="882" y="216" width="9" height="18" fill="#0d0d12"/>
 <rect x="891" y="216" width="9" height="18" fill="#0d0d12"/>
 <text x="891" y="230" fill="#6d4b34">│</text>
 <rect x="0" y="234" width="9" height="18" fill="#0d0d12"/>

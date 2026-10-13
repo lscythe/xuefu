@@ -316,7 +316,9 @@ export function prView(section: PrSection): Component<SectionProps> {
       return all.slice(top, top + listRows()).map((row) => ({ row, chosen: row === chosen }));
     };
     const columns = () => prColumns(rows());
-    const titleWidth = () => Math.max(1, props.width - columns().ref - columns().reviews - 4);
+    const authorWidth = () => Math.min(columns().author, Math.max(1, Math.floor(props.width / 4)));
+    const titleWidth = () =>
+      Math.max(1, props.width - columns().ref - columns().reviews - authorWidth() - 6);
 
     return (
       <>
@@ -376,6 +378,10 @@ export function prView(section: PrSection): Component<SectionProps> {
                     <span style={{ bg }}>{"  "}</span>
                     <span style={{ fg: PALETTE[review.tone], bg }}>
                       {padded(review.text, columns().reviews)}
+                    </span>
+                    <span style={{ bg }}>{"  "}</span>
+                    <span style={{ fg: PALETTE.textMuted, bg }}>
+                      {padded(truncateToWidth(row.pull.author, authorWidth()), authorWidth())}
                     </span>
                     <span style={{ bg }}>{"  "}</span>
                     <span style={{ fg: chosen ? PALETTE.selectionFg : PALETTE.text, bg }}>

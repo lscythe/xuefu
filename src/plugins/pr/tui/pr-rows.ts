@@ -73,11 +73,16 @@ export function prRows(lists: PrLists): PrRow[] {
   ];
 }
 
-/** Columns for the ref and reviews, wide enough for every pull request listed. */
-export function prColumns(rows: readonly PrRow[]): { ref: number; reviews: number } {
+/** Natural widths for the ref, reviews, and author; the view budgets the available space. */
+export function prColumns(rows: readonly PrRow[]): {
+  ref: number;
+  reviews: number;
+  author: number;
+} {
   const pulls = rows.filter((row): row is PullRow => row.kind === "pull").map((row) => row.pull);
   return {
     ref: Math.max(0, ...pulls.map((pull) => Bun.stringWidth(shortRef(pull)))),
     reviews: Math.max(0, ...pulls.map((pull) => reviewBadge(pull).text.length)),
+    author: Math.max(0, ...pulls.map((pull) => Bun.stringWidth(pull.author))),
   };
 }

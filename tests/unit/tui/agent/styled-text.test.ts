@@ -10,6 +10,15 @@ const plain = (rows: readonly StyledLine[]) =>
   rows.map((row) => row.map((span) => span.text).join(""));
 
 describe("inlineSpans", () => {
+  test("links retain their label and destination, with emphasis rendered", () => {
+    expect(inlineSpans("See [design](https://example.test/design) and *retry*.", "text")).toEqual([
+      { tone: "text", text: "See " },
+      { tone: "accentSecondary", text: "design (https://example.test/design)" },
+      { tone: "text", text: " and " },
+      { tone: "text", italic: true, text: "retry" },
+      { tone: "text", text: "." },
+    ]);
+  });
   test("code, bold, and a file and line stand out of the text around them", () => {
     expect(
       inlineSpans("Await `authenticate()` in **Login.kt** at app/src/Login.kt:11.", "text"),

@@ -205,7 +205,8 @@ const YOUR_PULLS = [
     comments: 3,
     openTodos: 1,
     description: [
-      "Adds Face ID and fingerprint unlock to the login screen.",
+      "## Description",
+      "Adds **Face ID** and fingerprint unlock to the `login` screen.",
       "",
       "- Falls back to the PIN after three failed attempts",
       "- Behind the `biometrics` feature flag, off by default",
