@@ -28,7 +28,9 @@ export const POST_TOOL = {
           properties: {
             file: {
               type: "string",
-              description: "the file's whole path, as the diff names it after b/; never shortened",
+              description:
+                "the file's whole path, as the diff names it after b/ or dst://, without either; " +
+                "never shortened",
             },
             line: {
               type: "integer",

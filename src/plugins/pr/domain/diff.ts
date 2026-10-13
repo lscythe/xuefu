@@ -78,14 +78,16 @@ function runs(numbers: readonly number[]): string {
 /**
  * Where a comment on line `line` of `path` goes: in the file after, or with `side` "old" on a
  * removed line of the file before. A path cut short, as agents write them, such as
- * "feature/…/Login.kt" or one without "src/main/java", is taken for the one file it fits.
+ * "feature/…/Login.kt" or one without "src/main/java", is taken for the one file it fits; so is
+ * one with Bitbucket's src:// or dst:// before it, as its diff names files.
  */
 export function placeComment(
   files: readonly DiffFile[],
-  path: string,
+  asked: string,
   line: number,
   side: "old" | "new",
 ): Placement {
+  const path = asked.replace(/^(?:src|dst):\/\//, "");
   const wanted = segments(path);
   const named = files.filter((candidate) =>
     [candidate.to, candidate.from].some(
@@ -157,14 +159,18 @@ export function placementProblem(
 
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
-/** A path as git writes it after a/ or b/, unquoted; null for /dev/null. */
-function gitPath(raw: string, prefix: "a/" | "b/"): string | null {
+/** What a diff puts before a file's path, before and after: git's own, and Bitbucket's. */
+const PREFIXES = { from: ["a/", "src://"], to: ["b/", "dst://"] } as const;
+
+/** A path as a diff writes it, without its prefix, unquoted; null for /dev/null. */
+function gitPath(raw: string, side: keyof typeof PREFIXES): string | null {
   let path = raw.trim();
   if (path.startsWith('"') && path.endsWith('"')) {
     path = path.slice(1, -1).replace(/\\(["\\])/g, "$1");
   }
   if (path === "/dev/null") return null;
-  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+  const prefix = PREFIXES[side].find((each) => path.startsWith(each));
+  return prefix === undefined ? path : path.slice(prefix.length);
 }
 
 interface Building {
@@ -176,7 +182,8 @@ interface Building {
 }
 
 /**
- * Reads a unified diff as git writes it. Each hunk takes as many lines as its heading counts, so a
+ * Reads a unified diff as git writes it, or as Bitbucket does, its paths after src:// and dst://
+ * where git's are after a/ and b/. Each hunk takes as many lines as its heading counts, so a
  * removed line that reads like a header is still read as a line.
  */
 export function parseDiff(text: string): DiffFile[] {
@@ -218,15 +225,15 @@ export function parseDiff(text: string): DiffFile[] {
       continue;
     }
     if (line.startsWith("diff --git ")) {
-      const paths = /^diff --git (a\/.*) (b\/.*)$/.exec(line);
-      file = start(gitPath(paths?.[1] ?? "", "a/"), gitPath(paths?.[2] ?? "", "b/"));
+      const paths = /^diff --git ((?:a\/|src:\/\/).*) ((?:b\/|dst:\/\/).*)$/.exec(line);
+      file = start(gitPath(paths?.[1] ?? "", "from"), gitPath(paths?.[2] ?? "", "to"));
     } else if (line.startsWith("--- ")) {
       // A diff without git's own headings starts each file here.
       if (file === null || file.hunks.length > 0) file = start(null, null);
-      file.from = gitPath(line.slice(4).split("\t")[0] ?? "", "a/");
+      file.from = gitPath(line.slice(4).split("\t")[0] ?? "", "from");
       if (file.from === null) file.change = "added";
     } else if (line.startsWith("+++ ") && file !== null) {
-      file.to = gitPath(line.slice(4).split("\t")[0] ?? "", "b/");
+      file.to = gitPath(line.slice(4).split("\t")[0] ?? "", "to");
       if (file.to === null) file.change = "deleted";
     } else if (file !== null && line.startsWith("new file mode")) {
       file.change = "added";
