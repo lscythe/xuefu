@@ -42,6 +42,7 @@ import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
 import { gitCheckout } from "../infrastructure/agent/branch-checkout";
 import { briefFiles } from "../infrastructure/agent/brief-files";
+import { choiceFile } from "../infrastructure/agent/choice-file";
 import { claudeCode } from "../infrastructure/agent/claude-code";
 import { findGraf, grafGraph, grafSetup } from "../infrastructure/agent/graf";
 import type { ConfigSource } from "../infrastructure/config/load-config";
@@ -682,17 +683,19 @@ async function runPluginCommand(
 }
 
 /**
- * Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit. With
- * graf on PATH too, it also gets a graph of the workspace's code.
+ * Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit, on
+ * the model chosen. With graf on PATH too, it also gets a graph of the workspace's code.
  */
 function cockpitAgent(app: App, out: Output): AgentHost | null {
   const PATH = out.runtime.env["PATH"] ?? "";
-  const command = Bun.which("claude", { PATH });
-  if (command === null) return null;
+  const claude = Bun.which("claude", { PATH });
+  if (claude === null) return null;
+  const elsewhere = emptyFolder(join(app.paths.dataDir, "agent"));
   const graf = findGraf(PATH, out.runtime.home);
   const cacheDir = join(app.paths.dataDir, "graf");
   return agentHost({
-    runner: claudeCode({ command, env: out.runtime.env, model: null }),
+    runners: [claudeCode({ command: claude, env: out.runtime.env })],
+    choices: choiceFile(join(app.paths.dataDir, "agent.json")),
     tools: agentTools(app, out),
     graph: graf === null ? null : grafGraph({ command: graf, processes: app.processes, cacheDir }),
     setup:
@@ -706,7 +709,7 @@ function cockpitAgent(app: App, out: Output): AgentHost | null {
           })
         : null,
     briefs: briefFiles(join(app.paths.dataDir, "briefs")),
-    elsewhere: emptyFolder(join(app.paths.dataDir, "agent")),
+    elsewhere,
     checkout: gitCheckout(app.processes),
     clock: systemClock,
   });

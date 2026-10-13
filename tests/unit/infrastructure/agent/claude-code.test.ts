@@ -25,13 +25,14 @@ const LAUNCH: AgentLaunch = {
   readTools: ["pr_diff", "pr_comments"],
   approvalTool: "approval",
   servers: [],
+  model: null,
 };
 
 const line = (message: object) => JSON.stringify(message);
 
 describe("claudeArgs", () => {
   test("headless, stream JSON both ways, XueFu's tools alone, reads free, the rest asked", () => {
-    const args = claudeArgs(LAUNCH, null);
+    const args = claudeArgs(LAUNCH);
     const after = (flag: string) => args[args.indexOf(flag) + 1];
     expect(args.slice(0, 6)).toEqual([
       "-p",
@@ -59,17 +60,14 @@ describe("claudeArgs", () => {
     // Nothing bypasses asking.
     expect(args.join(" ")).not.toContain("bypass");
     expect(args).not.toContain("--model");
-    expect(claudeArgs(LAUNCH, "opus").slice(-2)).toEqual(["--model", "opus"]);
+    expect(claudeArgs({ ...LAUNCH, model: "opus" }).slice(-2)).toEqual(["--model", "opus"]);
   });
 
   test("the read-only servers it is given run over stdio, every tool of theirs free", () => {
-    const args = claudeArgs(
-      {
-        ...LAUNCH,
-        servers: [{ name: "graf", command: "/bin/graf", args: ["serve", "--db", "/g"] }],
-      },
-      null,
-    );
+    const args = claudeArgs({
+      ...LAUNCH,
+      servers: [{ name: "graf", command: "/bin/graf", args: ["serve", "--db", "/g"] }],
+    });
     const after = (flag: string) => args[args.indexOf(flag) + 1];
     expect(JSON.parse(after("--mcp-config") ?? "").mcpServers.graf).toEqual({
       type: "stdio",
@@ -220,15 +218,19 @@ function converse(
   const runner = claudeCode({
     command: options.command ?? fake.command,
     env: { ...process.env, BITBUCKET_TOKEN: "BBDC-secret" },
-    model: null,
     ...(options.graceMs === undefined ? {} : { graceMs: options.graceMs }),
   });
   let session: { send(text: string): void; stop(): void } | null = null;
-  const started = runner.start({ ...LAUNCH, cwd: fake.cwd, prompt: first }, (event) => {
-    events.push(event);
-    if (event.kind === "exit") resolve(events);
-    else if (session !== null) then(event, session);
-  });
+  const started = runner.start(
+    { ...LAUNCH, cwd: fake.cwd, prompt: first },
+    (event) => {
+      events.push(event);
+      if (event.kind === "exit") resolve(events);
+      else if (session !== null) then(event, session);
+    },
+    // Claude Code asks through XueFu's approval tool, never through the runner.
+    () => Promise.resolve(false),
+  );
   if (started.ok) session = started.value;
   return { runner, started, exited, cwd: fake.cwd };
 }
@@ -243,6 +245,7 @@ describe("claudeCode", () => {
       else session.stop();
     });
     expect(runner.name).toBe("Claude");
+    expect(runner.id).toBe("claude");
     const events = await exited;
     expect(events).toEqual([
       { kind: "ready", model: "fake-model" },
@@ -255,6 +258,19 @@ describe("claudeCode", () => {
       { kind: "turn", costUsd: 0.01, failed: null },
       // Stopped when asked: no reason to give.
       { kind: "exit", message: null },
+    ]);
+  });
+
+  test("its models are its own default, then each alias it knows", async () => {
+    const models = await claudeCode({ command: "claude", env: {} }).models(
+      new AbortController().signal,
+    );
+    expect(models.ok && models.value.map((model) => model.id)).toEqual([
+      null,
+      "fable",
+      "opus",
+      "sonnet",
+      "haiku",
     ]);
   });
 

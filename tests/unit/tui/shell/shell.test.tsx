@@ -990,6 +990,7 @@ describe("Shell agent", () => {
     let handlers: AgentHandlers | null = null;
     const agent: AgentHost = {
       name: "Claude",
+      model: null,
       ask: (question, given) => {
         handlers = given;
         const on = question.branch === null ? "" : ` on ${question.branch}`;

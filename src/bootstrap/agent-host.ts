@@ -1,4 +1,7 @@
 import type {
+  AgentChoice,
+  AgentChoices,
+  AgentChoosing,
   AgentEvent,
   AgentHandlers,
   AgentHost,
@@ -20,6 +23,7 @@ import { type McpTools, mcpReply } from "../cli/mcp-server";
 import type { McpTool } from "../cli/mcp-tools";
 import type { ConfirmationPrompt } from "../domain/shared/confirmation";
 import type { AbsolutePath } from "../domain/shared/path";
+import { ok } from "../domain/shared/result";
 import { briefAge, freshBrief, INSTRUCTIONS, instructionsFor, studyPrompt } from "./agent-context";
 import { canPost, draftReview, POST, POST_TOOL, postReview } from "./review-post";
 
@@ -96,7 +100,10 @@ const callKey = (name: string, input: Readonly<Record<string, unknown>>) =>
   ]);
 
 export interface AgentHostOptions {
-  readonly runner: AgentRunner;
+  /** Every agent installed, the one offered first first; there is always one. */
+  readonly runners: readonly [AgentRunner, ...AgentRunner[]];
+  /** The agent and model chosen, kept between runs. */
+  readonly choices: AgentChoices;
   readonly tools: McpTools;
   /** Keeps a graph of each workspace's code for the agent; null when graf is not installed. */
   readonly graph: CodeGraph | null;
@@ -148,15 +155,24 @@ function installPrompt(agent: string, setup: CodeGraphSetup): ConfirmationPrompt
  * after starts from, until it is two weeks old.
  */
 export function agentHost(options: AgentHostOptions): AgentHost {
-  const { runner, tools } = options;
+  const { runners, tools } = options;
   /** The code graph, once graf is installed, by the user or from here. */
   let codeGraph = options.graph;
   /** Asked once a run at most, so a second conversation does not ask while the first does. */
   let offered = false;
+  /** The agent that answers, and on which model: as kept, else the first installed's default. */
+  const kept = options.choices.load();
+  let chosen: AgentChoice =
+    kept !== null && runners.some((runner) => runner.id === kept.agent)
+      ? kept
+      : { agent: runners[0].id, model: null };
+  const chosenRunner = () => runners.find((runner) => runner.id === chosen.agent) ?? runners[0];
+
   const answer = async (
     text: string,
     approvals: Set<string>,
     handlers: AgentHandlers,
+    agent: string,
   ): Promise<object | null> => {
     let parsed: unknown = null;
     try {
@@ -171,7 +187,7 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       const asked = record(params["arguments"]);
       const name = typeof asked?.["tool_name"] === "string" ? asked["tool_name"] : "";
       const input = record(asked?.["input"]) ?? {};
-      const allowed = await handlers.approve(approvalPrompt(runner.name, tools.tools, name, input));
+      const allowed = await handlers.approve(approvalPrompt(agent, tools.tools, name, input));
       if (allowed) approvals.add(callKey(name.replace(OURS, ""), input));
       const decision = allowed
         ? { behavior: "allow", updatedInput: input }
@@ -202,12 +218,18 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       const name = String(params?.["name"]);
       const input = record(params?.["arguments"]) ?? {};
       const tool = tools.tools.find((candidate) => candidate.name === name);
-      if (tool?.changes === true && !approvals.delete(callKey(name, input))) {
+      // Allowed already through the approval tool, or asked now: an agent without one, such as
+      // OpenCode, calls the tool straight away.
+      if (
+        tool?.changes === true &&
+        !approvals.delete(callKey(name, input)) &&
+        !(await handlers.approve(approvalPrompt(agent, tools.tools, `${OURS}${name}`, input)))
+      ) {
         return {
           jsonrpc: "2.0",
           id,
           result: {
-            content: [{ type: "text", text: "XueFu runs a change only once the user allows it." }],
+            content: [{ type: "text", text: "The user did not allow it." }],
             isError: true,
           },
         };
@@ -222,7 +244,7 @@ export function agentHost(options: AgentHostOptions): AgentHost {
   };
 
   /** XueFu's MCP endpoint for one session, until it is stopped. */
-  const serve = (handlers: AgentHandlers) => {
+  const serve = (handlers: AgentHandlers, agent: string) => {
     const token = crypto.randomUUID();
     const approvals = new Set<string>();
     const server = Bun.serve({
@@ -238,7 +260,7 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         if (request.method !== "POST") {
           return new Response(null, { status: 405, headers: { Allow: "POST" } });
         }
-        const reply = await answer(await request.text(), approvals, handlers);
+        const reply = await answer(await request.text(), approvals, handlers, agent);
         return reply === null ? new Response(null, { status: 202 }) : Response.json(reply);
       },
     });
@@ -248,11 +270,34 @@ export function agentHost(options: AgentHostOptions): AgentHost {
     };
   };
 
+  const choosing: AgentChoosing = {
+    agents: () => runners.map(({ id, name }) => ({ id, name })),
+    models: (agent, signal) => {
+      const runner = runners.find((one) => one.id === agent);
+      return runner === undefined ? Promise.resolve(ok([])) : runner.models(signal);
+    },
+    current: () => chosen,
+    choose: (choice) => {
+      const saved = options.choices.save(choice);
+      if (saved.ok) chosen = choice;
+      return saved;
+    },
+  };
+
   return {
-    name: runner.name,
+    get name() {
+      return chosenRunner().name;
+    },
+    get model() {
+      return chosen.model;
+    },
+    choosing,
     ask(question, handlers) {
       const { workspace } = question;
-      const endpoint = serve(handlers);
+      // Kept for the whole conversation, though another agent is chosen meanwhile.
+      const runner = chosenRunner();
+      const { model } = chosen;
+      const endpoint = serve(handlers, runner.name);
       let ended = false;
       /** The agent at work now: studying the workspace, then the conversation. */
       let current: AgentSession | null = null;
@@ -291,26 +336,31 @@ export function agentHost(options: AgentHostOptions): AgentHost {
         ],
         approvalTool: APPROVAL,
         servers,
+        model,
       });
 
       /** Runs the agent on one prompt, showing the tools it uses, until its answer is done. */
       const study = (studying: AgentLaunch) =>
         new Promise<Studied>((resolve) => {
           let last: string | null = null;
-          const started = runner.start(studying, (event) => {
-            if (event.kind === "tool") tell(event);
-            else if (event.kind === "text") last = event.text;
-            else if (event.kind === "turn") {
-              current?.stop();
-              resolve({
-                text: event.failed === null ? last : null,
-                costUsd: event.costUsd,
-                failed: event.failed,
-              });
-            } else if (event.kind === "exit") {
-              resolve({ text: null, costUsd: null, failed: event.message ?? "it stopped" });
-            }
-          });
+          const started = runner.start(
+            studying,
+            (event) => {
+              if (event.kind === "tool") tell(event);
+              else if (event.kind === "text") last = event.text;
+              else if (event.kind === "turn") {
+                current?.stop();
+                resolve({
+                  text: event.failed === null ? last : null,
+                  costUsd: event.costUsd,
+                  failed: event.failed,
+                });
+              } else if (event.kind === "exit") {
+                resolve({ text: null, costUsd: null, failed: event.message ?? "it stopped" });
+              }
+            },
+            handlers.approve,
+          );
           if (started.ok) current = started.value;
           else resolve({ text: null, costUsd: null, failed: started.error.message });
         });
@@ -342,8 +392,10 @@ export function agentHost(options: AgentHostOptions): AgentHost {
 
       /** Starts the conversation itself, sending what the user said while it was prepared. */
       const converse = (prompt: string, instructions: string, servers: readonly AgentServer[]) => {
-        const started = runner.start(launch(prompt, instructions, servers), (event) =>
-          event.kind === "exit" ? end(event.message) : tell(event),
+        const started = runner.start(
+          launch(prompt, instructions, servers),
+          (event) => (event.kind === "exit" ? end(event.message) : tell(event)),
+          handlers.approve,
         );
         if (!started.ok) {
           end(started.error.message);

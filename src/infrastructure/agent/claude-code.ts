@@ -1,12 +1,14 @@
 import type {
   AgentEvent,
   AgentLaunch,
+  AgentModel,
   AgentRunner,
   AgentSession,
 } from "../../application/ports/agent";
 import { processError } from "../../domain/shared/errors";
 import { err, ok } from "../../domain/shared/result";
 import { childEnvironment } from "../process/bun-process-runner";
+import { lines } from "./lines";
 
 /** What XueFu's MCP server is called in the session, so its tools are `mcp__xuefu__<name>`. */
 const SERVER = "xuefu";
@@ -51,7 +53,7 @@ const mcpName = (tool: string) => `mcp__${SERVER}__${tool}`;
  * asked of XueFu's approval tool, which asks the user. The session is not saved, so it stays out
  * of Claude Code's own history.
  */
-export function claudeArgs(launch: AgentLaunch, model: string | null): string[] {
+export function claudeArgs(launch: AgentLaunch): string[] {
   const config = {
     mcpServers: {
       [SERVER]: {
@@ -90,9 +92,18 @@ export function claudeArgs(launch: AgentLaunch, model: string | null): string[] 
     "--no-session-persistence",
     "--append-system-prompt",
     launch.instructions,
-    ...(model === null ? [] : ["--model", model]),
+    ...(launch.model === null ? [] : ["--model", launch.model]),
   ];
 }
+
+/** The models Claude Code runs by alias, each the latest of its kind, after its own default. */
+const MODELS: readonly AgentModel[] = [
+  { id: null, name: "Claude Code's default" },
+  { id: "fable", name: "Fable" },
+  { id: "opus", name: "Opus" },
+  { id: "sonnet", name: "Sonnet" },
+  { id: "haiku", name: "Haiku" },
+];
 
 /** A message from the user, as Claude Code reads one on stdin. */
 export function userMessage(text: string): string {
@@ -157,25 +168,11 @@ export function claudeEvents(line: string): AgentEvent[] {
   }
 }
 
-/** Reads the stream's text a line at a time. */
-async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for await (const chunk of stream) {
-    const parts = (buffer + decoder.decode(chunk, { stream: true })).split("\n");
-    buffer = parts.pop() ?? "";
-    yield* parts;
-  }
-  if (buffer !== "") yield buffer;
-}
-
 export interface ClaudeCodeOptions {
   /** The program to run; `claude` on PATH unless config says otherwise. */
   readonly command: string;
   /** XueFu's environment, filtered before Claude Code sees it. */
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** The model; Claude Code's own choice when null. */
-  readonly model: string | null;
   readonly graceMs?: number;
 }
 
@@ -183,11 +180,14 @@ export interface ClaudeCodeOptions {
 export function claudeCode(options: ClaudeCodeOptions): AgentRunner {
   const graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
   return {
+    id: "claude",
     name: "Claude",
+    models: () => Promise.resolve(ok(MODELS)),
+    // Claude Code asks XueFu's approval tool, never its client.
     start(launch, onEvent) {
       let child: Bun.Subprocess<"pipe", "pipe", "pipe">;
       try {
-        child = Bun.spawn([options.command, ...claudeArgs(launch, options.model)], {
+        child = Bun.spawn([options.command, ...claudeArgs(launch)], {
           cwd: launch.cwd,
           env: agentEnvironment(options.env),
           stdin: "pipe",

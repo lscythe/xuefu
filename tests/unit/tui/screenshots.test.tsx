@@ -845,6 +845,7 @@ describe("screenshots", () => {
   /** Claude reviewing a pull request: it reads, answers, then asks to post a comment if `asks`. */
   const reviewer = (asks: boolean, posts = false): AgentHost => ({
     name: "Claude",
+    model: null,
     ask: ({ branch }, { onEvent, approve, review }) => {
       queueMicrotask(() => {
         for (const text of [

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentChoice,
+  AgentChoices,
   AgentEvent,
   AgentLaunch,
   AgentRunner,
@@ -100,17 +102,21 @@ const MOBILE: Workspace = {
 const GRAF: AgentServer = { name: "graf", command: "graf", args: ["serve", "--db", "/g.db"] };
 
 /** An agent that does nothing on its own: the test speaks for it, as its MCP client. */
-function fakeRunner(fails = false) {
+function fakeRunner(fails = false, id = "claude", name = "Claude") {
   const launches: AgentLaunch[] = [];
   const stopped: string[] = [];
   const sent: string[] = [];
   let emit: (event: AgentEvent) => void = () => undefined;
+  let ask: (prompt: ConfirmationPrompt) => Promise<boolean> = () => Promise.resolve(false);
   const runner: AgentRunner = {
-    name: "Claude",
-    start(launch, onEvent) {
+    id,
+    name,
+    models: () => Promise.resolve(ok([{ id: null, name: `${name}'s default` }])),
+    start(launch, onEvent, approve) {
       if (fails) return err(processError("Unable to run claude", "claude", null));
       launches.push(launch);
       emit = onEvent;
+      ask = approve;
       const session: AgentSession = {
         send: (text) => sent.push(text),
         stop: () => stopped.push(launch.prompt),
@@ -118,7 +124,30 @@ function fakeRunner(fails = false) {
       return ok(session);
     },
   };
-  return { runner, launches, stopped, sent, emit: (event: AgentEvent) => emit(event) };
+  return {
+    runner,
+    launches,
+    stopped,
+    sent,
+    emit: (event: AgentEvent) => emit(event),
+    approve: (prompt: ConfirmationPrompt) => ask(prompt),
+  };
+}
+
+/** Choices kept in memory, failing to keep when told to. */
+function memoryChoices(kept: AgentChoice | null = null, broken = false) {
+  const saved: AgentChoice[] = [];
+  const choices: AgentChoices = {
+    load: () => kept,
+    save: (choice) => {
+      if (broken) {
+        return err(fileSystemError("Unable to keep the agent chosen", "/agent.json", "write"));
+      }
+      saved.push(choice);
+      return ok(undefined);
+    },
+  };
+  return { choices, saved };
 }
 
 /** Briefs kept in memory, failing to read or keep when told to. */
@@ -274,7 +303,8 @@ function asking(setup: Setup = {}) {
   const events: AgentEvent[] = [];
   const putBack: PutBack[] = [];
   const host = agentHost({
-    runner: fake.runner,
+    runners: [fake.runner],
+    choices: memoryChoices().choices,
     tools: served,
     graph: setup.graph ?? null,
     setup: setup.setup ?? null,
@@ -537,25 +567,22 @@ describe("agentHost", () => {
     const { call, asked, served, fake, events } = await session([true]);
     expect(await call("pr_diff", { pullRequest: "MOB/app#42" })).toMatchObject({ isError: false });
 
-    // Not asked of the user first: refused.
-    const unasked = await call("pr_approve", { pullRequest: "MOB/app#42", yes: true });
-    expect(unasked).toEqual({
-      content: [{ type: "text", text: "XueFu runs a change only once the user allows it." }],
-      isError: true,
-    });
-
     const input = { yes: true, pullRequest: "MOB/app#42" };
     const allowed = await call("approval", { tool_name: "mcp__xuefu__pr_approve", input });
     expect(decision(allowed)).toEqual({ behavior: "allow", updatedInput: input });
     expect(asked.map((prompt) => prompt.title)).toEqual(["Let Claude run pr approve"]);
 
-    // The arguments in any order are the same call; it runs once.
+    // The arguments in any order are the same call; it runs without asking again, once.
     expect(await call("pr_approve", { pullRequest: "MOB/app#42", yes: true })).toMatchObject({
       isError: false,
     });
-    expect(await call("pr_approve", { pullRequest: "MOB/app#42", yes: true })).toMatchObject({
+    expect(asked).toHaveLength(1);
+    // Again, it is asked again; declined, it does not run.
+    expect(await call("pr_approve", { pullRequest: "MOB/app#42", yes: true })).toEqual({
+      content: [{ type: "text", text: "The user did not allow it." }],
       isError: true,
     });
+    expect(asked).toHaveLength(2);
     expect(served.ran).toEqual([
       ["pr", "diff", "--", "MOB/app#42"],
       ["pr", "approve", "--yes"],
@@ -567,6 +594,16 @@ describe("agentHost", () => {
       { kind: "text", text: "Approved." },
       { kind: "exit", message: null },
     ]);
+  });
+
+  test("a change called without the approval tool is asked of the user then", async () => {
+    const { call, asked, served, fake } = await session([true]);
+    expect(await call("pr_approve", { pullRequest: "MOB/app#42" })).toMatchObject({
+      isError: false,
+    });
+    expect(asked.map((prompt) => prompt.title)).toEqual(["Let Claude run pr approve"]);
+    expect(served.ran).toEqual([["pr", "approve"]]);
+    fake.emit({ kind: "exit", message: null });
   });
 
   test("a change the user declines is denied, with why, and does not run", async () => {
@@ -900,5 +937,93 @@ describe("agentHost", () => {
     await Bun.sleep(5);
     expect(studying.fake.launches).toHaveLength(1);
     expect(studying.events.filter((event) => event.kind === "exit")).toHaveLength(1);
+  });
+
+  test("the agent may ask the user itself, through the cockpit", async () => {
+    const { fake, asked } = await session([true]);
+    const prompt = approvalPrompt("Claude", [], "edit", {});
+    expect(await fake.approve(prompt)).toBe(true);
+    expect(asked).toEqual([prompt]);
+    fake.emit({ kind: "exit", message: null });
+  });
+});
+
+describe("choosing the agent", () => {
+  /** Claude and OpenCode installed, with what was chosen before. */
+  function choosing(kept: AgentChoice | null = null, broken = false) {
+    const claude = fakeRunner();
+    const openCode = fakeRunner(false, "opencode", "OpenCode");
+    const memory = memoryChoices(kept, broken);
+    const host = agentHost({
+      runners: [claude.runner, openCode.runner],
+      choices: memory.choices,
+      tools: tools(),
+      graph: null,
+      setup: null,
+      briefs: memoryBriefs(FRESH).briefs,
+      elsewhere: ELSEWHERE,
+      checkout: fakeCheckout().checkout,
+      clock: new ManualClock(),
+    });
+    const ask = () =>
+      host.ask(
+        { workspace: MOBILE, prompt: "hello", branch: null },
+        {
+          onEvent: () => undefined,
+          approve: () => Promise.resolve(false),
+          review: () => Promise.resolve([]),
+          putBack: () => undefined,
+        },
+      );
+    return { host, claude, openCode, saved: memory.saved, ask };
+  }
+
+  test("every agent installed, each with its models; none for one it does not know", async () => {
+    const { host } = choosing();
+    const choices = host.choosing;
+    if (choices === undefined) throw new Error("no choosing");
+    expect(choices.agents()).toEqual([
+      { id: "claude", name: "Claude" },
+      { id: "opencode", name: "OpenCode" },
+    ]);
+    const signal = new AbortController().signal;
+    expect(await choices.models("opencode", signal)).toEqual(
+      ok([{ id: null, name: "OpenCode's default" }]),
+    );
+    expect(await choices.models("aider", signal)).toEqual(ok([]));
+  });
+
+  test("the first agent on its default, until another is chosen and kept", async () => {
+    const { host, claude, openCode, saved, ask } = choosing();
+    expect(host.choosing?.current()).toEqual({ agent: "claude", model: null });
+    expect([host.name, host.model]).toEqual(["Claude", null]);
+
+    const next = { agent: "opencode", model: "anthropic/claude-opus-5-5" };
+    expect(host.choosing?.choose(next)).toEqual(ok(undefined));
+    expect(saved).toEqual([next]);
+    expect([host.name, host.model]).toEqual(["OpenCode", "anthropic/claude-opus-5-5"]);
+    ask();
+    await until(() => openCode.launches.length === 1);
+    expect(openCode.launches[0]?.model).toBe("anthropic/claude-opus-5-5");
+    expect(claude.launches).toEqual([]);
+    openCode.emit({ kind: "exit", message: null });
+  });
+
+  test("what was kept is used; an agent no longer installed falls back to the first", () => {
+    expect(choosing({ agent: "opencode", model: "x/y" }).host.choosing?.current()).toEqual({
+      agent: "opencode",
+      model: "x/y",
+    });
+    expect(choosing({ agent: "aider", model: "x/y" }).host.choosing?.current()).toEqual({
+      agent: "claude",
+      model: null,
+    });
+  });
+
+  test("a choice that cannot be kept is said so, and changes nothing", () => {
+    const { host } = choosing(null, true);
+    const chosen = host.choosing?.choose({ agent: "opencode", model: null });
+    expect(chosen?.ok).toBe(false);
+    expect(host.name).toBe("Claude");
   });
 });
