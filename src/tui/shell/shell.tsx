@@ -715,15 +715,12 @@ export function Shell(props: ShellProps) {
                 askAgent:
                   askAgent() === null
                     ? null
-                    : {
-                        name: props.agent?.name ?? "",
-                        ask: (question) => {
-                          setPaletteOpen(false);
-                          askAgent()?.({
-                            title: question === null ? "Study" : "Question",
-                            prompt: question,
-                          });
-                        },
+                    : (question) => {
+                        setPaletteOpen(false);
+                        askAgent()?.({
+                          title: question === null ? "Study" : "Question",
+                          prompt: question,
+                        });
                       },
                 chooseAgent:
                   props.agent?.choosing === undefined

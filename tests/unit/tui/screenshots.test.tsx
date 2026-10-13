@@ -970,7 +970,7 @@ describe("screenshots", () => {
     await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
     screen.mockInput.pressTab();
     screen.mockInput.pressKey("A");
-    await screen.waitForFrame((f) => f.includes("Ask Claude more"));
+    await screen.waitForFrame((f) => f.includes("Ask a follow-up"));
     expectScreenshot("pr-agent", screen.captureSpans());
   });
 

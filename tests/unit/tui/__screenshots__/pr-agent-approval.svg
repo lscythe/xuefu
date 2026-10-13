@@ -494,7 +494,7 @@
 <rect x="54" y="450" width="9" height="18" fill="#12121a"/>
 <text x="54" y="464" fill="#626369">▏</text>
 <rect x="63" y="450" width="144" height="18" fill="#12121a"/>
-<text x="72 81 90 108 117 126 135 144 153 171 180 189 198" y="464" fill="#282935">AskClaudemore</text>
+<text x="72 81 90 108 126 135 144 153 162 171 180 189 198" y="464" fill="#282935">Askafollow-up</text>
 <rect x="207" y="450" width="666" height="18" fill="#12121a"/>
 <rect x="873" y="450" width="9" height="18" fill="#12121a"/>
 <text x="873" y="464" fill="#6d4b34">│</text>

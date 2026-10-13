@@ -260,7 +260,7 @@ export function AgentDialog(props: AgentDialogProps) {
     const cursor = ascii() ? "_" : "▏";
     const shown = lastColumns(`${typed}${cursor}`, inner() - 2);
     return typed === "" && !working()
-      ? { text: cursor, placeholder: ` Ask ${name} more` }
+      ? { text: cursor, placeholder: " Ask a follow-up" }
       : { text: shown, placeholder: "" };
   };
 

@@ -1173,15 +1173,15 @@ describe("Shell agent", () => {
     await shell.waitForFrame((f) => f.includes("no agent: "));
     shell.mockInput.pressKey(":");
     const palette = await shell.waitForFrame((f) => f.includes("Switch workspace"));
-    expect(palette).not.toContain("Ask Claude");
+    expect(palette).not.toContain("Ask the agent");
   });
 
-  test("the palette asks a question of your own", async () => {
+  test("the palette asks a question of your own, of whichever agent is chosen", async () => {
     const { agent, asked } = quietAgent();
     const shell = await renderShell({ agent });
     shell.mockInput.pressKey(":");
-    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
-    await shell.mockInput.typeText("ask claude");
+    await shell.waitForFrame((f) => f.includes("Ask the agent…"));
+    await shell.mockInput.typeText("ask the agent");
     shell.mockInput.pressEnter();
     await shell.waitForFrame((f) => f.includes("Question"));
     await shell.mockInput.typeText("What is left on MOB-2841?");
@@ -1194,9 +1194,9 @@ describe("Shell agent", () => {
     const { agent, asked } = quietAgent();
     const shell = await renderShell({ agent });
     shell.mockInput.pressKey(":");
-    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    await shell.waitForFrame((f) => f.includes("Ask the agent…"));
     await shell.mockInput.typeText("study again");
-    await shell.waitForFrame((f) => f.includes("Have Claude study Mobile Banking again"));
+    await shell.waitForFrame((f) => f.includes("Have the agent study Mobile Banking again"));
     shell.mockInput.pressEnter();
     await shell.waitForFrame((f) => f.includes(" Claude · Study "));
     expect(asked).toEqual([`null in ${MOBILE.workspace.path}`]);
@@ -1217,7 +1217,7 @@ describe("Shell agent", () => {
     const shell = await onPrs({ ...agent, choosing });
     shell.mockInput.pressTab();
     shell.mockInput.pressKey(":");
-    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    await shell.waitForFrame((f) => f.includes("Ask the agent…"));
     await shell.mockInput.typeText("choose the agent");
     await shell.waitForFrame((f) => f.includes("Choose the agent and model"));
     shell.mockInput.pressEnter();
@@ -1237,7 +1237,7 @@ describe("Shell agent", () => {
     const { agent } = quietAgent();
     const shell = await renderShell({ agent });
     shell.mockInput.pressKey(":");
-    const palette = await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    const palette = await shell.waitForFrame((f) => f.includes("Ask the agent…"));
     expect(palette).not.toContain("Choose the agent");
   });
 });

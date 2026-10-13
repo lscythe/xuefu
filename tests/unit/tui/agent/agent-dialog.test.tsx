@@ -139,7 +139,7 @@ describe("AgentDialog", () => {
     expect(shown).toContain("Looks good, one risk in Login.kt line 11.");
     expect(shown).not.toContain("working");
     expect(shown).toContain("$0.04");
-    expect(shown).toContain("Ask Claude more");
+    expect(shown).toContain("Ask a follow-up");
     expect(shown).toContain("enter send");
   });
 

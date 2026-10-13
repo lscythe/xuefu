@@ -349,10 +349,10 @@ describe("prView", () => {
     expect(sent).toEqual([]);
 
     view.mockInput.pressEnter();
-    const details = await until(view, (f) => f.includes("A ask claude"));
+    const details = await until(view, (f) => f.includes("A ask agent"));
     expect(details).toContain(" MOB/mobile-banking#40 ");
     view.mockInput.pressKey("A");
-    await until(view, (f) => !f.includes("A ask claude"));
+    await until(view, (f) => !f.includes("A ask agent"));
     expect(view.asked).toHaveLength(2);
     expect(view.modal.at(-1)).toBe(false);
   });
@@ -360,11 +360,11 @@ describe("prView", () => {
   test("without an agent, A does nothing and is not offered", async () => {
     const view = await render(fakePullRequests({ yours: YOURS }), { focused: true });
     await until(view, (f) => f.includes("Yours (2)"));
-    expect(view.keys.at(-1)).not.toContain("ask claude");
+    expect(view.keys.at(-1)).not.toContain("ask agent");
     view.mockInput.pressKey("A");
     view.mockInput.pressEnter();
     const details = await until(view, (f) => f.includes("d diff"));
-    expect(details).not.toContain("ask claude");
+    expect(details).not.toContain("ask agent");
     view.mockInput.pressKey("A");
     await view.renderOnce();
     expect(view.captureCharFrame()).toContain("d diff");
