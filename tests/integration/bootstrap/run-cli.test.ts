@@ -839,7 +839,11 @@ describe("runCli: activity", () => {
     await screen.waitForFrame((f) => f.includes("血符"));
     screen.mockInput.pressKey("k");
     screen.mockInput.pressKey("k");
-    await screen.waitForFrame((f) => f.includes("─ Activity ─") && f.includes("Opened"));
+    // Opening it is not activity; adding it is.
+    const shown = await screen.waitForFrame(
+      (f) => f.includes("─ Activity ─") && f.includes("Added"),
+    );
+    expect(shown).not.toContain("Opened");
     screen.mockInput.pressKey("t");
     await screen.waitForFrame((f) => f.includes("Started the timer"));
     screen.mockInput.pressKey("q");

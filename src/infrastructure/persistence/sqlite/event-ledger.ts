@@ -158,6 +158,10 @@ export class SqliteEventLedger implements EventLedger {
       clauses.push("seq < ?");
       params.push(query.beforeSeq);
     }
+    if (query.withoutTypes !== undefined && query.withoutTypes.length > 0) {
+      clauses.push(`type NOT IN (${query.withoutTypes.map(() => "?").join(", ")})`);
+      params.push(...query.withoutTypes);
+    }
     const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
     const order = query.newestFirst === true ? "DESC" : "ASC";
 
