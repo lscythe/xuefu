@@ -986,6 +986,61 @@ describe("Shell plugin sections", () => {
   });
 });
 
+describe("Shell overlays", () => {
+  /** A section that counts the keys it acts on while focused, and shows the last. */
+  const counting: Component<SectionProps> = (props) => {
+    const [keys, setKeys] = createSignal<string[]>([]);
+    useKeyboard((key) => {
+      if (props.focused) setKeys((all) => [...all, key.name]);
+    });
+    return <text>{`keys ${keys().length} last ${keys().at(-1) ?? "none"}`}</text>;
+  };
+  const COUNTED = { id: "pr", label: "PRs", icons: { nerd: "P", letter: "P" }, view: counting };
+  const CHOOSING: AgentChoosing = {
+    agents: () => [{ id: "claude", name: "Claude" }],
+    models: () => Promise.resolve(ok([{ id: "opus", name: "Opus" }])),
+    current: () => ({ agent: "claude", model: null }),
+    choose: () => ok(undefined),
+  };
+  const AGENT: AgentHost = {
+    name: "Claude",
+    model: null,
+    choosing: CHOOSING,
+    ask: () => ({ send: () => undefined, stop: () => undefined }),
+  };
+
+  test.each([
+    ["the palette", ":", " Commands "],
+    ["the switcher", "^W", " Switch workspace "],
+    ["the agent picker", "choose", " Agent and model "],
+  ])("while %s is open, the focused section gets none of the keys", async (_name, how, title) => {
+    const shell = await renderShell({
+      sections: cockpitSections([COUNTED]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent: AGENT,
+    });
+    shell.mockInput.pressTab();
+    await shell.waitForFrame((f) => f.includes("keys 0 last none"));
+    if (how === "^W") shell.mockInput.pressKey("w", { ctrl: true });
+    else shell.mockInput.pressKey(":");
+    if (how === "choose") {
+      await shell.waitForFrame((f) => f.includes(" Commands "));
+      await shell.mockInput.typeText("choose the agent");
+      await shell.waitForFrame((f) => f.includes("Choose the agent and model"));
+      shell.mockInput.pressEnter();
+    }
+    await shell.waitForFrame((f) => f.includes(title));
+    shell.mockInput.pressArrow("down");
+    shell.mockInput.pressArrow("up");
+    await shell.mockInput.typeText("ar");
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(title));
+    shell.mockInput.pressKey("z");
+    await shell.waitForFrame((f) => f.includes("last z"));
+    expect(shell.captureCharFrame()).toContain("keys 1 last z");
+  });
+});
+
 describe("Shell agent", () => {
   /** An agent that only records what it is asked, in which folder, and whether it was stopped. */
   function quietAgent() {

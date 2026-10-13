@@ -428,13 +428,16 @@ export function Shell(props: ShellProps) {
     }
   };
 
+  /** An overlay of the cockpit's own is open, which has the keyboard to itself. */
+  const holding = () => editing() !== null || asking() !== null || confirmation.asking();
+  const overlay = () => switcherOpen() || paletteOpen() || picking();
+
   useKeyboard((key) => {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
     // note editor, which asks before Ctrl+C drops unsaved text.
-    if (editing() !== null || asking() !== null || modal() || confirmation.asking()) return;
-    const overlay = switcherOpen() || paletteOpen() || picking();
-    if (action === null || (overlay && action.kind !== "interrupt")) return;
+    if (holding() || modal()) return;
+    if (action === null || (overlay() && action.kind !== "interrupt")) return;
     // In a section, the arrows, j and k, digits, Enter and s are its own.
     const own = ["nav", "panel.jump", "panel.open", "work.start"];
     if (inSection() && own.includes(action.kind)) return;
@@ -594,7 +597,8 @@ export function Shell(props: ShellProps) {
                         width={areaWidth() - PANEL_CHROME_COLUMNS}
                         rows={panelRows()}
                         icons={props.icons}
-                        focused={inSection() && asking() === null && !confirmation.asking()}
+                        // Not while an overlay is open over it, which takes every key.
+                        focused={inSection() && !holding() && !overlay()}
                         setStatus={setPluginStatus}
                         setKeys={setPluginKeys}
                         setModal={setModal}
