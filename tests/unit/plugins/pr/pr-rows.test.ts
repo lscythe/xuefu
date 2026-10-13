@@ -72,6 +72,10 @@ describe("prColumns", () => {
           toReview: [],
         }),
       ),
-    ).toEqual({ ref: "mobile-banking#7".length, reviews: "0/1 approved".length });
+    ).toEqual({
+      ref: "mobile-banking#7".length,
+      reviews: "0/1 approved".length,
+      author: "Dana Scully".length,
+    });
   });
 });

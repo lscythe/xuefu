@@ -121,21 +121,31 @@ function wrapCells(
 
 /** A file and line, as agents cite them: app/src/Login.kt:11, or a range of lines. */
 const INLINE =
-  /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|((?:[\w.-]+\/)*[\w-]+\.[A-Za-z][\w]*:\d+(?:-\d+)?)/gu;
+  /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(!?\[[^\]\n]+\]\([^)\n]+\))|((?<!\w)(?:\*[^*\n]+\*|_[^_\n]+_)(?!\w))|((?:[\w.-]+\/)*[\w-]+\.[A-Za-z][\w]*:\d+(?:-\d+)?)/gu;
 
 /**
  * A line of Markdown's inline marks as runs: `code` in the code colour, **bold** in bold, and a
- * file and line in the colour files have elsewhere, around text in `tone`.
+ * links with their destinations, emphasis in italics, and file references in their colour.
  */
 export function inlineSpans(text: string, tone: PaletteToken, base: Style = { tone }): Span[] {
   const spans: Span[] = [];
   let at = 0;
   for (const match of text.matchAll(INLINE)) {
     if (match.index > at) spans.push({ ...base, tone, text: text.slice(at, match.index) });
-    const [whole, code, bold] = match;
+    const [whole, code, bold, link, italic] = match;
     if (code !== undefined)
       spans.push({ ...base, tone: "accentSpectral", text: code.slice(1, -1) });
     else if (bold !== undefined) spans.push({ ...base, tone, bold: true, text: bold.slice(2, -2) });
+    else if (link !== undefined) {
+      const start = link.startsWith("!") ? 2 : 1;
+      const split = link.indexOf("](");
+      spans.push({
+        ...base,
+        tone: "accentSecondary",
+        text: `${link.slice(start, split)} (${link.slice(split + 2, -1)})`,
+      });
+    } else if (italic !== undefined)
+      spans.push({ ...base, tone, italic: true, text: italic.slice(1, -1) });
     else spans.push({ ...base, tone: "accentSecondary", text: whole });
     at = match.index + whole.length;
   }
