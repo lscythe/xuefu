@@ -1,3 +1,4 @@
+import { assertNever } from "../../../domain/shared/assert-never";
 import type { CommentAnchor } from "./comment";
 
 /** A line of a diff, with its number in the file before and after; null where it is not in one. */
@@ -32,24 +33,126 @@ export interface DiffFile {
 /** The path a file is known by: where it ends up, or where it was when deleted. */
 export const filePath = (file: Pick<DiffFile, "from" | "to">): string => file.to ?? file.from ?? "";
 
+/** Where a comment on a line goes, or why it cannot go there. */
+export type Placement =
+  | { readonly kind: "placed"; readonly anchor: Omit<CommentAnchor, "outdated"> }
+  /** No file of the diff is the one named; `near` are those with its name, if any. */
+  | { readonly kind: "no-file"; readonly near: readonly string[] }
+  /** The path, shortened, fits more than one file. */
+  | { readonly kind: "ambiguous"; readonly paths: readonly string[] }
+  /** The file is in the diff, but not that line: what it shows of it, after and before. */
+  | {
+      readonly kind: "no-line";
+      readonly path: string;
+      readonly shown: string;
+      readonly removed: string;
+    };
+
+/** A path's names, leaving out what stands for some left out, such as "…". */
+const segments = (path: string) =>
+  path.split("/").filter((name) => name !== "" && name !== "." && !/^(\.\.\.|…)$/u.test(name));
+
+/** Whether `wanted` are among `names`, in order, the last of each the same. */
+function fits(wanted: readonly string[], names: readonly string[]): boolean {
+  if (wanted.at(-1) !== names.at(-1)) return false;
+  let at = 0;
+  for (const name of names) if (name === wanted[at]) at += 1;
+  return at === wanted.length;
+}
+
+/** Numbers as runs, such as "9-15, 40". */
+function runs(numbers: readonly number[]): string {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let start = sorted[0];
+  for (let index = 0; index < sorted.length; index += 1) {
+    const now = sorted[index] ?? 0;
+    const next = sorted[index + 1];
+    if (next === now + 1) continue;
+    parts.push(start === now ? `${now}` : `${start}-${now}`);
+    start = next;
+  }
+  return parts.join(", ");
+}
+
 /**
  * Where a comment on line `line` of `path` goes: in the file after, or with `side` "old" on a
- * removed line of the file before. Null when the diff does not show that line.
+ * removed line of the file before. A path cut short, as agents write them, such as
+ * "feature/…/Login.kt" or one without "src/main/java", is taken for the one file it fits.
  */
-export function lineAnchor(
+export function placeComment(
   files: readonly DiffFile[],
   path: string,
   line: number,
   side: "old" | "new",
-): Omit<CommentAnchor, "outdated"> | null {
-  const file = files.find((candidate) => filePath(candidate) === path || candidate.from === path);
-  const lines = file?.hunks.flatMap((hunk) => hunk.lines) ?? [];
+): Placement {
+  const wanted = segments(path);
+  const named = files.filter((candidate) =>
+    [candidate.to, candidate.from].some(
+      (each) => each !== null && segments(each).at(-1) === wanted.at(-1),
+    ),
+  );
+  const exact = files.find((candidate) => filePath(candidate) === path || candidate.from === path);
+  const fitting = named.filter((candidate) =>
+    [candidate.to, candidate.from].some((each) => each !== null && fits(wanted, segments(each))),
+  );
+  const file = exact ?? (fitting.length === 1 ? fitting[0] : undefined);
+  if (file === undefined) {
+    return fitting.length > 1
+      ? { kind: "ambiguous", paths: fitting.map(filePath) }
+      : { kind: "no-file", near: named.map(filePath) };
+  }
+  const lines = file.hunks.flatMap((hunk) => hunk.lines);
   const found =
     side === "old"
       ? lines.find((shown) => shown.kind === "removed" && shown.old === line)
       : lines.find((shown) => shown.kind !== "removed" && shown.new === line);
-  if (file === undefined || found === undefined) return null;
-  return { path: filePath(file), line, side, lineKind: found.kind };
+  if (found === undefined) {
+    return {
+      kind: "no-line",
+      path: filePath(file),
+      shown: runs(lines.flatMap((shown) => (shown.new === null ? [] : [shown.new]))),
+      removed: runs(
+        lines.flatMap((shown) =>
+          shown.kind === "removed" && shown.old !== null ? [shown.old] : [],
+        ),
+      ),
+    };
+  }
+  return { kind: "placed", anchor: { path: filePath(file), line, side, lineKind: found.kind } };
+}
+
+/**
+ * Why a comment could not be placed, saying what would: the file meant, or the lines the diff
+ * shows. `old` is how a removed line is asked for, such as "--old".
+ */
+export function placementProblem(
+  placement: Exclude<Placement, { kind: "placed" }>,
+  path: string,
+  line: number,
+  side: "old" | "new",
+  old: string,
+): string {
+  switch (placement.kind) {
+    case "no-file":
+      return placement.near.length === 0
+        ? `${path} is not in the diff`
+        : `${path} is not in the diff; did you mean ${placement.near.join(" or ")}?`;
+    case "ambiguous":
+      return `${path} could be ${placement.paths.join(" or ")}; give its whole path`;
+    case "no-line": {
+      const where = `line ${line} of ${placement.path}`;
+      if (side === "old") {
+        return placement.removed === ""
+          ? `${where} as it was is not removed in the diff, which removes nothing of it`
+          : `${where} as it was is not removed in the diff, which removes lines ${placement.removed}`;
+      }
+      const shown = placement.shown === "" ? "" : `, which shows lines ${placement.shown} of it`;
+      return `${where} is not in the diff${shown}; for a removed line, add ${old}`;
+    }
+    default:
+      return assertNever(placement);
+  }
 }
 
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
