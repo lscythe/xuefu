@@ -408,7 +408,7 @@ function dayOfActivity() {
     ),
     activityEntry(at(10, 45), deployd ?? null, "Stopped the timer", null, "00:38:02"),
     activityEntry(at(10, 7), deployd ?? null, "Started the timer"),
-    activityEntry(at(9, 2), mobile ?? null, "Opened"),
+    activityEntry(at(9, 2), mobile ?? null, "Saved its note"),
     activityEntry(at(18, 12, 1), mobile ?? null, "Stopped the timer", null, "03:12:40"),
     activityEntry(at(18, 12, 1), mobile ?? null, "Finished work on", issue("MOB-2799")),
     activityEntry(at(17, 5, 1), null, "Unrecognised event", {

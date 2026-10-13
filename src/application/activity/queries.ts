@@ -30,7 +30,13 @@ export interface ActivityQuery {
   readonly limit: number;
 }
 
-/** The activity ledger read back as a timeline. */
+/**
+ * Moving about the cockpit, recorded but not activity: opening a workspace, as switching to it
+ * does, and closing its tab.
+ */
+const NAVIGATION = ["WorkspaceActivated", "WorkspaceTabClosed"];
+
+/** The activity ledger read back as a timeline, of what was done rather than looked at. */
 export class ActivityQueries {
   constructor(
     private readonly ledger: EventLedger,
@@ -43,6 +49,7 @@ export class ActivityQueries {
     const page = this.ledger.list({
       limit: query.limit,
       newestFirst: true,
+      withoutTypes: NAVIGATION,
       ...(query.workspaceId === undefined ? {} : { workspaceId: query.workspaceId }),
       ...(query.before === undefined ? {} : { beforeSeq: query.before }),
     });

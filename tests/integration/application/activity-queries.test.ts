@@ -68,14 +68,27 @@ describe("ActivityQueries.recent", () => {
   });
 
   test("filters by workspace and pages back through older entries", () => {
-    for (let i = 0; i < 3; i += 1) record("WorkspaceActivated", { id: mobile });
-    record("WorkspaceActivated", { id: removed }, removed);
+    for (let i = 0; i < 3; i += 1) {
+      record("NoteCleared", { noteId: "n", workspaceId: mobile, issueKey: null });
+    }
+    record("NoteCleared", { noteId: "n", workspaceId: removed, issueKey: null }, removed);
     const first = recent({ workspaceId: mobile, limit: 2 });
     expect(first.entries.map((e) => e.seq)).toEqual([3, 2]);
     expect(first.nextCursor).toBe(2);
     const rest = recent({ workspaceId: mobile, limit: 2, before: 2 });
     expect(rest.entries.map((e) => e.seq)).toEqual([1]);
     expect(rest.nextCursor).toBeNull();
+  });
+
+  test("opening a workspace and closing its tab are not activity, and take no room", () => {
+    record("NoteCleared", { noteId: "n", workspaceId: mobile, issueKey: null });
+    for (let i = 0; i < 3; i += 1) {
+      record("WorkspaceActivated", { id: mobile });
+      record("WorkspaceTabClosed", { id: mobile });
+    }
+    const page = recent({ limit: 1 });
+    expect(page.entries.map((e) => e.description.action)).toEqual(["Cleared its note"]);
+    expect(page.nextCursor).toBeNull();
   });
 
   test("storage failures and bad page sizes are errors", () => {

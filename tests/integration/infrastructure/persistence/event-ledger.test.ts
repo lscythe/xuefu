@@ -116,6 +116,22 @@ describe("SqliteEventLedger", () => {
     expect(rest.nextCursor).toBeNull();
   });
 
+  test("leaves out the types asked, before the page is counted", () => {
+    ledger.append([
+      testEvent({ type: "WorkStarted" }),
+      testEvent({ type: "WorkspaceActivated" }),
+      testEvent({ type: "WorkspaceTabClosed" }),
+      testEvent({ type: "WorkStopped" }),
+    ]);
+    const types = (withoutTypes: readonly string[]) =>
+      list({ limit: 2, newestFirst: true, withoutTypes }).events.map((e) => e.type);
+    expect(types(["WorkspaceActivated", "WorkspaceTabClosed"])).toEqual([
+      "WorkStopped",
+      "WorkStarted",
+    ]);
+    expect(types([])).toEqual(["WorkStopped", "WorkspaceTabClosed"]);
+  });
+
   test("corrupt rows are reported instead of being returned", () => {
     db.run(
       `INSERT INTO events (id, type, version, occurred_at, workspace_id, correlation_id, payload)

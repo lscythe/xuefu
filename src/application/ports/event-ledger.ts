@@ -17,6 +17,8 @@ export interface LedgerQuery {
   readonly to?: Timestamp;
   readonly afterSeq?: number;
   readonly beforeSeq?: number;
+  /** Event types left out, as if they were not there; pages still fill up to `limit`. */
+  readonly withoutTypes?: readonly string[];
   /** Latest events first; continue with `beforeSeq: nextCursor`. Oldest first otherwise. */
   readonly newestFirst?: boolean;
   readonly limit: number;

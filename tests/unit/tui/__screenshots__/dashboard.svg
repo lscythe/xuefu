@@ -535,9 +535,9 @@
 <rect x="720" y="342" width="9" height="18" fill="#1c1d29"/>
 <rect x="729" y="342" width="63" height="18" fill="#1c1d29"/>
 <text x="729 738 747 756 765" y="356" fill="#9a9db6">09:02</text>
-<rect x="792" y="342" width="54" height="18" fill="#1c1d29"/>
-<text x="792 801 810 819 828 837" y="356" fill="#dadcea">Opened</text>
-<rect x="846" y="342" width="225" height="18" fill="#1c1d29"/>
+<rect x="792" y="342" width="126" height="18" fill="#1c1d29"/>
+<text x="792 801 810 819 828 846 855 864 882 891 900 909" y="356" fill="#dadcea">Saveditsnote</text>
+<rect x="918" y="342" width="153" height="18" fill="#1c1d29"/>
 <rect x="1071" y="342" width="9" height="18" fill="#1c1d29"/>
 <text x="1071" y="356" fill="#3d405a">│</text>
 <rect x="0" y="360" width="9" height="18" fill="#1c1d29"/>
