@@ -17,6 +17,7 @@ import { queryActionFor } from "../query-input/keys";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
 import { PostDialog } from "./post-dialog";
+import type { Span } from "./styled-text";
 import { type TranscriptEntry, transcriptRows } from "./transcript";
 
 export interface AgentDialogProps {
@@ -50,8 +51,21 @@ type Waiting =
       readonly decline: () => void;
     };
 
-/** The frame, the line under the transcript, the input, the keys, and the dialog's margin. */
-const CHROME_ROWS = 10;
+/**
+ * The frame, the status line under the transcript, the rule, the input, the keys, and the
+ * dialog's margin.
+ */
+const CHROME_ROWS = 11;
+
+/** A run of the transcript in its colour, bold or italic as it says. */
+function Styled(props: { readonly span: Span }) {
+  const text = () => (props.span.italic === true ? <i>{props.span.text}</i> : props.span.text);
+  return (
+    <span style={{ fg: PALETTE[props.span.tone] }}>
+      {props.span.bold === true ? <b>{text()}</b> : text()}
+    </span>
+  );
+}
 
 /** The end of `text` that fits in `width` columns, so what is being typed stays in view. */
 function lastColumns(text: string, width: number): string {
@@ -81,6 +95,8 @@ export function AgentDialog(props: AgentDialogProps) {
   // The first row shown; null keeps the newest in view as they come.
   const [top, setTop] = createSignal<number | null>(null);
   const [approvals, setApprovals] = createSignal<readonly Waiting[]>([]);
+  // What the agent thinks, whole or folded to its first lines.
+  const [thinking, setThinking] = createSignal(false);
   const add = (entry: TranscriptEntry) => setEntries((all) => [...all, entry]);
   // As when it was asked, though another agent or model is chosen meanwhile.
   const name = props.agent.name;
@@ -92,6 +108,9 @@ export function AgentDialog(props: AgentDialogProps) {
         return;
       case "text":
         add({ kind: "agent", text: event.text });
+        return;
+      case "thinking":
+        add({ kind: "thinking", text: event.text });
         return;
       case "tool":
         add({ kind: "tool", name: event.name, input: event.input });
@@ -148,8 +167,13 @@ export function AgentDialog(props: AgentDialogProps) {
   const room = () => Math.max(3, dimensions().height - CHROME_ROWS);
   const ascii = () => props.icons === "ascii";
   const rows = createMemo(() =>
-    transcriptRows(entries(), inner(), props.workspace?.path ?? null, ascii()),
+    transcriptRows(entries(), inner(), {
+      cwd: props.workspace?.path ?? null,
+      ascii: ascii(),
+      thinking: thinking(),
+    }),
   );
+  const thought = createMemo(() => entries().some((entry) => entry.kind === "thinking"));
   const lastTop = () => Math.max(0, rows().length - room());
   const first = () => Math.min(top() ?? lastTop(), lastTop());
   const scroll = (to: number) => setTop(to >= lastTop() ? null : Math.max(0, to));
@@ -168,6 +192,10 @@ export function AgentDialog(props: AgentDialogProps) {
     if (approvals().length > 0) return;
     if (key.ctrl && key.name === "c") {
       props.onClose();
+      return;
+    }
+    if (key.ctrl && key.name === "t") {
+      setThinking((whole) => !whole);
       return;
     }
     switch (key.name) {
@@ -210,14 +238,22 @@ export function AgentDialog(props: AgentDialogProps) {
 
   const status = () => {
     const spent = cost() === null ? "" : `$${(cost() ?? 0).toFixed(2)}`;
+    const doing = entries().at(-1)?.kind === "thinking" ? "thinking" : "working";
     const state = ended()
       ? `${name} has stopped`
       : working()
-        ? `${name} is working${ascii() ? "..." : "…"}`
+        ? `${ascii() ? "*" : "✻"} ${name} is ${doing}${ascii() ? "..." : "…"}`
         : "";
     const more = first() < lastTop() ? `  ${first() + room()}/${rows().length}` : "";
     return { state, right: `${spent}${more}` };
   };
+  /** The keys at the foot, each with what it does. */
+  const keys = () => [
+    ...(ended() ? [] : [["enter", "send"]]),
+    [ascii() ? "pgup/pgdn" : "⇞⇟", "scroll"],
+    ...(thought() ? [["ctrl+t", thinking() ? "fold thinking" : "all thinking"]] : []),
+    ["esc", "close"],
+  ];
   const input = () => {
     if (ended()) return { text: "", placeholder: "" };
     const typed = draft();
@@ -236,7 +272,9 @@ export function AgentDialog(props: AgentDialogProps) {
       >
         <box height={room()} flexDirection="column">
           <For each={rows().slice(first(), first() + room())}>
-            {(row) => <text fg={PALETTE[row.tone]}>{row.text === "" ? " " : row.text}</text>}
+            {(row) => (
+              <text>{row.length === 0 ? " " : row.map((span) => <Styled span={span} />)}</text>
+            )}
           </For>
         </box>
         <text>
@@ -251,13 +289,25 @@ export function AgentDialog(props: AgentDialogProps) {
             {status().right}
           </span>
         </text>
+        <text fg={PALETTE.borderIdle}>{(ascii() ? "-" : "─").repeat(inner())}</text>
         <text>
-          <span style={{ fg: PALETTE.accentSecondary }}>{ascii() ? "> " : "› "}</span>
+          <span style={{ fg: PALETTE.accentSecondary }}>
+            <b>{ascii() ? "> " : "› "}</b>
+          </span>
           <span style={{ fg: PALETTE.text }}>{input().text}</span>
           <span style={{ fg: PALETTE.textDim }}>{input().placeholder}</span>
         </text>
-        <text fg={PALETTE.textMuted}>
-          {`${ended() ? "" : "enter send  "}${ascii() ? "pgup/pgdn" : "⇞⇟"} scroll  esc close`}
+        <text>
+          <For each={keys()}>
+            {([key, does], index) => (
+              <>
+                <span
+                  style={{ fg: PALETTE.accentTertiary }}
+                >{`${index() === 0 ? "" : "  "}${key}`}</span>
+                <span style={{ fg: PALETTE.textMuted }}>{` ${does}`}</span>
+              </>
+            )}
+          </For>
         </text>
       </Dialog>
       {/* Keyed: each question gets a dialog of its own, as one answers only once. */}

@@ -867,6 +867,14 @@ describe("screenshots", () => {
         });
         onEvent({ kind: "ready", model: "claude-opus-5-5" });
         onEvent({
+          kind: "thinking",
+          text:
+            "The diff touches Login.kt and the docs. Start with the sign-in flow, since a " +
+            "biometric change is where a cancelled prompt could still let someone in.\n" +
+            "Then check whether the PIN fallback still limits attempts, and read the open " +
+            "threads so I do not repeat what Fox already asked.",
+        });
+        onEvent({
           kind: "tool",
           name: "pr_diff",
           input: { pullRequest: "MOB/mobile-banking#42" },
@@ -889,12 +897,17 @@ describe("screenshots", () => {
         onEvent({
           kind: "text",
           text:
-            "One risk, two smaller points.\n\n" +
-            "1. app/src/Login.kt:11: prompt() is called before the biometric check is " +
-            "awaited, so a cancelled prompt still signs in. Await authenticate() first.\n" +
+            "**One risk**, two smaller points.\n\n" +
+            "1. app/src/Login.kt:11: `prompt()` is called before the biometric check is " +
+            "awaited, so a cancelled prompt still signs in. Await `authenticate()` first:\n" +
+            "```kotlin\n" +
+            "-        prompt()\n" +
+            "+        if (!authenticate().await()) return\n" +
+            "+        prompt()\n" +
+            "```\n" +
             "2. app/src/Login.kt:12: the PIN fallback has no attempt limit.\n" +
-            "3. docs/login.md is new but not linked from the README.\n\n" +
-            "Fox's thread on line 11 asks the same; it is still open.",
+            "3. `docs/login.md` is new but not linked from the README.\n\n" +
+            "> Fox's thread on line 11 asks the same; it is still open.",
         });
         onEvent({ kind: "turn", costUsd: 0.0731, failed: null });
         if (asks) {
@@ -945,11 +958,15 @@ describe("screenshots", () => {
   });
 
   test("pull requests, Claude reviewing one", async () => {
-    const screen = await shell({
-      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
-      navigation: new Map([["mobile-banking", "pr"]]),
-      agent: reviewer(false),
-    });
+    // Tall enough for the whole conversation.
+    const screen = await shell(
+      {
+        sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+        navigation: new Map([["mobile-banking", "pr"]]),
+        agent: reviewer(false),
+      },
+      { width: 100, height: 48 },
+    );
     await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
     screen.mockInput.pressTab();
     screen.mockInput.pressKey("A");

@@ -363,8 +363,31 @@ describe("AgentDialog", () => {
     const shown = await frame();
     // Together, with no blank line between.
     expect(shown).toMatch(
-      /No code graph: error: unsupported +│ +\n +│ Studying Mobile first\. +│ +\n +│ ↳ graf god nodes/u,
+      /✗ No code graph: error: unsupported +│ +\n +│ · Studying Mobile first\. +│ +\n +│ ↳ graf god nodes/u,
     );
+  });
+
+  test("what it thinks shows folded, whole with ctrl+t, and says it is thinking", async () => {
+    const script = scriptedAgent();
+    const { view, frame } = await open(script.agent, "unicode", 30);
+    const { onEvent } = script.handlers();
+    onEvent({ kind: "thinking", text: "Read the diff.\nThen Login.kt.\nThen tests.\nThen docs." });
+    let shown = await frame();
+    expect(shown).toContain("✻ Read the diff.");
+    expect(shown).toContain("… 1 more line");
+    expect(shown).not.toContain("Then docs.");
+    expect(shown).toContain("✻ Claude is thinking…");
+    expect(shown).toContain("ctrl+t all thinking");
+    view.mockInput.pressKey("t", { ctrl: true });
+    shown = await frame();
+    expect(shown).toContain("Then docs.");
+    expect(shown).toContain("ctrl+t fold thinking");
+    // Ctrl+T is not typed into the message.
+    expect(shown).not.toContain("› t");
+    onEvent({ kind: "text", text: "Done: **one** risk in `prompt()`." });
+    shown = await frame();
+    expect(shown).toContain("● Done: one risk in prompt().");
+    expect(shown).toContain("✻ Claude is working…");
   });
 
   test("asked only to study the workspace again, it starts with no message of yours", async () => {
