@@ -1,3 +1,4 @@
+import reviewVoice from "../../PERSON.md" with { type: "text" };
 import type { ProjectBrief } from "../application/ports/project-context";
 import type { Timestamp } from "../domain/shared/time";
 import type { Workspace } from "../domain/workspace/workspace";
@@ -12,7 +13,8 @@ export const INSTRUCTIONS =
   "say in a small terminal dialog: keep answers short, in plain text, without tables. XueFu's " +
   "tools read and act on the user's workspaces, work, Jira issues and Bitbucket pull requests, " +
   "and you may read the files in this folder. The user approves every change in XueFu before " +
-  "it runs, so pass yes set to true to tools that change something.";
+  "it runs, so pass yes set to true to tools that change something.\n\n" +
+  reviewVoice.trim();
 
 const GRAPH =
   "graf's tools answer questions about the structure of the code: what calls what, what a file " +

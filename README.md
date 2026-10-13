@@ -290,6 +290,11 @@ conversation is not saved to Claude Code's history.
 
 ## Development
 
+PR review comments prepared for Bitbucket use the casual Indonesian voice in
+[PERSON.md](PERSON.md), based on the team's review threads. Discussion with the user stays
+in English. XueFu embeds this guide in the shared agent instructions for Claude Code and OpenCode,
+including compiled binaries; it does not depend on the reviewed repository having that file.
+
 Requires [mise](https://mise.jdx.dev) and git. `mise.toml` pins Bun, actionlint and shellcheck for
 local work and CI alike.
 
