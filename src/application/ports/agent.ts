@@ -1,5 +1,5 @@
 import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
-import type { ProcessError } from "../../domain/shared/errors";
+import type { FileSystemError, ProcessError } from "../../domain/shared/errors";
 import type { AbsolutePath } from "../../domain/shared/path";
 import type { Result } from "../../domain/shared/result";
 import type { Workspace } from "../../domain/workspace/workspace";
@@ -28,6 +28,42 @@ export interface AgentLaunch {
   readonly approvalTool: string;
   /** Read-only servers it may also use freely, such as a code graph of the folder. */
   readonly servers: readonly AgentServer[];
+  /** The model to run, as the agent names it; its own default when null. */
+  readonly model: string | null;
+}
+
+/** A model an agent can run. */
+export interface AgentModel {
+  /** As the agent names it, such as "opus"; null for the agent's own default. */
+  readonly id: string | null;
+  /** As shown to the user. */
+  readonly name: string;
+}
+
+/** Which agent answers, and on which model; null for that agent's own default. */
+export interface AgentChoice {
+  /** The agent's id, such as "claude". */
+  readonly agent: string;
+  readonly model: string | null;
+}
+
+/** The agent and model chosen, kept between runs of XueFu. */
+export interface AgentChoices {
+  /** Null when none has been chosen, or what was kept cannot be read. */
+  load(): AgentChoice | null;
+  save(choice: AgentChoice): Result<void, FileSystemError>;
+}
+
+/** Choosing among the agents installed, and their models. */
+export interface AgentChoosing {
+  /** Every agent installed, by id and the name the user knows it by, in the order offered. */
+  agents(): readonly { readonly id: string; readonly name: string }[];
+  /** The models an agent can run, its own default first. */
+  models(agent: string, signal?: AbortSignal): Promise<Result<readonly AgentModel[], ProcessError>>;
+  /** What answers now. */
+  current(): AgentChoice;
+  /** Has `choice` answer from now on, kept for the next run too. */
+  choose(choice: AgentChoice): Result<void, FileSystemError>;
 }
 
 /** What the agent does, as it does it. */
@@ -133,17 +169,30 @@ export interface AgentHandlers {
  * prepares what it knows of the workspace; anything that fails ends the session with a reason.
  */
 export interface AgentHost {
-  /** The agent's name, as the user knows it, such as "Claude". */
+  /** The name of the agent that answers now, as the user knows it, such as "Claude". */
   readonly name: string;
+  /** The model it answers on now; null for its own default. */
+  readonly model: string | null;
   ask(question: AgentQuestion, handlers: AgentHandlers): AgentSession;
+  /** Choosing another agent or model; absent when there is nothing to choose. */
+  readonly choosing?: AgentChoosing;
 }
 
 /** Starts a coding agent; fails when it cannot be run, such as when it is not installed. */
 export interface AgentRunner {
+  /** Kept when it is chosen, such as "claude". */
+  readonly id: string;
   /** The agent's name, as the user knows it, such as "Claude". */
   readonly name: string;
+  /** The models it can run, its own default first. */
+  models(signal?: AbortSignal): Promise<Result<readonly AgentModel[], ProcessError>>;
+  /**
+   * Starts it on `launch`. An agent that asks its client before using a tool of its own, rather
+   * than XueFu's approval tool, asks through `approve`.
+   */
   start(
     launch: AgentLaunch,
     onEvent: (event: AgentEvent) => void,
+    approve: (prompt: ConfirmationPrompt) => Promise<boolean>,
   ): Result<AgentSession, ProcessError>;
 }

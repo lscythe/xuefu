@@ -14,7 +14,7 @@ import {
 import type { ActivityEntry } from "../../application/activity/queries";
 import type { AppError } from "../../application/errors";
 import type { SavedNote } from "../../application/notes/commands";
-import type { AgentHost } from "../../application/ports/agent";
+import type { AgentChoosing, AgentHost } from "../../application/ports/agent";
 import type { Clock } from "../../application/ports/clock";
 import type { TimerView, TrackedTime } from "../../application/timesheet/queries";
 import type { FinishedWork, StartedWork } from "../../application/work/commands";
@@ -29,6 +29,7 @@ import type { IssueKey } from "../../domain/work/issue-key";
 import type { WorkContext } from "../../domain/work/work-context";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { AgentDialog } from "../agent/agent-dialog";
+import { AgentPicker } from "../agent/agent-picker";
 import { createAsking } from "../asking";
 import { ErrorLine } from "../error-line";
 import { cycle } from "../list-navigation";
@@ -175,6 +176,8 @@ export function Shell(props: ShellProps) {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   // An entry the palette opens on, filling in its fields, such as a rename picked in the switcher.
   const [paletteStart, setPaletteStart] = createSignal<PaletteEntry | null>(null);
+  // Choosing which agent answers, and on which model.
+  const [picking, setPicking] = createSignal(false);
   // Asks before a workspace is removed.
   const confirmation = createAsking();
   const [editing, setEditing] = createSignal<EditingNote | null>(null);
@@ -425,13 +428,16 @@ export function Shell(props: ShellProps) {
     }
   };
 
+  /** An overlay of the cockpit's own is open, which has the keyboard to itself. */
+  const holding = () => editing() !== null || asking() !== null || confirmation.asking();
+  const overlay = () => switcherOpen() || paletteOpen() || picking();
+
   useKeyboard((key) => {
     const action = actionFor(key);
     // An open overlay owns the keyboard; only Ctrl+C still reaches the shell, except from the
     // note editor, which asks before Ctrl+C drops unsaved text.
-    if (editing() !== null || asking() !== null || modal() || confirmation.asking()) return;
-    const overlay = switcherOpen() || paletteOpen();
-    if (action === null || (overlay && action.kind !== "interrupt")) return;
+    if (holding() || modal()) return;
+    if (action === null || (overlay() && action.kind !== "interrupt")) return;
     // In a section, the arrows, j and k, digits, Enter and s are its own.
     const own = ["nav", "panel.jump", "panel.open", "work.start"];
     if (inSection() && own.includes(action.kind)) return;
@@ -591,7 +597,8 @@ export function Shell(props: ShellProps) {
                         width={areaWidth() - PANEL_CHROME_COLUMNS}
                         rows={panelRows()}
                         icons={props.icons}
-                        focused={inSection() && asking() === null && !confirmation.asking()}
+                        // Not while an overlay is open over it, which takes every key.
+                        focused={inSection() && !holding() && !overlay()}
                         setStatus={setPluginStatus}
                         setKeys={setPluginKeys}
                         setModal={setModal}
@@ -718,6 +725,13 @@ export function Shell(props: ShellProps) {
                           });
                         },
                       },
+                chooseAgent:
+                  props.agent?.choosing === undefined
+                    ? null
+                    : () => {
+                        setPaletteOpen(false);
+                        setPicking(true);
+                      },
                 workspaces: workspaceActions(),
                 quit: props.onQuit,
               },
@@ -728,6 +742,15 @@ export function Shell(props: ShellProps) {
           />
         </Show>
         <confirmation.AskingDialog icons={props.icons} />
+        <Show when={picking() && props.agent?.choosing}>
+          {(choosing: Accessor<AgentChoosing>) => (
+            <AgentPicker
+              choosing={choosing()}
+              icons={props.icons}
+              onClose={() => setPicking(false)}
+            />
+          )}
+        </Show>
         <Show when={editing()}>
           {(note: Accessor<EditingNote>) => (
             <NoteEditor

@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { confirmationTokenFor } from "../application/commands/command";
 import type { DiagnosticsReport } from "../application/diagnostics";
@@ -42,8 +42,10 @@ import { issueKey } from "../domain/work/issue-key";
 import type { Workspace } from "../domain/workspace/workspace";
 import { gitCheckout } from "../infrastructure/agent/branch-checkout";
 import { briefFiles } from "../infrastructure/agent/brief-files";
+import { choiceFile } from "../infrastructure/agent/choice-file";
 import { claudeCode } from "../infrastructure/agent/claude-code";
 import { findGraf, grafGraph, grafSetup } from "../infrastructure/agent/graf";
+import { openCode } from "../infrastructure/agent/opencode";
 import type { ConfigSource } from "../infrastructure/config/load-config";
 import { systemClock } from "../infrastructure/system/clock";
 import { agentHost } from "./agent-host";
@@ -681,18 +683,35 @@ async function runPluginCommand(
   return ran.ok ? ran.value : fail(out, ran.error);
 }
 
+/** OpenCode on PATH, or where its installer puts it. */
+function findOpenCode(PATH: string, home: string): string | null {
+  const installed = join(home, ".opencode", "bin", "opencode");
+  return Bun.which("opencode", { PATH }) ?? (existsSync(installed) ? installed : null);
+}
+
 /**
- * Claude Code, when it is on PATH, with XueFu's tools; asked about workspaces in the cockpit. With
- * graf on PATH too, it also gets a graph of the workspace's code.
+ * The coding agents installed, Claude Code then OpenCode, with XueFu's tools; asked about
+ * workspaces in the cockpit, the one chosen answering. With graf installed too, they also get a
+ * graph of the workspace's code.
  */
 function cockpitAgent(app: App, out: Output): AgentHost | null {
   const PATH = out.runtime.env["PATH"] ?? "";
-  const command = Bun.which("claude", { PATH });
-  if (command === null) return null;
+  const claude = Bun.which("claude", { PATH });
+  const opencode = findOpenCode(PATH, out.runtime.home);
+  const elsewhere = emptyFolder(join(app.paths.dataDir, "agent"));
+  const runners = [
+    ...(claude === null ? [] : [claudeCode({ command: claude, env: out.runtime.env })]),
+    ...(opencode === null
+      ? []
+      : [openCode({ command: opencode, env: out.runtime.env, scratch: elsewhere })]),
+  ];
+  const [first, ...others] = runners;
+  if (first === undefined) return null;
   const graf = findGraf(PATH, out.runtime.home);
   const cacheDir = join(app.paths.dataDir, "graf");
   return agentHost({
-    runner: claudeCode({ command, env: out.runtime.env, model: null }),
+    runners: [first, ...others],
+    choices: choiceFile(join(app.paths.dataDir, "agent.json")),
     tools: agentTools(app, out),
     graph: graf === null ? null : grafGraph({ command: graf, processes: app.processes, cacheDir }),
     setup:
@@ -706,7 +725,7 @@ function cockpitAgent(app: App, out: Output): AgentHost | null {
           })
         : null,
     briefs: briefFiles(join(app.paths.dataDir, "briefs")),
-    elsewhere: emptyFolder(join(app.paths.dataDir, "agent")),
+    elsewhere,
     checkout: gitCheckout(app.processes),
     clock: systemClock,
   });

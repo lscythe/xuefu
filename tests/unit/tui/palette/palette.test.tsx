@@ -185,6 +185,36 @@ describe("Palette", () => {
     await palette.waitForFrame((f) => !f.includes("Unable to save"));
   });
 
+  test("while an entry runs, such as one asking first, the keys are not the palette's", async () => {
+    const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
+    const palette = await renderPalette({
+      entries: [
+        {
+          title: "Remove workspace",
+          keys: null,
+          fields: [],
+          run: async () => {
+            await answered;
+            return ok(undefined);
+          },
+        },
+        { title: "Quit", keys: "q", fields: [], run: () => Promise.resolve(ok(undefined)) },
+      ],
+    });
+    palette.mockInput.pressEnter();
+    palette.mockInput.pressArrow("down");
+    await palette.mockInput.typeText("qu");
+    await palette.mockInput.pasteBracketedText("it");
+    palette.mockInput.pressEscape();
+    await Bun.sleep(30);
+    const frame = await palette.waitForFrame((f) => rowWith(f, "Remove workspace").includes("▸"));
+    expect(frame).not.toContain(": qu");
+    expect(frame).not.toContain(": it");
+    expect(palette.closed()).toBe(0);
+    answer();
+    await palette.waitForFrame(() => palette.closed() === 1);
+  });
+
   test("no match says so; enter then does nothing", async () => {
     const palette = await renderPalette();
     await palette.mockInput.typeText("zzz");

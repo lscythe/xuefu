@@ -84,7 +84,7 @@ It opens on the workspace containing the current folder, alongside the tabs you 
 | `a` `n` `u`    | in PRs: approve the pull request under the cursor, ask for changes, or withdraw either |
 | `m`            | in PRs: merge the pull request under the cursor, once Bitbucket allows |
 | `d`            | in PRs: review the pull request under the cursor, its diff with the comments on it |
-| `A`            | in PRs: ask Claude to review the pull request under the cursor (with Claude Code installed) |
+| `A`            | in PRs: ask the agent to review the pull request under the cursor (with Claude Code or OpenCode installed) |
 | `c` `C`        | in a review: comment on the line under the cursor or reply, or comment on the whole |
 | `r`            | in Jira or PRs: read the list again |
 | `q`, `Ctrl+C`  | quit                                             |
@@ -241,6 +241,16 @@ you are signed in to it, with nothing to set up. In PRs, `A` asks Claude to revi
 under the cursor; from the palette, "Ask Claude" takes any question about the workspace in front.
 The conversation opens in a dialog: what Claude says and each tool it uses show as it works, and
 once it has answered, Enter sends a follow-up. Esc closes it and stops Claude.
+
+"Choose the agent and model" in the palette lists every agent installed, each with the models it
+can run, and the one you pick answers from then on, after a restart too. Claude Code runs on its
+own default unless you pick Fable, Opus, Sonnet or Haiku.
+
+[OpenCode](https://opencode.ai), on your PATH or where its installer puts it, is the other agent
+the cockpit can ask, on any model its providers offer, with your own OpenCode settings and keys.
+XueFu speaks the Agent Client Protocol with it and starts it in its read-only plan mode, with file
+edits refused. A command it would run is put to you first, as is any change through XueFu's tools,
+and its session is deleted when the conversation ends.
 
 A review is one you and Claude do together. Claude numbers its findings, each on a line of the
 diff with the fix it would suggest, and you go through them: drop some, reword others, add your

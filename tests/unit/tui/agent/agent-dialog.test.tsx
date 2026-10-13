@@ -53,12 +53,13 @@ const REVIEW: DraftReview = {
 };
 
 /** An agent the test speaks for: what it is sent, whether it is stopped, and its handlers. */
-function scriptedAgent() {
+function scriptedAgent(model: string | null = null) {
   const sent: (string | null)[] = [];
   let stopped = 0;
   let handlers: AgentHandlers | null = null;
   const agent: AgentHost = {
     name: "Claude",
+    model,
     ask: (question, given) => {
       expect(question.workspace).toBe(MOBILE);
       // A branch is only checked out when one is given.
@@ -140,6 +141,11 @@ describe("AgentDialog", () => {
     expect(shown).toContain("$0.04");
     expect(shown).toContain("Ask Claude more");
     expect(shown).toContain("enter send");
+  });
+
+  test("the model chosen shows by the agent's name", async () => {
+    const { frame } = await open(scriptedAgent("opus").agent);
+    expect(await frame()).toContain(" Claude opus · Review MOB/app#42 ");
   });
 
   test("a follow-up is typed and sent with Enter, once the last answer is done", async () => {

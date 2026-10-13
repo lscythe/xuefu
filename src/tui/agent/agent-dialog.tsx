@@ -82,7 +82,9 @@ export function AgentDialog(props: AgentDialogProps) {
   const [top, setTop] = createSignal<number | null>(null);
   const [approvals, setApprovals] = createSignal<readonly Waiting[]>([]);
   const add = (entry: TranscriptEntry) => setEntries((all) => [...all, entry]);
+  // As when it was asked, though another agent or model is chosen meanwhile.
   const name = props.agent.name;
+  const model = props.agent.model;
 
   const onEvent = (event: AgentEvent) => {
     switch (event.kind) {
@@ -228,7 +230,10 @@ export function AgentDialog(props: AgentDialogProps) {
 
   return (
     <>
-      <Dialog title={` ${name} · ${props.title} `} width={width()}>
+      <Dialog
+        title={` ${model === null ? name : `${name} ${model}`} · ${props.title} `}
+        width={width()}
+      >
         <box height={room()} flexDirection="column">
           <For each={rows().slice(first(), first() + room())}>
             {(row) => <text fg={PALETTE[row.tone]}>{row.text === "" ? " " : row.text}</text>}
