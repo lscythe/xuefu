@@ -5,8 +5,10 @@ import type {
   AgentRunner,
   AgentServer,
   AgentSession,
+  BranchCheckout,
   DraftComment,
   DraftReview,
+  PutBack,
 } from "../../../src/application/ports/agent";
 import type {
   CodeGraph,
@@ -205,6 +207,29 @@ interface Setup {
   readonly pick?: (draft: DraftReview) => readonly DraftComment[];
   /** Where the question is asked; Mobile by default, null for no workspace. */
   readonly workspace?: Workspace | null;
+  /** A branch to check out for the conversation; none by default. */
+  readonly branch?: string | null;
+  readonly checkout?: BranchCheckout;
+}
+
+/** Checks out a branch as told: saying so, then putting back; or holding until released. */
+function fakeCheckout(options: { held?: boolean; nothingToPutBack?: boolean } = {}) {
+  const asked: string[] = [];
+  const putBack: string[] = [];
+  let release: () => void = () => undefined;
+  const checkout: BranchCheckout = {
+    checkout: async (folder, branch, say) => {
+      asked.push(`${folder} ${branch}`);
+      if (options.held === true) await new Promise<void>((resolve) => (release = resolve));
+      say(`Checked out ${branch}.`, false);
+      if (options.nothingToPutBack === true) return null;
+      return () => {
+        putBack.push(branch);
+        return Promise.resolve(ok("Back on main."));
+      };
+    },
+  };
+  return { checkout, asked, putBack, release: () => release() };
 }
 
 const ELSEWHERE = "/data/agent" as AbsolutePath;
@@ -247,6 +272,7 @@ function asking(setup: Setup = {}) {
   const asked: ConfirmationPrompt[] = [];
   const reviewed: DraftReview[] = [];
   const events: AgentEvent[] = [];
+  const putBack: PutBack[] = [];
   const host = agentHost({
     runner: fake.runner,
     tools: served,
@@ -254,6 +280,7 @@ function asking(setup: Setup = {}) {
     setup: setup.setup ?? null,
     briefs: memory.briefs,
     elsewhere: ELSEWHERE,
+    checkout: setup.checkout ?? fakeCheckout().checkout,
     clock,
   });
   const ask = (into: AgentEvent[]) =>
@@ -261,6 +288,7 @@ function asking(setup: Setup = {}) {
       {
         workspace: setup.workspace === undefined ? MOBILE : setup.workspace,
         prompt: setup.prompt === undefined ? "Review MOB/app#42" : setup.prompt,
+        branch: setup.branch ?? null,
       },
       {
         onEvent: (event) => into.push(event),
@@ -272,10 +300,23 @@ function asking(setup: Setup = {}) {
           reviewed.push(draft);
           return Promise.resolve(setup.pick?.(draft) ?? draft.comments);
         },
+        putBack: (done) => putBack.push(done),
       },
     );
   const started = ask(events);
-  return { host, fake, served, started, asked, reviewed, events, clock, saved: memory.saved, ask };
+  return {
+    host,
+    fake,
+    served,
+    started,
+    asked,
+    reviewed,
+    events,
+    clock,
+    saved: memory.saved,
+    ask,
+    putBack,
+  };
 }
 
 const steps = (events: readonly AgentEvent[]) =>
@@ -782,6 +823,56 @@ describe("agentHost", () => {
     expect(fake.sent).toEqual(["and the tests?"]);
     started.send("thanks");
     expect(fake.sent).toEqual(["and the tests?", "thanks"]);
+  });
+
+  test("a review's branch is checked out first, and put back once the conversation ends", async () => {
+    const checkout = fakeCheckout();
+    const { events, fake, launch, putBack } = await session([], {
+      branch: "feature/MOB-2841",
+      checkout: checkout.checkout,
+    });
+    expect(checkout.asked).toEqual(["/tmp feature/MOB-2841"]);
+    expect(launch.cwd).toBe(MOBILE.path);
+    expect(steps(events).slice(0, 2)).toEqual([
+      "Checking out feature/MOB-2841 in Mobile…",
+      "Checked out feature/MOB-2841.",
+    ]);
+    expect(checkout.putBack).toEqual([]);
+    fake.emit({ kind: "exit", message: null });
+    await until(() => putBack.length === 1);
+    expect(checkout.putBack).toEqual(["feature/MOB-2841"]);
+    expect(putBack).toEqual([ok("Back on main.")]);
+  });
+
+  test("with nothing to put back, or no workspace, nothing is put back", async () => {
+    const already = fakeCheckout({ nothingToPutBack: true });
+    const { started, putBack } = await session([], {
+      branch: "main",
+      checkout: already.checkout,
+    });
+    started.stop();
+    await Bun.sleep(5);
+    expect(putBack).toEqual([]);
+
+    const nowhere = fakeCheckout();
+    const elsewhere = await session([], {
+      branch: "main",
+      checkout: nowhere.checkout,
+      workspace: null,
+    });
+    elsewhere.started.stop();
+    expect(nowhere.asked).toEqual([]);
+  });
+
+  test("stopped while the branch is checked out, it is put back at once", async () => {
+    const held = fakeCheckout({ held: true });
+    const { fake, started, putBack } = asking({ branch: "feature/x", checkout: held.checkout });
+    await until(() => held.asked.length === 1);
+    started.stop();
+    held.release();
+    await until(() => putBack.length === 1);
+    expect(fake.launches).toEqual([]);
+    expect(held.putBack).toEqual(["feature/x"]);
   });
 
   test("stopped while it prepares, it ends once and starts nothing more", async () => {

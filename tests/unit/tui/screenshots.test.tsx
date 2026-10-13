@@ -845,8 +845,15 @@ describe("screenshots", () => {
   /** Claude reviewing a pull request: it reads, answers, then asks to post a comment if `asks`. */
   const reviewer = (asks: boolean, posts = false): AgentHost => ({
     name: "Claude",
-    ask: (_question, { onEvent, approve, review }) => {
+    ask: ({ branch }, { onEvent, approve, review }) => {
       queueMicrotask(() => {
+        for (const text of [
+          `Checking out ${branch} in Mobile Banking…`,
+          `Stashed your uncommitted changes as "xuefu: before reviewing ${branch}".`,
+          `Checked out ${branch} at 3f9a2c1.`,
+        ]) {
+          onEvent({ kind: "step", text, failed: false });
+        }
         onEvent({
           kind: "step",
           text: "The code graph of Mobile Banking is up to date (412 files).",
