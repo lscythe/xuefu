@@ -108,6 +108,34 @@ describe("parseDiff", () => {
     expect(parseDiff("")).toEqual([]);
   });
 
+  test("Bitbucket's, its paths after src:// and dst://", () => {
+    const files = parseDiff(
+      [
+        "diff --git src://feature/Response.kt dst://feature/Response.kt",
+        "index 3b18e51..a2c4f0d 100644",
+        "--- src://feature/Response.kt",
+        "+++ dst://feature/Response.kt",
+        "@@ -1 +1 @@",
+        "-a",
+        "+b",
+        "diff --git src://core/Old.kt dst://core/New.kt",
+        "rename from core/Old.kt",
+        "rename to core/New.kt",
+        "diff --git src://README.md dst://README.md",
+        "new file mode 100644",
+        "--- /dev/null",
+        "+++ dst://README.md",
+        "@@ -0,0 +1 @@",
+        "+# Mobile",
+      ].join("\n"),
+    );
+    expect(files.map((file) => [file.from, file.to, file.change])).toEqual([
+      ["feature/Response.kt", "feature/Response.kt", "modified"],
+      ["core/Old.kt", "core/New.kt", "renamed"],
+      [null, "README.md", "added"],
+    ]);
+  });
+
   test("an empty line inside a hunk is context, as some tools strip its space", () => {
     const [file] = parseDiff(
       ["--- a/f", "+++ b/f", "@@ -1,3 +1,3 @@", " a", "", "-b", "+c"].join("\n"),
@@ -163,6 +191,15 @@ describe("placeComment", () => {
       anchor: { side: "old", lineKind: "removed" },
     });
     expect(placeComment(FILES, "core/Old.kt", 5, "new")).toMatchObject({
+      anchor: { path: "core/New.kt" },
+    });
+  });
+
+  test("a path as Bitbucket's diff names it, after dst:// or src://, is the file's own", () => {
+    expect(placeComment(FILES, `dst://${DETAIL}`, 282, "new")).toMatchObject({
+      anchor: { path: DETAIL },
+    });
+    expect(placeComment(FILES, "src://core/Old.kt", 5, "new")).toMatchObject({
       anchor: { path: "core/New.kt" },
     });
   });

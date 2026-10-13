@@ -8,6 +8,7 @@ import type {
   DraftReview,
   PutBack,
 } from "../../application/ports/agent";
+import type { Clock } from "../../application/ports/clock";
 import type { ConfirmationPrompt } from "../../domain/shared/confirmation";
 import type { Workspace } from "../../domain/workspace/workspace";
 import { ConfirmDialog } from "../confirm-dialog";
@@ -16,6 +17,7 @@ import { eraseChar, eraseWord, pastedText } from "../query-input/edit";
 import { queryActionFor } from "../query-input/keys";
 import { PALETTE } from "../theme/palette";
 import type { IconSet } from "../theme/status";
+import { useNow } from "../use-now";
 import { PostDialog } from "./post-dialog";
 import type { Span } from "./styled-text";
 import { type TranscriptEntry, transcriptRows } from "./transcript";
@@ -31,6 +33,8 @@ export interface AgentDialogProps {
   /** A branch to check out in the workspace while the agent works; null leaves it be. */
   readonly branch?: string | null;
   readonly icons: IconSet;
+  /** What turns the spinner while the agent works. */
+  readonly clock: Clock;
   readonly onClose: () => void;
   /** How the workspace was put back once the conversation closed, after a branch was checked out. */
   readonly onPutBack?: (done: PutBack) => void;
@@ -56,6 +60,10 @@ type Waiting =
  * dialog's margin.
  */
 const CHROME_ROWS = 11;
+
+/** The spinner's frames, and how long each shows. */
+const SPINNER = { unicode: "◐◓◑◒", ascii: "|/-\\" } as const;
+const SPIN_MS = 150;
 
 /** A run of the transcript in its colour, bold or italic as it says. */
 function Styled(props: { readonly span: Span }) {
@@ -97,6 +105,9 @@ export function AgentDialog(props: AgentDialogProps) {
   const [approvals, setApprovals] = createSignal<readonly Waiting[]>([]);
   // What the agent thinks, whole or folded to its first lines.
   const [thinking, setThinking] = createSignal(false);
+  // The comments of a review being posted: how many are done, of how many.
+  const [posting, setPosting] = createSignal<{ done: number; of: number } | null>(null);
+  const now = useNow(props.clock, SPIN_MS);
   const add = (entry: TranscriptEntry) => setEntries((all) => [...all, entry]);
   // As when it was asked, though another agent or model is chosen meanwhile.
   const name = props.agent.name;
@@ -118,8 +129,12 @@ export function AgentDialog(props: AgentDialogProps) {
       case "step":
         add({ kind: "note", text: event.text, tone: event.failed ? "error" : "muted" });
         return;
+      case "posting":
+        setPosting(event.done < event.of ? { done: event.done, of: event.of } : null);
+        return;
       case "turn":
         setWorking(false);
+        setPosting(null);
         setCost(event.costUsd);
         if (event.failed !== null) add({ kind: "note", text: event.failed, tone: "error" });
         return;
@@ -238,12 +253,15 @@ export function AgentDialog(props: AgentDialogProps) {
 
   const status = () => {
     const spent = cost() === null ? "" : `$${(cost() ?? 0).toFixed(2)}`;
-    const doing = entries().at(-1)?.kind === "thinking" ? "thinking" : "working";
-    const state = ended()
-      ? `${name} has stopped`
-      : working()
-        ? `${ascii() ? "*" : "✻"} ${name} is ${doing}${ascii() ? "..." : "…"}`
-        : "";
+    const frames = SPINNER[ascii() ? "ascii" : "unicode"];
+    const spinner = frames[Math.floor(now() / SPIN_MS) % frames.length];
+    const dots = ascii() ? "..." : "…";
+    const sending = posting();
+    const doing =
+      sending !== null
+        ? `Posting comment ${sending.done + 1} of ${sending.of}${dots}`
+        : `${name} is ${entries().at(-1)?.kind === "thinking" ? "thinking" : "working"}${dots}`;
+    const state = ended() ? `${name} has stopped` : working() ? `${spinner} ${doing}` : "";
     const more = first() < lastTop() ? `  ${first() + room()}/${rows().length}` : "";
     return { state, right: `${spent}${more}` };
   };

@@ -1,4 +1,4 @@
-import type { DraftComment, DraftReview } from "../application/ports/agent";
+import type { AgentEvent, DraftComment, DraftReview } from "../application/ports/agent";
 import type { McpTools } from "../cli/mcp-server";
 import { suggestedText } from "../plugins/pr/domain/comment";
 import { parseDiff, placeComment, placementProblem } from "../plugins/pr/domain/diff";
@@ -28,7 +28,9 @@ export const POST_TOOL = {
           properties: {
             file: {
               type: "string",
-              description: "the file's whole path, as the diff names it after b/; never shortened",
+              description:
+                "the file's whole path, as the diff names it after b/ or dst://, without either; " +
+                "never shortened",
             },
             line: {
               type: "integer",
@@ -133,19 +135,22 @@ export const canPost = (tools: McpTools) => tools.tools.some((tool) => tool.name
 
 /**
  * Posts the comments the user chose, each on its line as `xuefu pr comment` would, and says what
- * became of each, and of those left out, for the agent.
+ * became of each, and of those left out, for the agent. `tell` shows the user how far it is, and
+ * what became of each as it does.
  */
 export async function postReview(
   tools: McpTools,
   draft: DraftReview,
   chosen: readonly DraftComment[],
+  tell: (event: AgentEvent) => void,
 ): Promise<string> {
   const comment = tools.tools.find((tool) => tool.name === COMMENT);
   if (comment === undefined || chosen.length === 0) {
     return "The user posted none of them. Ask what they would change.";
   }
   const said: string[] = [];
-  for (const each of chosen) {
+  for (const [index, each] of chosen.entries()) {
+    tell({ kind: "posting", done: index, of: chosen.length });
     const argv = comment.argv({
       pullRequest: draft.pullRequest,
       file: each.file,
@@ -157,8 +162,11 @@ export async function postReview(
     const ran = await tools.run(argv);
     const where = `${each.file}:${each.line}`;
     const why = (ran.stderr.trim() || ran.stdout.trim()).split("\n").at(-1) ?? "";
-    said.push(ran.code === 0 ? `Posted on ${where}.` : `Could not post on ${where}: ${why}`);
+    const result = ran.code === 0 ? `Posted on ${where}` : `Could not post on ${where}: ${why}`;
+    tell({ kind: "step", text: result, failed: ran.code !== 0 });
+    said.push(ran.code === 0 ? `${result}.` : result);
   }
+  tell({ kind: "posting", done: chosen.length, of: chosen.length });
   const left = draft.comments.length - chosen.length;
   if (left > 0) said.push(`The user left out ${left} of them.`);
   return said.join("\n");

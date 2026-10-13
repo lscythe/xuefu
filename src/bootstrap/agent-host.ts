@@ -206,7 +206,7 @@ export function agentHost(options: AgentHostOptions): AgentHost {
       const said =
         typeof draft === "string"
           ? draft
-          : await postReview(tools, draft, await handlers.review(draft));
+          : await postReview(tools, draft, await handlers.review(draft), handlers.onEvent);
       return {
         jsonrpc: "2.0",
         id,
