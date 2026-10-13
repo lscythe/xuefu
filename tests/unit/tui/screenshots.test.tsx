@@ -1,7 +1,7 @@
 import { afterEach, describe, test } from "bun:test";
 import type { TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
-import type { AgentHost } from "../../../src/application/ports/agent";
+import type { AgentChoosing, AgentHost } from "../../../src/application/ports/agent";
 import type { TrackedTime } from "../../../src/application/timesheet/queries";
 import { approvalPrompt } from "../../../src/bootstrap/agent-host";
 import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
@@ -984,6 +984,44 @@ describe("screenshots", () => {
     screen.mockInput.pressKey(" ");
     await screen.waitForFrame((f) => f.includes("enter post 2 of 3"));
     expectScreenshot("pr-agent-post", screen.captureSpans());
+  });
+
+  test("choosing the agent and its model", async () => {
+    const choosing: AgentChoosing = {
+      agents: () => [
+        { id: "claude", name: "Claude" },
+        { id: "opencode", name: "OpenCode" },
+      ],
+      models: (agent) =>
+        Promise.resolve(
+          ok(
+            agent === "claude"
+              ? [
+                  { id: null, name: "Claude Code's default" },
+                  { id: "fable", name: "Fable" },
+                  { id: "opus", name: "Opus" },
+                  { id: "sonnet", name: "Sonnet" },
+                  { id: "haiku", name: "Haiku" },
+                ]
+              : [
+                  { id: null, name: "OpenCode's default (anthropic/claude-sonnet-5-5)" },
+                  { id: "anthropic/claude-opus-5-5", name: "Anthropic/Claude Opus 5.5" },
+                  { id: "anthropic/claude-sonnet-5-5", name: "Anthropic/Claude Sonnet 5.5" },
+                  { id: "openai/gpt-5.5", name: "OpenAI/GPT-5.5" },
+                ],
+          ),
+        ),
+      current: () => ({ agent: "claude", model: "opus" }),
+      choose: () => ok(undefined),
+    };
+    const screen = await shell({ agent: { ...reviewer(false), choosing } });
+    await screen.mockInput.typeText(":");
+    await screen.waitForFrame((f) => f.includes(" Commands "));
+    await screen.mockInput.typeText("choose the agent");
+    await screen.waitForFrame((f) => f.includes("Choose the agent and model"));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("OpenAI/GPT-5.5"));
+    expectScreenshot("agent-picker", screen.captureSpans());
   });
 
   test("git, not a repository, at 80 columns", async () => {

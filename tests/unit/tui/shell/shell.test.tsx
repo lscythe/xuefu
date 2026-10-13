@@ -5,7 +5,11 @@ import { testRender, useKeyboard } from "@opentui/solid";
 import { type Component, createEffect, createSignal, lazy } from "solid-js";
 import type { AppError } from "../../../../src/application/errors";
 import type { SavedNote } from "../../../../src/application/notes/commands";
-import type { AgentHandlers, AgentHost } from "../../../../src/application/ports/agent";
+import type {
+  AgentChoosing,
+  AgentHandlers,
+  AgentHost,
+} from "../../../../src/application/ports/agent";
 import type { Note, NoteBody } from "../../../../src/domain/notes/note";
 import {
   confirmationRequired,
@@ -1141,6 +1145,45 @@ describe("Shell agent", () => {
     shell.mockInput.pressEnter();
     await shell.waitForFrame((f) => f.includes(" Claude · Study "));
     expect(asked).toEqual([`null in ${MOBILE.workspace.path}`]);
+  });
+
+  test("the palette opens the choice of agent and model; Esc goes back to the cockpit", async () => {
+    const { agent } = quietAgent();
+    const chosen: string[] = [];
+    const choosing: AgentChoosing = {
+      agents: () => [{ id: "claude", name: "Claude" }],
+      models: () => Promise.resolve(ok([{ id: "opus", name: "Opus" }])),
+      current: () => ({ agent: "claude", model: null }),
+      choose: (choice) => {
+        chosen.push(`${choice.agent} ${choice.model}`);
+        return ok(undefined);
+      },
+    };
+    const shell = await onPrs({ ...agent, choosing });
+    shell.mockInput.pressTab();
+    shell.mockInput.pressKey(":");
+    await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    await shell.mockInput.typeText("choose the agent");
+    await shell.waitForFrame((f) => f.includes("Choose the agent and model"));
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes(" Agent and model ") && f.includes("Opus"));
+    // Its keys are the picker's, not the section's.
+    shell.mockInput.pressKey("x");
+    await shell.waitForFrame((f) => f.includes("> x"));
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Agent and model "));
+    shell.mockInput.pressKey("y");
+    const after = await shell.waitForFrame((f) => /agent: .*y/u.test(f));
+    expect(after).not.toMatch(/agent: .*x/u);
+    expect(chosen).toEqual([]);
+  });
+
+  test("without a choice to make, the palette does not offer one", async () => {
+    const { agent } = quietAgent();
+    const shell = await renderShell({ agent });
+    shell.mockInput.pressKey(":");
+    const palette = await shell.waitForFrame((f) => f.includes("Ask Claude…"));
+    expect(palette).not.toContain("Choose the agent");
   });
 });
 

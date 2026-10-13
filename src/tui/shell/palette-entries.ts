@@ -33,6 +33,8 @@ export interface CockpitActions {
     readonly name: string;
     readonly ask: (question: string | null) => void;
   } | null;
+  /** Opens the choice of agent and model; null when there is nothing to choose. */
+  readonly chooseAgent: (() => void) | null;
   /** Adding, renaming, grouping and removing workspaces; null when the cockpit cannot. */
   readonly workspaces: WorkspaceEntryActions | null;
   readonly quit: () => void;
@@ -112,6 +114,14 @@ export function paletteEntries(state: CockpitState, actions: CockpitActions): Pa
       keys: null,
       fields: [],
       run: done(() => agent.ask(null)),
+    });
+  }
+  if (actions.chooseAgent !== null) {
+    entries.push({
+      title: "Choose the agent and model",
+      keys: null,
+      fields: [],
+      run: done(actions.chooseAgent),
     });
   }
   const toggle = timerToggle(state.timer?.timer ?? null, state.workspace?.id ?? null);
