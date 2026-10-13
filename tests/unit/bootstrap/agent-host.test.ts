@@ -454,7 +454,7 @@ describe("agentHost", () => {
       text: "Await authenticate() before prompt().",
       suggestion: "    authenticate().await()\n",
     };
-    const { launch, rpc, call, served, reviewed, fake } = await session([], {
+    const { launch, rpc, call, served, reviewed, fake, events } = await session([], {
       commenting: true,
       // The user leaves out the last.
       pick: (draft) => draft.comments.slice(0, 2),
@@ -522,6 +522,14 @@ describe("agentHost", () => {
         },
       ],
     });
+    // The user sees how far it is, and what became of each, as it posts.
+    expect(events.slice(1)).toEqual([
+      { kind: "posting", done: 0, of: 2 },
+      { kind: "step", text: "Posted on app/src/main/java/Login.kt:11", failed: false },
+      { kind: "posting", done: 1, of: 2 },
+      { kind: "step", text: "Posted on app/src/Pin.kt:4", failed: false },
+      { kind: "posting", done: 2, of: 2 },
+    ]);
     fake.emit({ kind: "exit", message: null });
   });
 

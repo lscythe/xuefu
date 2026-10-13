@@ -82,6 +82,8 @@ export type AgentEvent =
     }
   /** What XueFu does to prepare it, such as bringing the code graph up to date. */
   | { readonly kind: "step"; readonly text: string; readonly failed: boolean }
+  /** XueFu posts the comments of a review the user chose: how many are done, of how many. */
+  | { readonly kind: "posting"; readonly done: number; readonly of: number }
   /** Its answer to a message is complete; `failed` says why when it could not finish. */
   | { readonly kind: "turn"; readonly costUsd: number | null; readonly failed: string | null }
   /** It has stopped; `message` says why when it was not asked to. */
