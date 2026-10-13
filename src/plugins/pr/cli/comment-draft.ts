@@ -4,7 +4,7 @@ import { validationError } from "../../../domain/shared/errors";
 import { err, ok, type Result } from "../../../domain/shared/result";
 import type { PullRequestClient } from "../application/pull-request-client";
 import type { CommentDraft } from "../domain/comment";
-import { lineAnchor, parseDiff } from "../domain/diff";
+import { parseDiff, placeComment, placementProblem } from "../domain/diff";
 import type { PullRequest } from "../domain/pull-request";
 
 const refused = (path: string, message: string) =>
@@ -47,14 +47,12 @@ export async function commentDraft(
   const diff = await client.diff(pull.repository, pull.id);
   if (!diff.ok) return diff;
   const side = flags["old"] === true ? "old" : "new";
-  const anchor = lineAnchor(parseDiff(diff.value), file, number, side);
-  if (anchor === null) {
+  const placed = placeComment(parseDiff(diff.value), file, number, side);
+  if (placed.kind !== "placed") {
     return refused(
-      "line",
-      side === "old"
-        ? `line ${number} of ${file} as it was is not removed in the diff`
-        : `line ${number} of ${file} is not in the diff; for a removed line, add --old`,
+      placed.kind === "no-line" ? "line" : "file",
+      placementProblem(placed, file, number, side, "--old"),
     );
   }
-  return ok({ text, anchor, replyTo: null });
+  return ok({ text, anchor: placed.anchor, replyTo: null });
 }

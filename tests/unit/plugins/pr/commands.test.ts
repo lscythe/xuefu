@@ -567,7 +567,9 @@ describe("xuefu pr comment", () => {
       issues: [
         {
           path: "line",
-          message: "line 99 of app/src/Login.kt is not in the diff; for a removed line, add --old",
+          message:
+            "line 99 of app/src/Login.kt is not in the diff, which shows lines 10-13 of it; " +
+            "for a removed line, add --old",
         },
       ],
     });

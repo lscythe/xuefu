@@ -1,11 +1,14 @@
 import type { DraftComment, DraftReview } from "../application/ports/agent";
 import type { McpTools } from "../cli/mcp-server";
 import { suggestedText } from "../plugins/pr/domain/comment";
+import { parseDiff, placeComment, placementProblem } from "../plugins/pr/domain/diff";
 
 /** The tool the agent posts a settled review with, once the user has chosen what goes. */
 export const POST = "post_comments";
 /** XueFu's tool that posts one comment, which posting a review runs for each. */
 const COMMENT = "pr_comment";
+/** XueFu's tool that shows a pull request's diff, which comments are placed on. */
+const DIFF = "pr_diff";
 
 export const POST_TOOL = {
   name: POST,
@@ -23,10 +26,15 @@ export const POST_TOOL = {
         items: {
           type: "object",
           properties: {
-            file: { type: "string", description: "the file's path in the repository" },
+            file: {
+              type: "string",
+              description: "the file's whole path, as the diff names it after b/; never shortened",
+            },
             line: {
               type: "integer",
-              description: "the line, numbered as in the file after the change, or before if old",
+              description:
+                "a line the diff shows, added or unchanged, numbered as in the file after the " +
+                "change; or with old, a removed line, numbered as before",
             },
             old: { type: "boolean", description: "the line is one the change removes" },
             text: { type: "string", description: "the comment, in Markdown, without the code" },
@@ -87,6 +95,37 @@ export function draftReview(given: unknown): DraftReview | string {
   const wrong = drafted.find((comment) => typeof comment === "string");
   if (typeof wrong === "string") return wrong;
   return { pullRequest, comments: drafted as DraftComment[] };
+}
+
+/**
+ * The review with each comment placed on its line of the pull request's diff, its path as the
+ * diff has it; or, when any cannot be, what is wrong with each, for the agent to put right before
+ * the user is shown any. Without the diff, it stays as drafted, and posting says what fails.
+ */
+export async function placeReview(
+  tools: McpTools,
+  draft: DraftReview,
+): Promise<DraftReview | string> {
+  const diff = tools.tools.find((tool) => tool.name === DIFF);
+  if (diff === undefined) return draft;
+  const ran = await tools.run(diff.argv({ pullRequest: draft.pullRequest }));
+  if (ran.code !== 0) return draft;
+  const files = parseDiff(ran.stdout);
+  const problems: string[] = [];
+  const comments = draft.comments.map((comment, index) => {
+    const side = comment.old ? "old" : "new";
+    const placed = placeComment(files, comment.file, comment.line, side);
+    if (placed.kind === "placed") return { ...comment, file: placed.anchor.path };
+    const why = placementProblem(placed, comment.file, comment.line, side, "old: true");
+    problems.push(`comment ${index + 1}: ${why}`);
+    return comment;
+  });
+  if (problems.length === 0) return { ...draft, comments };
+  return [
+    "Nothing was shown to the user yet. Put each of these on a line the diff shows, with its",
+    "whole path, then call post_comments again with all the comments:",
+    ...problems,
+  ].join("\n");
 }
 
 /** Whether reviews can be posted: XueFu's PR commands are on. */

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { filePath, parseDiff } from "../../../../src/plugins/pr/domain/diff";
+import {
+  filePath,
+  parseDiff,
+  placeComment,
+  placementProblem,
+} from "../../../../src/plugins/pr/domain/diff";
 
 const MODIFIED = [
   "diff --git a/app/src/Login.kt b/app/src/Login.kt",
@@ -113,5 +118,114 @@ describe("parseDiff", () => {
       ["removed", 3, null],
       ["added", null, 3],
     ]);
+  });
+});
+
+describe("placeComment", () => {
+  /** Two modules with a file of the same name, and one moved. */
+  const FILES = parseDiff(
+    [
+      "diff --git a/feature/detail/src/main/java/id/bri/detail/DetailViewModel.kt b/feature/detail/src/main/java/id/bri/detail/DetailViewModel.kt",
+      "@@ -280,3 +280,5 @@",
+      "         try {",
+      "-            pin()",
+      "+            cvv()",
+      "+        } catch (e: Throwable) {",
+      "+            error(e)",
+      "         }",
+      "diff --git a/feature/addcc/src/main/java/id/bri/addcc/Screen.kt b/feature/addcc/src/main/java/id/bri/addcc/Screen.kt",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+      "diff --git a/feature/estatement/src/main/java/id/bri/Screen.kt b/feature/estatement/src/main/java/id/bri/Screen.kt",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+      "diff --git a/core/Old.kt b/core/New.kt",
+      "rename from core/Old.kt",
+      "rename to core/New.kt",
+      "@@ -5 +5 @@",
+      "-x",
+      "+y",
+    ].join("\n"),
+  );
+  const DETAIL = "feature/detail/src/main/java/id/bri/detail/DetailViewModel.kt";
+
+  test("on a line the diff shows, by the path as the diff has it, or as it was before a move", () => {
+    expect(placeComment(FILES, DETAIL, 282, "new")).toEqual({
+      kind: "placed",
+      anchor: { path: DETAIL, line: 282, side: "new", lineKind: "added" },
+    });
+    expect(placeComment(FILES, DETAIL, 284, "new")).toMatchObject({
+      anchor: { lineKind: "context" },
+    });
+    expect(placeComment(FILES, DETAIL, 281, "old")).toMatchObject({
+      anchor: { side: "old", lineKind: "removed" },
+    });
+    expect(placeComment(FILES, "core/Old.kt", 5, "new")).toMatchObject({
+      anchor: { path: "core/New.kt" },
+    });
+  });
+
+  test("a path cut short is the one file it fits", () => {
+    for (const short of [
+      "feature/detail/ui/detail/DetailViewModel.kt".replace("ui/detail/", "detail/"),
+      "feature/detail/DetailViewModel.kt",
+      "feature/…/DetailViewModel.kt",
+      ".../detail/DetailViewModel.kt",
+      "DetailViewModel.kt",
+    ]) {
+      expect(placeComment(FILES, short, 282, "new")).toMatchObject({ anchor: { path: DETAIL } });
+    }
+    expect(placeComment(FILES, "addcc/Screen.kt", 1, "new")).toMatchObject({
+      anchor: { path: "feature/addcc/src/main/java/id/bri/addcc/Screen.kt" },
+    });
+  });
+
+  test("one it does not fit, or fits more than one of, says which it could be", () => {
+    const wrong = placeComment(FILES, "feature/detail/ui/DetailViewModel.kt", 282, "new");
+    expect(wrong).toEqual({ kind: "no-file", near: [DETAIL] });
+    if (wrong.kind !== "placed") {
+      expect(
+        placementProblem(wrong, "feature/detail/ui/DetailViewModel.kt", 282, "new", "--old"),
+      ).toBe(`feature/detail/ui/DetailViewModel.kt is not in the diff; did you mean ${DETAIL}?`);
+    }
+    const none = placeComment(FILES, "Settings.kt", 1, "new");
+    expect(none).toEqual({ kind: "no-file", near: [] });
+    if (none.kind !== "placed") {
+      expect(placementProblem(none, "Settings.kt", 1, "new", "--old")).toBe(
+        "Settings.kt is not in the diff",
+      );
+    }
+    const both = placeComment(FILES, "Screen.kt", 1, "new");
+    expect(both.kind).toBe("ambiguous");
+    if (both.kind !== "placed") {
+      expect(placementProblem(both, "Screen.kt", 1, "new", "--old")).toBe(
+        "Screen.kt could be feature/addcc/src/main/java/id/bri/addcc/Screen.kt or " +
+          "feature/estatement/src/main/java/id/bri/Screen.kt; give its whole path",
+      );
+    }
+  });
+
+  test("a line it does not show says which lines it does", () => {
+    const after = placeComment(FILES, DETAIL, 300, "new");
+    expect(after).toEqual({ kind: "no-line", path: DETAIL, shown: "280-284", removed: "281" });
+    if (after.kind === "no-line") {
+      expect(placementProblem(after, DETAIL, 300, "new", "old: true")).toBe(
+        `line 300 of ${DETAIL} is not in the diff, which shows lines 280-284 of it; ` +
+          "for a removed line, add old: true",
+      );
+      expect(placementProblem(after, DETAIL, 280, "old", "--old")).toBe(
+        `line 280 of ${DETAIL} as it was is not removed in the diff, which removes lines 281`,
+      );
+      expect(
+        placementProblem({ ...after, shown: "", removed: "" }, DETAIL, 2, "old", "--old"),
+      ).toBe(
+        `line 2 of ${DETAIL} as it was is not removed in the diff, which removes nothing of it`,
+      );
+      expect(placementProblem({ ...after, shown: "" }, DETAIL, 2, "new", "--old")).toBe(
+        `line 2 of ${DETAIL} is not in the diff; for a removed line, add --old`,
+      );
+    }
   });
 });
