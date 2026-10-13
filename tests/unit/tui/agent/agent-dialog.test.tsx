@@ -13,6 +13,7 @@ import type { AbsolutePath } from "../../../../src/domain/shared/path";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Workspace, WorkspaceName } from "../../../../src/domain/workspace/workspace";
 import { AgentDialog } from "../../../../src/tui/agent/agent-dialog";
+import { ManualClock } from "../../../support/manual-clock";
 
 const MOBILE: Workspace = {
   id: "mobile" as WorkspaceId,
@@ -89,6 +90,7 @@ async function open(
   prompt: string | null = "Review the pull request MOB/app#42.",
 ) {
   const [shown, setShown] = createSignal(true);
+  const clock = new ManualClock();
   setup = await testRender(
     () => (
       <Show when={shown()}>
@@ -98,6 +100,7 @@ async function open(
           workspace={MOBILE}
           prompt={prompt}
           icons={icons}
+          clock={clock}
           onClose={() => setShown(false)}
         />
       </Show>
@@ -110,7 +113,7 @@ async function open(
     await view.renderOnce();
     return view.captureCharFrame();
   };
-  return { view, frame, shown, close: () => setShown(false) };
+  return { view, frame, clock, shown, close: () => setShown(false) };
 }
 
 /** A lone ESC is only reported once the parser is sure no escape sequence follows. */
@@ -215,6 +218,29 @@ describe("AgentDialog", () => {
     expect(await posting).toEqual(REVIEW.comments.filter((_, index) => index !== 1));
     expect(await frame()).not.toContain("Post on");
     expect(script.sent).toHaveLength(1);
+  });
+
+  test("while a review is posted, says which comment it is on, and what became of each", async () => {
+    const script = scriptedAgent();
+    const { frame, clock } = await open(script.agent);
+    const { onEvent } = script.handlers();
+    onEvent({ kind: "posting", done: 0, of: 2 });
+    let shown = await frame();
+    expect(shown).toContain("◐ Posting comment 1 of 2…");
+    onEvent({ kind: "step", text: "Posted on app/src/Login.kt:11", failed: false });
+    onEvent({ kind: "posting", done: 1, of: 2 });
+    // The spinner turns with the clock.
+    clock.advance(150);
+    await Bun.sleep(200);
+    shown = await frame();
+    expect(shown).toContain("· Posted on app/src/Login.kt:11");
+    expect(shown).toContain("◓ Posting comment 2 of 2…");
+    onEvent({ kind: "step", text: "Could not post on README.md:2: gone", failed: true });
+    onEvent({ kind: "posting", done: 2, of: 2 });
+    shown = await frame();
+    expect(shown).toContain("✗ Could not post on README.md:2: gone");
+    expect(shown).toContain("Claude is working…");
+    expect(shown).not.toContain("Posting");
   });
 
   test("in a review, a chooses all or none, and Esc posts none", async () => {
@@ -376,7 +402,7 @@ describe("AgentDialog", () => {
     expect(shown).toContain("✻ Read the diff.");
     expect(shown).toContain("… 1 more line");
     expect(shown).not.toContain("Then docs.");
-    expect(shown).toContain("✻ Claude is thinking…");
+    expect(shown).toContain("◐ Claude is thinking…");
     expect(shown).toContain("ctrl+t all thinking");
     view.mockInput.pressKey("t", { ctrl: true });
     shown = await frame();
@@ -387,7 +413,7 @@ describe("AgentDialog", () => {
     onEvent({ kind: "text", text: "Done: **one** risk in `prompt()`." });
     shown = await frame();
     expect(shown).toContain("● Done: one risk in prompt().");
-    expect(shown).toContain("✻ Claude is working…");
+    expect(shown).toContain("◐ Claude is working…");
   });
 
   test("asked only to study the workspace again, it starts with no message of yours", async () => {

@@ -768,6 +768,7 @@ export function Shell(props: ShellProps) {
               prompt={question.prompt}
               branch={question.branch ?? null}
               icons={props.icons}
+              clock={props.clock}
               onClose={() => setAsking(null)}
               onPutBack={(done) => {
                 if (!done.ok) setNotice(done.error);

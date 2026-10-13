@@ -843,7 +843,8 @@ describe("screenshots", () => {
   });
 
   /** Claude reviewing a pull request: it reads, answers, then asks to post a comment if `asks`. */
-  const reviewer = (asks: boolean, posts = false): AgentHost => ({
+  /** Claude reviewing; it `asks` to comment, or `posts` a review, the last still `posting`. */
+  const reviewer = (asks: boolean, posts = false, posting = false): AgentHost => ({
     name: "Claude",
     model: null,
     ask: ({ branch }, { onEvent, approve, review }) => {
@@ -909,7 +910,8 @@ describe("screenshots", () => {
             "3. `docs/login.md` is new but not linked from the README.\n\n" +
             "> Fox's thread on line 11 asks the same; it is still open.",
         });
-        onEvent({ kind: "turn", costUsd: 0.0731, failed: null });
+        // Posting is inside its turn, which ends only once the comments are posted.
+        if (!posting) onEvent({ kind: "turn", costUsd: 0.0731, failed: null });
         if (asks) {
           const input = {
             pullRequest: "MOB/mobile-banking#42",
@@ -950,6 +952,11 @@ describe("screenshots", () => {
                 suggestion: "- [Login](docs/login.md): biometric sign-in and the PIN fallback",
               },
             ],
+          }).then((chosen) => {
+            if (!posting) return;
+            onEvent({ kind: "posting", done: 0, of: chosen.length });
+            onEvent({ kind: "step", text: "Posted on app/src/Login.kt:11", failed: false });
+            onEvent({ kind: "posting", done: 1, of: chosen.length });
           });
         }
       });
@@ -1001,6 +1008,21 @@ describe("screenshots", () => {
     screen.mockInput.pressKey(" ");
     await screen.waitForFrame((f) => f.includes("enter post 2 of 3"));
     expectScreenshot("pr-agent-post", screen.captureSpans());
+  });
+
+  test("pull requests, the review chosen being posted", async () => {
+    const screen = await shell({
+      sections: cockpitSections([gitSection(DIRTY), jiraSection, prSection]),
+      navigation: new Map([["mobile-banking", "pr"]]),
+      agent: reviewer(false, true, true),
+    });
+    await screen.waitForFrame((f) => f.includes("shared-sdk#12") && f.includes("This branch"));
+    screen.mockInput.pressTab();
+    screen.mockInput.pressKey("A");
+    await screen.waitForFrame((f) => f.includes("enter post 3 of 3"));
+    screen.mockInput.pressEnter();
+    await screen.waitForFrame((f) => f.includes("Posting comment 2 of 3"));
+    expectScreenshot("pr-agent-posting", screen.captureSpans());
   });
 
   test("choosing the agent and its model", async () => {
