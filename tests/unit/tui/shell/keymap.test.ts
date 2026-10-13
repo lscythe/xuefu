@@ -34,6 +34,7 @@ describe("actionFor", () => {
     [alt("w"), { kind: "tab.close" }],
     [press("e"), { kind: "note.edit", on: "workspace" }],
     [press("i"), { kind: "note.edit", on: "issue" }],
+    [press("s"), { kind: "work.start" }],
     [press("t"), { kind: "timer.toggle" }],
     [press("t", { shift: true }), { kind: "timer.stop" }],
     [press("tab"), { kind: "panel.focus", to: "next" }],

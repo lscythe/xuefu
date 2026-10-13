@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { fitHints } from "../../../../src/tui/shell/panel-status";
+import { fitHints, workKeys } from "../../../../src/tui/shell/panel-status";
+
+describe("workKeys", () => {
+  test("starting work with a workspace in front, then what the timer key does", () => {
+    expect(workKeys(true, "start", false)).toBe("s start work · t start timer");
+    expect(workKeys(true, "pause", true)).toBe("s start work | t pause | T stop");
+    expect(workKeys(true, null, false)).toBe("s start work");
+    expect(workKeys(false, "resume", false)).toBe("t resume · T stop");
+    expect(workKeys(false, null, false)).toBeNull();
+  });
+});
 
 describe("fitHints", () => {
   const hints = [

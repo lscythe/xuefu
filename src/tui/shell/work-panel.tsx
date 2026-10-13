@@ -67,7 +67,7 @@ export function WorkPanel(props: WorkPanelProps) {
       </Match>
       <Match when={props.work === null}>
         <text fg={PALETTE.text}>{`Nothing in progress in ${props.workspace?.name ?? ""}.`}</text>
-        <text fg={PALETTE.textMuted}>Start some with: xuefu work start {"<issue>"}</text>
+        <text fg={PALETTE.textMuted}>Press s to start work on an issue.</text>
       </Match>
       <Match when={props.work !== null && size() !== null && props.work}>
         {(work: Accessor<WorkContext>) => {

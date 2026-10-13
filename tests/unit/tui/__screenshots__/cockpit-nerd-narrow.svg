@@ -57,7 +57,7 @@
 <text x="54" y="86" fill="#f2a774">│</text>
 <rect x="63" y="72" width="9" height="18" fill="#1c1d29"/>
 <rect x="72" y="72" width="306" height="18" fill="#1c1d29"/>
-<text x="72 81 90 99 108 126 135 144 153 171 180 189 198 207 225 234 243 252 261 279 288 297 306 324 333 342 351 360" y="86" fill="#9a9db6">Startsomewith:xuefuworkstart</text>
+<text x="72 81 90 99 108 126 144 153 171 180 189 198 207 225 234 243 252 270 279 297 306 324 333 342 351 360 369" y="86" fill="#9a9db6">Pressstostartworkonanissue.</text>
 <rect x="378" y="72" width="63" height="18" fill="#1c1d29"/>
 <rect x="441" y="72" width="9" height="18" fill="#1c1d29"/>
 <text x="441" y="86" fill="#f2a774">│</text>
@@ -76,10 +76,7 @@
 <text x="45" y="104" fill="#3d405a">│</text>
 <rect x="54" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="54" y="104" fill="#f2a774">│</text>
-<rect x="63" y="90" width="9" height="18" fill="#1c1d29"/>
-<rect x="72" y="90" width="63" height="18" fill="#1c1d29"/>
-<text x="72 81 90 99 108 117 126" y="104" fill="#9a9db6">&lt;issue&gt;</text>
-<rect x="135" y="90" width="306" height="18" fill="#1c1d29"/>
+<rect x="63" y="90" width="378" height="18" fill="#1c1d29"/>
 <rect x="441" y="90" width="9" height="18" fill="#1c1d29"/>
 <text x="441" y="104" fill="#f2a774">│</text>
 <rect x="450" y="90" width="9" height="18" fill="#1c1d29"/>
@@ -144,7 +141,7 @@
 <rect x="45" y="162" width="9" height="18" fill="#1c1d29"/>
 <text x="45" y="176" fill="#3d405a">│</text>
 <rect x="54" y="162" width="396" height="18" fill="#1c1d29"/>
-<text x="54 63 72 81 90 99 108 117 126 135 153 171 180 189 198 207 225 234 243 252 261 279 297 315 324 333 342 360 369 378 387 396 405 414 423 432 441" y="176" fill="#f2a774">╰─────────tstarttimer·⏎open─────────╯</text>
+<text x="54 63 81 99 108 117 126 135 153 162 171 180 198 216 234 243 252 261 270 288 297 306 315 324 342 360 378 387 396 405 423 432 441" y="176" fill="#f2a774">╰─sstartwork·tstarttimer·⏎open──╯</text>
 <rect x="450" y="162" width="270" height="18" fill="#1c1d29"/>
 <text x="450 459 468 477 486 495 504 513 522 531 540 549 558 567 576 585 594 603 612 621 630 639 648 657 666 675 684 693 702 711" y="176" fill="#3d405a">╰────────────────────────────╯</text>
 <rect x="0" y="180" width="9" height="18" fill="#1c1d29"/>

@@ -438,6 +438,45 @@ describe("Shell work", () => {
     const none = await openWork({ tabs: fakeTabs(VIEWS).initial });
     expect(none.captureCharFrame()).toContain("Open a workspace with Ctrl+W to see its work.");
   });
+
+  test("s asks for an issue and starts work on it, from the Work section or the dashboard", async () => {
+    const clock = new ManualClock(NOW);
+    const work = fakeWork(
+      clock,
+      fakeTimer(
+        clock,
+        VIEWS.map((v) => v.workspace),
+      ),
+    );
+    const shell = await openWork({ work: new Map(), clock, startWork: work.start });
+    const empty = shell.captureCharFrame();
+    expect(empty).toContain("Press s to start work on an issue.");
+    expect(empty).toContain("s start work · t start timer");
+    shell.mockInput.pressKey("s");
+    const asked = await shell.waitForFrame((f) => f.includes(" Start work "));
+    // The key is not typed into the field it opens.
+    expect(asked).toContain("> ▏e.g. MOB-2841");
+    await shell.mockInput.typeText("MOB-7");
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes("Title (optional)"));
+    shell.mockInput.pressEnter();
+    await shell.waitForFrame((f) => f.includes("MOB-7") && !f.includes(" Start work "));
+    expect<string | undefined>(work.open().get("mobile-banking")?.issueKey).toBe("MOB-7");
+
+    shell.mockInput.pressKey("k");
+    await shell.waitForFrame(showing("Dashboard"));
+    shell.mockInput.pressKey("s");
+    await shell.waitForFrame((f) => f.includes(" Start other work "));
+    await pressEsc(shell);
+    await shell.waitForFrame((f) => !f.includes(" Start other work "));
+  });
+
+  test("s does nothing with no workspace in front", async () => {
+    const none = await openWork({ tabs: fakeTabs(VIEWS).initial });
+    none.mockInput.pressKey("s");
+    await none.renderOnce();
+    expect(none.captureCharFrame()).not.toContain(" Start work ");
+  });
 });
 
 describe("Shell activity", () => {
@@ -893,6 +932,10 @@ describe("Shell plugin sections", () => {
     // The cockpit's own keys, such as t for the timer, never reach the section.
     shell.mockInput.pressKey("k");
     await shell.waitForFrame((f) => f.includes("focused: j down 1 return k"));
+    // s is the section's, as git stages and Jira starts work with it.
+    shell.mockInput.pressKey("s");
+    const own = await shell.waitForFrame((f) => f.includes("focused: j down 1 return k s"));
+    expect(own).not.toContain(" Start work ");
   });
 
   test("esc or tab hands the keyboard back to the navigation", async () => {
@@ -1126,7 +1169,7 @@ describe("Shell dashboard", () => {
     expect(frame).toContain("MOB-2841  Add biometric login");
     expect(frame).toContain("Ask QA");
     expect(frame).toContain("13:58  Opened");
-    expect(rowContaining(frame, "⏎ open")).toContain("─ t start timer · ⏎ open ─");
+    expect(rowContaining(frame, "⏎ open")).toContain("─ s start work · t start timer · ⏎ open ─");
     expect(rowContaining(frame, "navigate")).toContain("tab focus");
     expect(frame).toContain("Nothing tracked today.");
     expect(lit(shell, "1 Work")).toBe(true);

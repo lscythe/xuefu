@@ -62,9 +62,9 @@
 <rect x="153" y="72" width="9" height="18" fill="#0d0d12"/>
 <text x="153" y="86" fill="#6d4b34">│</text>
 <rect x="162" y="72" width="9" height="18" fill="#0d0d12"/>
-<rect x="171" y="72" width="369" height="18" fill="#0d0d12"/>
-<text x="171 180 189 198 207 225 234 243 252 270 279 288 297 306 324 333 342 351 360 378 387 396 405 423 432 441 450 459 477 486 495 504 513 522 531" y="86" fill="#454752">Startsomewith:xuefuworkstart&lt;issue&gt;</text>
-<rect x="540" y="72" width="54" height="18" fill="#0d0d12"/>
+<rect x="171" y="72" width="306" height="18" fill="#0d0d12"/>
+<text x="171 180 189 198 207 225 243 252 270 279 288 297 306 324 333 342 351 369 378 396 405 423 432 441 450 459 468" y="86" fill="#454752">Pressstostartworkonanissue.</text>
+<rect x="477" y="72" width="117" height="18" fill="#0d0d12"/>
 <rect x="594" y="72" width="9" height="18" fill="#0d0d12"/>
 <text x="594" y="86" fill="#6d4b34">│</text>
 <rect x="603" y="72" width="9" height="18" fill="#0d0d12"/>
