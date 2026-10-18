@@ -164,6 +164,7 @@ export class SqliteTimerRepository implements TimerRepository {
         spans.push({
           source: { kind: "timer", id: id.value, position: row.data.position },
           workspaceId: workspace.value,
+          scope: { kind: "workspace", workspaceId: workspace.value },
           issueKey: issue.value,
           category: null,
           start,

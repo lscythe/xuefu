@@ -4,6 +4,7 @@ import type { EntryId, WorkspaceId } from "../shared/ids";
 import { err, ok, type Result } from "../shared/result";
 import type { Timestamp } from "../shared/time";
 import type { IssueKey } from "../work/issue-key";
+import type { GroupName } from "../workspace/workspace";
 
 /** What time not on an issue went to, such as "Meeting" or "Review". */
 export type Category = Brand<string, "Category">;
@@ -40,11 +41,14 @@ export function entryNote(raw: string): Result<EntryNote | null, ValidationError
 
 /**
  * Time added by hand, for what no timer ran: a meeting, or work done away from the desk. It is on
- * an issue, or in a category, never both, in the workspace it was added from.
+ * an issue, or in a category, never both. It belongs to a group, such as a meeting for all its
+ * workspaces, or to one workspace, and then to whichever group that workspace is in.
  */
 export interface TimeEntry {
   readonly id: EntryId;
-  readonly workspaceId: WorkspaceId;
+  readonly workspaceId: WorkspaceId | null;
+  /** Set only when the entry is on no one workspace. */
+  readonly group: GroupName | null;
   readonly issueKey: IssueKey | null;
   readonly category: Category | null;
   readonly start: Timestamp;
@@ -65,7 +69,9 @@ export function timeEntry(fields: TimeEntry): Result<TimeEntry, ValidationError>
         ? { path: "to", message: "must be within a day of the start" }
         : (fields.issueKey === null) === (fields.category === null)
           ? { path: "category", message: "give an issue or a category, one of them" }
-          : null;
+          : (fields.workspaceId === null) === (fields.group === null)
+            ? { path: "group", message: "give a workspace or a group, one of them" }
+            : null;
   if (problem !== null) return err(validationError("Time entry is invalid", [problem]));
   return ok(Object.freeze({ ...fields }));
 }

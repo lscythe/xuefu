@@ -8,11 +8,14 @@ import { err, ok, type Result } from "../../../domain/shared/result";
 import { type Timestamp, timestamp } from "../../../domain/shared/time";
 import { dayTasks, isEmptyDay, type TimesheetDay, workPlace } from "../../../domain/timesheet/day";
 import { category, entryNote, type TimeEntry, timeEntry } from "../../../domain/timesheet/entry";
+import { scopeKey, type TimesheetScope } from "../../../domain/timesheet/scope";
 import { issueKey } from "../../../domain/work/issue-key";
+import { groupName } from "../../../domain/workspace/workspace";
 
 const EntryRowSchema = z.object({
   id: z.string(),
-  workspace_id: z.string(),
+  workspace_id: z.string().nullable(),
+  group_name: z.string().nullable(),
   issue_key: z.string().nullable(),
   category: z.string().nullable(),
   start_at: z.number(),
@@ -27,7 +30,7 @@ const DayRowSchema = z.object({
   tasks: z.string().nullable(),
 });
 
-const ENTRY_COLUMNS = "id, workspace_id, issue_key, category, start_at, end_at, note";
+const ENTRY_COLUMNS = "id, workspace_id, group_name, issue_key, category, start_at, end_at, note";
 
 /** A stored value read back through its own rules; null when they refuse it. */
 const read = <T>(raw: string | null, parse: (raw: string) => Result<T, unknown>): T | null => {
@@ -41,19 +44,27 @@ function toEntry(raw: unknown): TimeEntry | null {
   if (!row.success) return null;
   const { data } = row;
   const id = entryId(data.id);
-  const workspace = workspaceId(data.workspace_id);
+  const workspace = read(data.workspace_id, workspaceId);
+  const group = read(data.group_name, groupName);
   const start = timestamp(data.start_at);
   const end = timestamp(data.end_at);
   const issue = read(data.issue_key, issueKey);
   const kind = read(data.category, category);
   const note = data.note === null ? ok(null) : entryNote(data.note);
-  if (!id.ok || !workspace.ok || !start.ok || !end.ok || !note.ok) return null;
-  if ((data.issue_key !== null && issue === null) || (data.category !== null && kind === null)) {
+  if (!id.ok || !start.ok || !end.ok || !note.ok) return null;
+  const refused = (raw: string | null, value: unknown) => raw !== null && value === null;
+  if (
+    refused(data.workspace_id, workspace) ||
+    refused(data.group_name, group) ||
+    refused(data.issue_key, issue) ||
+    refused(data.category, kind)
+  ) {
     return null;
   }
   const entry = timeEntry({
     id: id.value,
-    workspaceId: workspace.value,
+    workspaceId: workspace,
+    group,
     issueKey: issue,
     category: kind,
     start: start.value,
@@ -133,9 +144,10 @@ export class SqliteTimesheetRepository implements TimesheetRepository {
     try {
       this.db
         .query(
-          `INSERT INTO time_entries (${ENTRY_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO time_entries (${ENTRY_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              workspace_id = excluded.workspace_id,
+             group_name = excluded.group_name,
              issue_key = excluded.issue_key,
              category = excluded.category,
              start_at = excluded.start_at,
@@ -145,6 +157,7 @@ export class SqliteTimesheetRepository implements TimesheetRepository {
         .run(
           entry.id,
           entry.workspaceId,
+          entry.group,
           entry.issueKey,
           entry.category,
           entry.start,
@@ -168,35 +181,42 @@ export class SqliteTimesheetRepository implements TimesheetRepository {
     }
   }
 
-  days(from: CalendarDay, to: CalendarDay): Result<TimesheetDay[], StorageError> {
+  days(
+    scope: TimesheetScope,
+    from: CalendarDay,
+    to: CalendarDay,
+  ): Result<TimesheetDay[], StorageError> {
     let rows: unknown[];
     try {
       rows = this.db
         .query(
-          "SELECT day, place, leave, tasks FROM timesheet_days WHERE day BETWEEN ? AND ? ORDER BY day",
+          `SELECT day, place, leave, tasks FROM timesheet_days
+           WHERE scope = ? AND day BETWEEN ? AND ? ORDER BY day`,
         )
-        .all(from, to);
+        .all(scopeKey(scope), from, to);
     } catch (thrown) {
       return unreadable(thrown);
     }
     return all(rows, toDay);
   }
 
-  saveDay(day: TimesheetDay, at: Timestamp): Result<void, StorageError> {
+  saveDay(scope: TimesheetScope, day: TimesheetDay, at: Timestamp): Result<void, StorageError> {
+    const key = scopeKey(scope);
     try {
       if (isEmptyDay(day)) {
-        this.db.query("DELETE FROM timesheet_days WHERE day = ?").run(day.day);
+        this.db.query("DELETE FROM timesheet_days WHERE scope = ? AND day = ?").run(key, day.day);
       } else {
         this.db
           .query(
-            `INSERT INTO timesheet_days (day, place, leave, tasks, updated_at) VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT (day) DO UPDATE SET
+            `INSERT INTO timesheet_days (scope, day, place, leave, tasks, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (scope, day) DO UPDATE SET
                place = excluded.place,
                leave = excluded.leave,
                tasks = excluded.tasks,
                updated_at = excluded.updated_at`,
           )
-          .run(day.day, day.place, day.leave ? 1 : 0, day.tasks, at);
+          .run(key, day.day, day.place, day.leave ? 1 : 0, day.tasks, at);
       }
       return ok(undefined);
     } catch (thrown) {

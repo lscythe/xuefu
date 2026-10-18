@@ -34,6 +34,7 @@ export type CliCommand =
       readonly span: "day" | "week" | "month";
       /** A day, or a month for "month"; null means today, or this month. */
       readonly when: string | null;
+      readonly target: TimesheetTarget;
       readonly json: boolean;
     }
   | { readonly kind: "timesheet.add"; readonly fields: TimeFields }
@@ -41,6 +42,7 @@ export type CliCommand =
   | { readonly kind: "timesheet.delete"; readonly id: string; readonly yes: boolean }
   | {
       readonly kind: "timesheet.day";
+      readonly target: TimesheetTarget;
       readonly day: string | null;
       readonly place: string | null;
       readonly leave: boolean | null;
@@ -110,10 +112,24 @@ interface CommandSpec {
   build(args: readonly string[], values: Values): CliCommand;
 }
 
+/**
+ * Whose timesheet: a group's, a workspace's (its group's when it has one), or with `all` every
+ * one together. Nothing given means the timesheet of the workspace containing the current folder.
+ */
+export interface TimesheetTarget {
+  readonly workspace: string | null;
+  readonly group: string | null;
+  readonly all: boolean;
+}
+
 /** Time as typed: when, and against what; null where not given. */
 export interface TimeFields {
-  /** null means the workspace containing the current directory. */
+  /**
+   * The workspace, or the whole group, the time is on. Neither means the current folder's
+   * workspace's group, or the workspace itself when it is in none.
+   */
   readonly workspace: string | null;
+  readonly group: string | null;
   readonly issue: string | null;
   readonly category: string | null;
   /** "13:00"; on `date`, or today. */
@@ -125,7 +141,7 @@ export interface TimeFields {
 
 const GLOBAL_FLAGS = new Set(["help", "version", "debug", "log-level"]);
 
-const TIME_FLAGS = ["workspace", "issue", "category", "from", "to", "date", "note"];
+const TIME_FLAGS = ["workspace", "group", "issue", "category", "from", "to", "date", "note"];
 
 const text = (values: Values, key: string): string | null => {
   const value = values[key];
@@ -134,8 +150,15 @@ const text = (values: Values, key: string): string | null => {
 const flag = (values: Values, key: string): boolean => values[key] === true;
 const arg = (args: readonly string[], index: number): string => args[index] ?? "";
 
+const timesheetTarget = (values: Values): TimesheetTarget => ({
+  workspace: text(values, "workspace"),
+  group: text(values, "group"),
+  all: flag(values, "all"),
+});
+
 const timeFields = (values: Values): TimeFields => ({
   workspace: text(values, "workspace"),
+  group: text(values, "group"),
   issue: text(values, "issue"),
   category: text(values, "category"),
   from: text(values, "from"),
@@ -149,11 +172,12 @@ function timesheetShow(span: "day" | "week" | "month"): CommandSpec {
     usage: span === "month" ? "[YYYY-MM]" : "[YYYY-MM-DD]",
     minArgs: 0,
     maxArgs: 1,
-    flags: ["json"],
+    flags: ["json", "workspace", "group", "all"],
     build: (args, values) => ({
       kind: "timesheet.show",
       span,
       when: args[0] ?? null,
+      target: timesheetTarget(values),
       json: flag(values, "json"),
     }),
   };
@@ -368,12 +392,13 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   },
   "timesheet day": {
     ...timesheetShow("day"),
-    flags: ["json", "place", "leave", "worked", "tasks"],
+    flags: ["json", "workspace", "group", "all", "place", "leave", "worked", "tasks"],
     build: (args, values) => {
       const changes = ["place", "leave", "worked", "tasks"].some((key) => key in values);
       if (!changes) return timesheetShow("day").build(args, values);
       return {
         kind: "timesheet.day",
+        target: timesheetTarget(values),
         day: args[0] ?? null,
         place: text(values, "place"),
         leave: flag(values, "leave") ? true : flag(values, "worked") ? false : null,
@@ -394,7 +419,7 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     usage: "<id>",
     minArgs: 1,
     maxArgs: 1,
-    flags: TIME_FLAGS.filter((name) => name !== "workspace"),
+    flags: TIME_FLAGS.filter((name) => name !== "workspace" && name !== "group"),
     build: (args, values) => ({
       kind: "timesheet.edit",
       id: arg(args, 0),
@@ -519,7 +544,8 @@ const CORE_OPTIONS: Readonly<OptionTable> = {
   json: { type: "boolean" },
   name: { type: "string" },
   id: { type: "string" },
-  group: { type: "string" },
+  group: { type: "string", short: "g" },
+  all: { type: "boolean" },
   yes: { type: "boolean", short: "y" },
   workspace: { type: "string", short: "w" },
   issue: { type: "string" },

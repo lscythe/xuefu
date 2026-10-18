@@ -5,8 +5,9 @@ import { ok, type Result } from "../../domain/shared/result";
 import type { Timestamp } from "../../domain/shared/time";
 import type { TimesheetDay } from "../../domain/timesheet/day";
 import type { TimeEntry } from "../../domain/timesheet/entry";
+import { sameScope, type TimesheetScope } from "../../domain/timesheet/scope";
 import type { Timer, TimerSegment } from "../../domain/timesheet/timer";
-import { entrySpan, type TrackedSpan } from "../../domain/timesheet/tracked";
+import { entrySpan, type TrackedSpan, withScopes } from "../../domain/timesheet/tracked";
 import type { WorkspaceRegistry } from "../../domain/workspace/registry";
 import type { Workspace } from "../../domain/workspace/workspace";
 import type { TimerRepository } from "../ports/timer-repository";
@@ -49,17 +50,28 @@ export class TimerQueries {
     return loaded.ok ? ok(viewTimer(loaded.value, active.value)) : loaded;
   }
 
-  /** Every stretch of time tracked from `from` until `to`, timed or added, oldest first. */
-  tracked(from: Timestamp, to: Timestamp): Result<TrackedTime, StorageError> {
+  /**
+   * Every stretch of time tracked from `from` until `to`, timed or added, oldest first; only the
+   * scope's when one is given. Each counts on the timesheet of its workspace's group as it is now.
+   */
+  tracked(
+    from: Timestamp,
+    to: Timestamp,
+    scope: TimesheetScope | null,
+  ): Result<TrackedTime, StorageError> {
     const timed = this.timers.tracked(from, to);
     if (!timed.ok) return timed;
     const added = this.timesheet.entries(from, to);
     if (!added.ok) return added;
     const loaded = this.workspaces.load();
     if (!loaded.ok) return loaded;
+    const workspaces = new Map(loaded.value.workspaces.map((w) => [w.id as string, w]));
+    const spans = withScopes([...timed.value, ...added.value.map(entrySpan)], workspaces);
     return ok({
-      spans: [...timed.value, ...added.value.map(entrySpan)].sort((a, b) => a.start - b.start),
-      workspaces: new Map(loaded.value.workspaces.map((w) => [w.id as string, w])),
+      spans: spans
+        .filter((span) => scope === null || sameScope(span.scope, scope))
+        .sort((a, b) => a.start - b.start),
+      workspaces,
     });
   }
 
@@ -74,8 +86,12 @@ export class TimerQueries {
     return ok(found.value?.segments[position] ?? null);
   }
 
-  /** What the timesheet says of the days from `from` to `to`, both included. */
-  days(from: CalendarDay, to: CalendarDay): Result<TimesheetDay[], StorageError> {
-    return this.timesheet.days(from, to);
+  /** What the scope's timesheet says of the days from `from` to `to`, both included. */
+  days(
+    scope: TimesheetScope,
+    from: CalendarDay,
+    to: CalendarDay,
+  ): Result<TimesheetDay[], StorageError> {
+    return this.timesheet.days(scope, from, to);
   }
 }

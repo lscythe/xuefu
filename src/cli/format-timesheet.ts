@@ -1,6 +1,7 @@
 import { longDate } from "../domain/shared/calendar";
 import { type Duration, shortDuration, type Timestamp } from "../domain/shared/time";
 import { wallClock } from "../domain/shared/wall-clock";
+import { scopeName, type TimesheetScope } from "../domain/timesheet/scope";
 import type { DaySheet } from "../domain/timesheet/sheet";
 import { spanId, type TrackedSpan } from "../domain/timesheet/tracked";
 import type { Workspace } from "../domain/workspace/workspace";
@@ -10,9 +11,18 @@ type Names = ReadonlyMap<string, Workspace>;
 
 const time = (at: Timestamp, timeZone?: string) => wallClock(at, timeZone).time;
 
-/** What a span was on: its issue, its category, or its workspace's name. */
-function subject(span: Pick<TrackedSpan, "issueKey" | "category" | "workspaceId">, names: Names) {
-  return span.issueKey ?? span.category ?? names.get(span.workspaceId)?.name ?? span.workspaceId;
+/** What a span was on: its issue, its category, or its workspace's name, or its group's. */
+function subject(
+  span: Pick<TrackedSpan, "issueKey" | "category" | "workspaceId" | "scope">,
+  names: Names,
+) {
+  return (
+    span.issueKey ??
+    span.category ??
+    (span.workspaceId === null
+      ? scopeName(span.scope, names)
+      : (names.get(span.workspaceId)?.name ?? span.workspaceId))
+  );
 }
 
 /** What is said of a day besides its time: leave, place, tasks. */
@@ -73,9 +83,26 @@ export function formatDays(sheets: readonly DaySheet[]): string {
   ]);
 }
 
-/** A day as JSON, for scripts and agents. */
-export function dayJson(sheet: DaySheet, names: Names, now: Timestamp) {
+/** A scope as JSON; null for every timesheet together. */
+const scopeJson = (scope: TimesheetScope | null, names: Names) =>
+  scope === null
+    ? null
+    : {
+        kind: scope.kind,
+        group: scope.kind === "group" ? scope.group : null,
+        workspaceId: scope.kind === "workspace" ? scope.workspaceId : null,
+        name: scopeName(scope, names),
+      };
+
+/** A day of the scope's timesheet as JSON, for scripts and agents. */
+export function dayJson(
+  sheet: DaySheet,
+  scope: TimesheetScope | null,
+  names: Names,
+  now: Timestamp,
+) {
   return {
+    timesheet: scopeJson(scope, names),
     day: sheet.record.day,
     place: sheet.record.place,
     leave: sheet.record.leave,
@@ -85,7 +112,8 @@ export function dayJson(sheet: DaySheet, names: Names, now: Timestamp) {
       id: spanId(span.source),
       kind: span.source.kind,
       workspaceId: span.workspaceId,
-      workspaceName: names.get(span.workspaceId)?.name ?? null,
+      workspaceName: span.workspaceId === null ? null : (names.get(span.workspaceId)?.name ?? null),
+      group: span.scope.kind === "group" ? span.scope.group : null,
       issueKey: span.issueKey,
       category: span.category,
       start: new Date(span.start).toISOString(),

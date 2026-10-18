@@ -293,28 +293,28 @@ describe("tracked", () => {
     clock.advance(30 * MINUTE);
     await bus.invoke(commands.start, { workspace: "auth-service" });
     clock.advance(5 * MINUTE);
-    const tracked = unwrap(queries.tracked(since, until(since)));
+    const tracked = unwrap(queries.tracked(since, until(since), null));
     expect<unknown>(tracked.spans.map((s) => [s.workspaceId, s.issueKey, s.end === null])).toEqual([
       ["mobile-banking", "MOB-7", false],
       ["auth-service", null, true],
     ]);
     expect<string | undefined>(tracked.workspaces.get("auth-service")?.name).toBe("Auth Service");
-    expect(unwrap(queries.tracked(clock.now(), until(clock.now()))).spans).toHaveLength(1);
+    expect(unwrap(queries.tracked(clock.now(), until(clock.now()), null)).spans).toHaveLength(1);
     // Nothing yet started is in time that ended before it.
-    expect(unwrap(queries.tracked((since - DAY) as Timestamp, since)).spans).toEqual([]);
+    expect(unwrap(queries.tracked((since - DAY) as Timestamp, since, null)).spans).toEqual([]);
   });
 
   test("a failure to read timers, entries or workspaces is a storage error", () => {
     const now = clock.now();
     db.run("DROP TABLE workspaces");
-    expect(queries.tracked(now, until(now))).toMatchObject({
+    expect(queries.tracked(now, until(now), null)).toMatchObject({
       ok: false,
       error: { kind: "storage" },
     });
     db.run("DROP TABLE time_entries");
-    expect(queries.tracked(now, until(now))).toMatchObject({ ok: false });
+    expect(queries.tracked(now, until(now), null)).toMatchObject({ ok: false });
     db.run("DROP TABLE timer_segments");
-    expect(queries.tracked(now, until(now))).toMatchObject({
+    expect(queries.tracked(now, until(now), null)).toMatchObject({
       ok: false,
       error: { kind: "storage" },
     });

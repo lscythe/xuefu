@@ -5,10 +5,11 @@ import type { EntryId, TimerId, WorkspaceId } from "../../../src/domain/shared/i
 import type { Timestamp } from "../../../src/domain/shared/time";
 import type { DayTasks, WorkPlace } from "../../../src/domain/timesheet/day";
 import type { Category, EntryNote } from "../../../src/domain/timesheet/entry";
+import { groupScope } from "../../../src/domain/timesheet/scope";
 import { type DaySheet, daySheets } from "../../../src/domain/timesheet/sheet";
 import type { TrackedSpan } from "../../../src/domain/timesheet/tracked";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
-import type { Workspace } from "../../../src/domain/workspace/workspace";
+import type { GroupName, Workspace } from "../../../src/domain/workspace/workspace";
 
 const MONDAY = "2026-09-07" as CalendarDay;
 const TUESDAY = "2026-09-08" as CalendarDay;
@@ -18,9 +19,12 @@ const NOW = at(1, 11);
 
 const names = new Map([["mobile", { id: "mobile", name: "Mobile Banking" } as Workspace]]);
 
+const BANKING = groupScope("Banking" as GroupName);
+
 const overnight: TrackedSpan = {
   source: { kind: "timer", id: "t1" as TimerId, position: 0 },
   workspaceId: "mobile" as WorkspaceId,
+  scope: BANKING,
   issueKey: null,
   category: null,
   start: at(0, 22),
@@ -29,7 +33,8 @@ const overnight: TrackedSpan = {
 };
 const meeting: TrackedSpan = {
   source: { kind: "entry", id: "ent-1" as EntryId },
-  workspaceId: "mobile" as WorkspaceId,
+  workspaceId: null,
+  scope: BANKING,
   issueKey: null,
   category: "Meeting" as Category,
   start: at(1, 9),
@@ -83,6 +88,13 @@ describe("formatDay", () => {
     if (monday === undefined) throw new Error("a day expected");
     expect(formatDay(monday, new Map(), NOW, "UTC")).toContain("mobile");
   });
+
+  test("time on a whole group with nothing else to name shows the group", () => {
+    const bare = { ...meeting, category: null };
+    const [tuesday] = daySheets(TUESDAY, TUESDAY, [bare], [], NOW, "UTC");
+    if (tuesday === undefined) throw new Error("a day expected");
+    expect(formatDay(tuesday, names, NOW, "UTC")).toMatch(/09:00-09:30 +30m +Banking/);
+  });
 });
 
 describe("formatDays", () => {
@@ -107,7 +119,8 @@ describe("dayJson", () => {
   test("a day for scripts: what is said of it, and each span with its id and length", () => {
     const [, tuesday] = sheets();
     if (tuesday === undefined) throw new Error("a day expected");
-    expect<unknown>(dayJson(tuesday, names, NOW)).toEqual({
+    expect<unknown>(dayJson(tuesday, BANKING, names, NOW)).toEqual({
+      timesheet: { kind: "group", group: "Banking", workspaceId: null, name: "Banking" },
       day: TUESDAY,
       place: "Office",
       leave: true,
@@ -119,6 +132,7 @@ describe("dayJson", () => {
           kind: "timer",
           workspaceId: "mobile",
           workspaceName: "Mobile Banking",
+          group: "Banking",
           issueKey: null,
           category: null,
           start: "2026-09-07T22:00:00.000Z",
@@ -129,8 +143,9 @@ describe("dayJson", () => {
         {
           id: "ent-1",
           kind: "entry",
-          workspaceId: "mobile",
-          workspaceName: "Mobile Banking",
+          workspaceId: null,
+          workspaceName: null,
+          group: "Banking",
           issueKey: null,
           category: "Meeting",
           start: "2026-09-08T09:00:00.000Z",
@@ -143,6 +158,7 @@ describe("dayJson", () => {
           kind: "timer",
           workspaceId: "mobile",
           workspaceName: "Mobile Banking",
+          group: "Banking",
           issueKey: "MOB-1",
           category: null,
           start: "2026-09-08T10:00:00.000Z",
@@ -152,6 +168,20 @@ describe("dayJson", () => {
         },
       ],
     });
-    expect(dayJson(tuesday, new Map(), NOW).spans[0]?.workspaceName).toBeNull();
+    const unknown = dayJson(tuesday, null, new Map(), NOW);
+    expect(unknown.timesheet).toBeNull();
+    expect(unknown.spans[0]?.workspaceName).toBeNull();
+  });
+
+  test("a workspace's own timesheet is named by the workspace", () => {
+    const own = { kind: "workspace", workspaceId: "mobile" as WorkspaceId } as const;
+    const [monday] = daySheets(MONDAY, MONDAY, [], [], NOW, "UTC");
+    if (monday === undefined) throw new Error("a day expected");
+    expect<unknown>(dayJson(monday, own, names, NOW).timesheet).toEqual({
+      kind: "workspace",
+      group: null,
+      workspaceId: "mobile",
+      name: "Mobile Banking",
+    });
   });
 });

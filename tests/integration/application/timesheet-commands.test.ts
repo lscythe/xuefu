@@ -16,7 +16,9 @@ import type { CalendarDay } from "../../../src/domain/shared/calendar";
 import type { EntryId, TimerId, WorkspaceId } from "../../../src/domain/shared/ids";
 import type { Result } from "../../../src/domain/shared/result";
 import type { Timestamp } from "../../../src/domain/shared/time";
+import { groupScope, type TimesheetScope } from "../../../src/domain/timesheet/scope";
 import { pauseTimer, startTimer, stopTimer } from "../../../src/domain/timesheet/timer";
+import type { GroupName } from "../../../src/domain/workspace/workspace";
 import { SqliteEventLedger } from "../../../src/infrastructure/persistence/sqlite/event-ledger";
 import { SqliteTimerRepository } from "../../../src/infrastructure/persistence/sqlite/timer-repository";
 import { SqliteTimesheetRepository } from "../../../src/infrastructure/persistence/sqlite/timesheet-repository";
@@ -41,9 +43,12 @@ let clock: ManualClock;
 
 beforeEach(() => {
   db = migratedMemoryDatabase();
+  // Two workspaces in one group, and one in none.
   db.run(
-    `INSERT INTO workspaces (id, name, path, group_name, position, added_at)
-     VALUES ('mobile-banking', 'Mobile Banking', '/work/mobile-banking', NULL, 0, 0)`,
+    `INSERT INTO workspaces (id, name, path, group_name, position, added_at) VALUES
+     ('mobile-banking', 'Mobile Banking', '/work/mobile-banking', NULL, 0, 0),
+     ('payments-api', 'Payments API', '/work/payments-api', 'Payments', 1, 0),
+     ('payments-web', 'Payments Web', '/work/payments-web', 'Payments', 2, 0)`,
   );
   const { logger } = testLogger();
   clock = new ManualClock(NOW);
@@ -86,7 +91,11 @@ const meeting = (extra: object = {}) =>
     ...extra,
   });
 
-const spans = () => unwrap(queries.tracked(at(-24 * 60), at(24 * 60))).spans;
+const spans = (scope: TimesheetScope | null = null) =>
+  unwrap(queries.tracked(at(-24 * 60), at(24 * 60), scope)).spans;
+
+const PAYMENTS = groupScope("Payments" as GroupName);
+const MOBILE: TimesheetScope = { kind: "workspace", workspaceId: "mobile-banking" as WorkspaceId };
 
 describe("time entries", () => {
   test("time added shows with timed time, and is recorded without its note", async () => {
@@ -114,11 +123,23 @@ describe("time entries", () => {
     expect(ledgerEvents()).toEqual([
       {
         type: "TimeEntryAdded",
-        payload: { entryId: "ent-1", issueKey: null, category: "Meeting", durationMs: 30 * MINUTE },
+        payload: {
+          entryId: "ent-1",
+          group: null,
+          issueKey: null,
+          category: "Meeting",
+          durationMs: 30 * MINUTE,
+        },
       },
       {
         type: "TimeEntryAdded",
-        payload: { entryId: "ent-2", issueKey: "MOB-1", category: null, durationMs: 30 * MINUTE },
+        payload: {
+          entryId: "ent-2",
+          group: null,
+          issueKey: "MOB-1",
+          category: null,
+          durationMs: 30 * MINUTE,
+        },
       },
     ]);
     const catalog = EventCatalog.create(TIMER_EVENTS);
@@ -290,36 +311,119 @@ describe("timed time", () => {
 
 describe("days", () => {
   const day = "2026-09-07" as CalendarDay;
-  const days = () => unwrap(queries.days(day, day));
+  const days = (scope: TimesheetScope = MOBILE) => unwrap(queries.days(scope, day, day));
+  const mobile = { workspace: "mobile-banking", day };
 
   test("a day's place, leave and tasks are kept apart, and blank puts each back", async () => {
     expect(
-      await bus.invoke(commands.setDay, { day, place: "Head office", tasks: "Login: fixed." }),
+      await bus.invoke(commands.setDay, {
+        ...mobile,
+        place: "Head office",
+        tasks: "Login: fixed.",
+      }),
     ).toMatchObject({
       ok: true,
       value: { day, place: "Head office", leave: false, tasks: "Login: fixed." },
     });
-    await bus.invoke(commands.setDay, { day, leave: true });
+    await bus.invoke(commands.setDay, { ...mobile, leave: true });
     expect<unknown>(days()).toEqual([
       { day, place: "Head office", leave: true, tasks: "Login: fixed." },
     ]);
-    await bus.invoke(commands.setDay, { day, place: "  ", tasks: "", leave: false });
+    await bus.invoke(commands.setDay, { ...mobile, place: "  ", tasks: "", leave: false });
     expect(days()).toEqual([]);
     expect(ledgerEvents().map((e) => e.payload)).toEqual([
-      { day, leave: false, tasks: true },
-      { day, leave: true, tasks: true },
-      { day, leave: false, tasks: false },
+      { day, group: null, leave: false, tasks: true },
+      { day, group: null, leave: true, tasks: true },
+      { day, group: null, leave: false, tasks: false },
     ]);
   });
 
-  test("a day that is not a date, or a place on two lines, is refused", async () => {
-    expect(await bus.invoke(commands.setDay, { day: "2026-09-31", leave: true })).toMatchObject({
+  test("a workspace in a group sets the group's day; each timesheet's days are its own", async () => {
+    await bus.invoke(commands.setDay, { workspace: "payments-web", day, leave: true });
+    await bus.invoke(commands.setDay, { group: "Payments", day, tasks: "Checkout: fixed." });
+    await bus.invoke(commands.setDay, { ...mobile, place: "Home" });
+    expect<unknown>(days(PAYMENTS)).toEqual([
+      { day, place: null, leave: true, tasks: "Checkout: fixed." },
+    ]);
+    expect<unknown>(days()).toEqual([{ day, place: "Home", leave: false, tasks: null }]);
+    expect(ledgerEvents()[0]?.payload).toEqual({
+      day,
+      group: "Payments",
+      leave: true,
+      tasks: false,
+    });
+  });
+
+  test("a day needs one known timesheet, a date, and a place on one line", async () => {
+    expect(await bus.invoke(commands.setDay, { day, leave: true })).toMatchObject({
+      ok: false,
+      error: { kind: "validation", message: "Which timesheet is missing" },
+    });
+    expect(
+      await bus.invoke(commands.setDay, { ...mobile, group: "Payments", leave: true }),
+    ).toMatchObject({ ok: false, error: { kind: "validation" } });
+    expect(await bus.invoke(commands.setDay, { group: "Ghosts", day, leave: true })).toMatchObject({
+      ok: false,
+      error: { kind: "not-found", message: "No group named Ghosts" },
+    });
+    expect(
+      await bus.invoke(commands.setDay, { workspace: "mobile-banking", day: "2026-09-31" }),
+    ).toMatchObject({ ok: false, error: { kind: "validation" } });
+    expect(await bus.invoke(commands.setDay, { ...mobile, place: "a\nb" })).toMatchObject({
       ok: false,
       error: { kind: "validation" },
     });
-    expect(await bus.invoke(commands.setDay, { day, place: "a\nb" })).toMatchObject({
+    expect(ledgerEvents()).toEqual([]);
+  });
+});
+
+describe("groups", () => {
+  const timed = (id: string, workspace: string, from: number, to: number) => {
+    const started = startTimer(
+      { id: id as TimerId, workspaceId: workspace as WorkspaceId, issueKey: null },
+      at(from),
+    );
+    unwrap(timers.save(unwrap(stopTimer(started, at(to)))));
+  };
+
+  test("a group's timesheet has the time of each of its workspaces, and time on the group", async () => {
+    timed("t1", "payments-api", -300, -240);
+    timed("t2", "payments-web", -200, -180);
+    timed("t3", "mobile-banking", -100, -90);
+    expect(await meeting({ workspace: undefined, group: "Payments" })).toMatchObject({
+      ok: true,
+      value: { workspaceId: null, group: "Payments" },
+    });
+    expect<unknown>(spans(PAYMENTS).map((s) => [s.workspaceId, s.issueKey ?? s.category])).toEqual([
+      ["payments-api", null],
+      ["payments-web", null],
+      [null, "Meeting"],
+    ]);
+    expect<unknown>(spans(MOBILE).map((s) => s.workspaceId)).toEqual(["mobile-banking"]);
+    expect(spans()).toHaveLength(4);
+    expect(ledgerEvents().at(-1)?.payload).toMatchObject({ group: "Payments" });
+  });
+
+  test("time on one workspace of a group counts on the group's timesheet", async () => {
+    await meeting({ workspace: "payments-api" });
+    expect<unknown>(spans(PAYMENTS).map((s) => [s.workspaceId, s.scope])).toEqual([
+      ["payments-api", { kind: "group", group: "Payments" }],
+    ]);
+  });
+
+  test("added time is on a known group or a workspace, not both", async () => {
+    expect(await meeting({ workspace: undefined, group: "Ghosts" })).toMatchObject({
+      ok: false,
+      error: { kind: "not-found", message: "No group named Ghosts" },
+    });
+    expect(await meeting({ group: "Payments" })).toMatchObject({
       ok: false,
       error: { kind: "validation" },
     });
+    expect(await meeting({ workspace: undefined })).toMatchObject({
+      ok: false,
+      error: { kind: "validation" },
+    });
+    expect(ledgerEvents()).toEqual([]);
   });
 });

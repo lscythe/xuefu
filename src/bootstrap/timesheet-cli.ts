@@ -1,7 +1,7 @@
 import { confirmationTokenFor } from "../application/commands/command";
 import type { AppError } from "../application/errors";
 import { dayJson, formatDay, formatDays } from "../cli/format-timesheet";
-import type { CliCommand, TimeFields } from "../cli/parse-args";
+import type { CliCommand, TimeFields, TimesheetTarget } from "../cli/parse-args";
 import { assertNever } from "../domain/shared/assert-never";
 import {
   addDays,
@@ -16,10 +16,12 @@ import {
   weekStart,
 } from "../domain/shared/calendar";
 import { notFound, type ValidationError, validationError } from "../domain/shared/errors";
-import { entryId, timerId } from "../domain/shared/ids";
+import { entryId, timerId, workspaceId } from "../domain/shared/ids";
 import { err, ok, type Result } from "../domain/shared/result";
 import type { Timestamp } from "../domain/shared/time";
+import { groupScope, scopeName, scopeOf, type TimesheetScope } from "../domain/timesheet/scope";
 import { daySheets } from "../domain/timesheet/sheet";
+import { groupName, type Workspace } from "../domain/workspace/workspace";
 import { systemClock } from "../infrastructure/system/clock";
 import type { App } from "./start-app";
 
@@ -29,8 +31,8 @@ export interface TimesheetCli {
   readonly fail: (error: AppError) => number;
   readonly print: (text: string) => number;
   readonly printJson: (value: unknown) => number;
-  /** The workspace named, else the one holding the current folder. */
-  readonly workspace: (given: string | null) => Promise<Result<string, AppError>>;
+  /** The workspace holding the current folder; null outside every one. */
+  readonly here: () => Promise<Result<Workspace | null, AppError>>;
 }
 
 type TimesheetCommand = Extract<
@@ -85,6 +87,44 @@ function moments(
   });
 }
 
+/** The workspace named, else the one holding the current folder; null when there is neither. */
+function workspaceGiven(
+  cli: TimesheetCli,
+  given: string | null,
+): Promise<Result<Workspace | null, AppError>> {
+  if (given === null) return cli.here();
+  const id = workspaceId(given);
+  return Promise.resolve(id.ok ? cli.app.workspaces.find(id.value) : id);
+}
+
+/**
+ * Whose timesheet the target names: the group given, else the group of the workspace given or of
+ * the current folder, or that workspace's own when it is in none. Null means every timesheet.
+ */
+async function scopeGiven(
+  cli: TimesheetCli,
+  target: TimesheetTarget,
+): Promise<Result<TimesheetScope | null, AppError>> {
+  if (target.all) {
+    return target.group === null && target.workspace === null
+      ? ok(null)
+      : err(invalid("--all is every timesheet", "all", "give --all alone, or --group"));
+  }
+  if (target.group !== null && target.workspace !== null) {
+    return err(invalid("Which timesheet is unclear", "group", "give --group or --workspace"));
+  }
+  if (target.group !== null) {
+    const group = groupName(target.group);
+    return group.ok ? ok(groupScope(group.value)) : group;
+  }
+  const workspace = await workspaceGiven(cli, target.workspace);
+  if (!workspace.ok) return workspace;
+  return ok(workspace.value === null ? null : scopeOf(workspace.value));
+}
+
+const outside = () =>
+  invalid("Not inside a workspace", "group", "pass --group <name> or run from a workspace folder");
+
 /** What the fields say an entry is on, and its note; only what was given. */
 const subject = (fields: TimeFields) => ({
   ...(fields.issue === null ? {} : { issue: fields.issue }),
@@ -109,28 +149,63 @@ function span(
   return ok([monday, addDays(monday, 6)]);
 }
 
-function show(cli: TimesheetCli, command: Extract<TimesheetCommand, { kind: "timesheet.show" }>) {
+async function show(
+  cli: TimesheetCli,
+  command: Extract<TimesheetCommand, { kind: "timesheet.show" }>,
+): Promise<number> {
   const { app } = cli;
   const covered = span(command);
   if (!covered.ok) return cli.fail(covered.error);
+  const scope = await scopeGiven(cli, command.target);
+  if (!scope.ok) return cli.fail(scope.error);
   const [first, last] = covered.value;
   const now = systemClock.now();
-  const tracked = app.timers.tracked(dayStart(first), dayStart(addDays(last, 1)));
+  const tracked = app.timers.tracked(dayStart(first), dayStart(addDays(last, 1)), scope.value);
   if (!tracked.ok) return cli.fail(tracked.error);
-  const records = app.timers.days(first, last);
+  const names = tracked.value.workspaces;
+  const { value: on } = scope;
+  if (on?.kind === "group" && ![...names.values()].some((w) => w.group === on.group)) {
+    return cli.fail(notFound("group", on.group));
+  }
+  // Every timesheet together has no one place, leave or tasks to show.
+  const records = on === null ? ok([]) : app.timers.days(on, first, last);
   if (!records.ok) return cli.fail(records.error);
   const sheets = daySheets(first, last, tracked.value.spans, records.value, now);
-  const names = tracked.value.workspaces;
+  const title = on === null ? "" : `${scopeName(on, names)}\n`;
   const [only] = sheets;
   if (command.span === "day" && only !== undefined) {
     return command.json
-      ? cli.printJson(dayJson(only, names, now))
-      : cli.print(formatDay(only, names, now));
+      ? cli.printJson(dayJson(only, on, names, now))
+      : cli.print(title + formatDay(only, names, now));
   }
   return command.json
-    ? cli.printJson(sheets.map((sheet) => dayJson(sheet, names, now)))
-    : cli.print(formatDays(sheets));
+    ? cli.printJson(sheets.map((sheet) => dayJson(sheet, on, names, now)))
+    : cli.print(title + formatDays(sheets));
 }
+
+/**
+ * What added time is on: the workspace or group given, else the current folder's workspace's
+ * group, or the workspace itself when it is in none.
+ */
+async function ownerGiven(
+  cli: TimesheetCli,
+  fields: TimeFields,
+): Promise<Result<{ workspace?: string; group?: string }, AppError>> {
+  if (fields.workspace !== null || fields.group !== null) {
+    return ok({
+      ...(fields.workspace === null ? {} : { workspace: fields.workspace }),
+      ...(fields.group === null ? {} : { group: fields.group }),
+    });
+  }
+  const here = await cli.here();
+  if (!here.ok) return here;
+  if (here.value === null) return err(outside());
+  return ok(here.value.group === null ? { workspace: here.value.id } : { group: here.value.group });
+}
+
+/** A scope as the commands name it. */
+const named = (scope: TimesheetScope) =>
+  scope.kind === "group" ? { group: scope.group } : { workspace: scope.workspaceId };
 
 async function add(cli: TimesheetCli, fields: TimeFields): Promise<number> {
   const { app } = cli;
@@ -141,10 +216,10 @@ async function add(cli: TimesheetCli, fields: TimeFields): Promise<number> {
   }
   const when = moments(fields, today());
   if (!when.ok) return cli.fail(when.error);
-  const workspace = await cli.workspace(fields.workspace);
-  if (!workspace.ok) return cli.fail(workspace.error);
+  const owner = await ownerGiven(cli, fields);
+  if (!owner.ok) return cli.fail(owner.error);
   const added = await app.commandBus.invoke(app.timesheetCommands.add, {
-    workspace: workspace.value,
+    ...owner.value,
     ...subject(fields),
     ...when.value,
   });
@@ -225,7 +300,17 @@ async function setDay(
   const { app } = cli;
   const day = dayGiven(command.day);
   if (!day.ok) return cli.fail(day.error);
+  const scope = await scopeGiven(cli, command.target);
+  if (!scope.ok) return cli.fail(scope.error);
+  if (scope.value === null) {
+    return cli.fail(
+      command.target.all
+        ? invalid("--all is only for showing", "all", "a day is set on one timesheet")
+        : outside(),
+    );
+  }
   const set = await app.commandBus.invoke(app.timesheetCommands.setDay, {
+    ...named(scope.value),
     day: day.value,
     ...(command.place === null ? {} : { place: command.place }),
     ...(command.leave === null ? {} : { leave: command.leave }),

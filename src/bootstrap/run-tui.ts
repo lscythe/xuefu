@@ -175,7 +175,8 @@ export async function runTui(
           ...(issue === null ? {} : { issue }),
           body: text,
         }),
-      loadTracked: (since) => app.timers.tracked(since, (since + 24 * 3_600_000) as Timestamp),
+      loadTracked: (since) =>
+        app.timers.tracked(since, (since + 24 * 3_600_000) as Timestamp, null),
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
       agent,

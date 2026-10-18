@@ -760,16 +760,24 @@ describe("runCli: work", () => {
 
 describe("runCli: timesheet", () => {
   const DAY = "2026-09-07";
+  // Two workspaces in one group, and one in none.
   let mobile: string;
+  let api: string;
+  let web: string;
   beforeEach(async () => {
-    mobile = join(realpathSync(dir.path), "mobile");
-    mkdirSync(mobile);
+    const projects = realpathSync(dir.path);
+    mobile = join(projects, "mobile");
+    api = join(projects, "api");
+    web = join(projects, "web");
+    for (const folder of [mobile, api, web]) mkdirSync(folder);
     await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+    await run(["workspace", "add", api, "--name", "Payments API", "--group", "Payments"]);
+    await run(["workspace", "add", web, "--name", "Payments Web", "--group", "Payments"]);
   });
 
-  /** Adds time on DAY and gives back its id. */
-  async function add(...flags: string[]): Promise<string> {
-    const added = await run(["timesheet", "add", "-d", DAY, ...flags], {}, mobile);
+  /** Adds time on DAY from `folder` and gives back its id. */
+  async function add(folder: string, ...flags: string[]): Promise<string> {
+    const added = await run(["timesheet", "add", "-d", DAY, ...flags], {}, folder);
     expect(added).toMatchObject({ code: EXIT.ok, stderr: "" });
     return /\((.+)\)\n$/.exec(added.stdout)?.[1] ?? "";
   }
@@ -781,21 +789,23 @@ describe("runCli: timesheet", () => {
       mobile,
     );
     expect(added.stdout).toMatch(/^✓ Added 30m for Meeting \(.+\)\n$/);
-    const id = await add("--from", "23:00", "--to", "01:00", "--issue", "MOB-1", "--note", "Fix");
+    const id = await add(mobile, "--from", "23:00", "--to", "01:00", "--issue", "MOB-1");
+    await run(["timesheet", "edit", id, "--note", "Fix"]);
 
-    const day = await run(["timesheet", DAY]);
+    const day = await run(["timesheet", DAY], {}, mobile);
     expect(day.code).toBe(EXIT.ok);
-    expect(day.stdout).toStartWith("7 September 2026  1h 30m\n");
+    expect(day.stdout).toStartWith("Mobile Banking\n7 September 2026  1h 30m\n");
     expect(day.stdout).toMatch(/09:00-09:30 +30m +Meeting/);
     expect(day.stdout).toMatch(new RegExp(`23:00-24:00 +1h 00m +MOB-1 +Fix +${id}`));
-    const next = await run(["timesheet", "day", "2026-09-08", "--json"]);
+    const next = await run(["timesheet", "day", "2026-09-08", "--json"], {}, mobile);
     expect(JSON.parse(next.stdout)).toMatchObject({
+      timesheet: { kind: "workspace", workspaceId: "mobile-banking", name: "Mobile Banking" },
       day: "2026-09-08",
       spans: [{ id, kind: "entry", issueKey: "MOB-1", note: "Fix", durationMs: 2 * 3_600_000 }],
     });
 
-    const week = await run(["timesheet", "week", DAY]);
-    expect(week.stdout).toMatch(/^DATE +TIME +NOTES\n7 September 2026 +1h 30m/);
+    const week = await run(["timesheet", "week", DAY], {}, mobile);
+    expect(week.stdout).toMatch(/^Mobile Banking\nDATE +TIME +NOTES\n7 September 2026 +1h 30m/);
     expect(week.stdout).toMatch(/13 September 2026 +-/);
     expect(week.stdout).toMatch(/Total +2h 30m/);
     const month = JSON.parse((await run(["timesheet", "month", "2026-09", "--json"])).stdout);
@@ -817,15 +827,101 @@ describe("runCli: timesheet", () => {
     expect((await run(["timesheet", DAY])).stdout).toStartWith("7 September 2026  30m\n");
   });
 
+  test("a group's timesheet adds up the time of its workspaces and of the group", async () => {
+    // From a workspace in a group, added time is on the group unless a workspace is named.
+    const meeting = await add(api, "--from", "09:00", "--to", "09:30", "-c", "Meeting");
+    await add(web, "-w", "payments-web", "--from", "10:00", "--to", "11:00", "--issue", "PAY-1");
+    await add(mobile, "--from", "12:00", "--to", "12:15", "-c", "Review");
+
+    const payments = await run(["timesheet", DAY], {}, web);
+    expect(payments.stdout).toStartWith("Payments\n7 September 2026  1h 30m\n");
+    expect(payments.stdout).toMatch(new RegExp(`09:00-09:30 +30m +Meeting +${meeting}`));
+    expect(payments.stdout).toMatch(/10:00-11:00 +1h 00m +PAY-1/);
+    expect(payments.stdout).not.toContain("Review");
+    expect((await run(["timesheet", DAY, "-g", "Payments"])).stdout).toBe(payments.stdout);
+    expect((await run(["timesheet", DAY, "-w", "payments-api"])).stdout).toBe(payments.stdout);
+    expect((await run(["timesheet", DAY, "-w", "mobile-banking"])).stdout).toStartWith(
+      "Mobile Banking\n7 September 2026  15m\n",
+    );
+    // Outside every workspace, or with --all, every timesheet together.
+    expect((await run(["timesheet", DAY])).stdout).toStartWith("7 September 2026  1h 45m\n");
+    expect((await run(["timesheet", DAY, "--all"], {}, web)).stdout).toStartWith(
+      "7 September 2026  1h 45m\n",
+    );
+    const json = JSON.parse(
+      (await run(["timesheet", "day", DAY, "-g", "Payments", "--json"])).stdout,
+    );
+    expect(json).toMatchObject({
+      timesheet: { kind: "group", group: "Payments", workspaceId: null, name: "Payments" },
+      spans: [
+        { id: meeting, workspaceId: null, group: "Payments", category: "Meeting" },
+        { workspaceId: "payments-web", workspaceName: "Payments Web", group: "Payments" },
+      ],
+    });
+
+    // A day is set on the group's timesheet from any of its workspaces.
+    expect(await run(["timesheet", "day", DAY, "--leave"], {}, api)).toMatchObject({
+      code: EXIT.ok,
+    });
+    expect((await run(["timesheet", DAY, "-g", "Payments"])).stdout).toContain("\n  Leave\n");
+    expect((await run(["timesheet", DAY], {}, mobile)).stdout).not.toContain("Leave");
+    expect((await run(["timesheet", "week", DAY, "--all"])).stdout).not.toContain("Leave");
+  });
+
+  test("a timesheet must be one that exists, and a day is set on one", async () => {
+    const ghosts = await run(["timesheet", "-g", "Ghosts"]);
+    expect(ghosts.code).toBe(EXIT.noInput);
+    expect(ghosts.stderr).toContain("No group named Ghosts");
+    expect((await run(["timesheet", "-w", "ghost"])).code).toBe(EXIT.noInput);
+    expect((await run(["timesheet", "-w", "Bad Id"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "-g", "a\tb"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "--all", "-g", "Payments"])).stderr).toContain(
+      "--all is every timesheet",
+    );
+    expect((await run(["timesheet", "day", DAY, "--leave", "--all"])).stderr).toContain(
+      "--all is only for showing",
+    );
+    const outside = await run(["timesheet", "day", DAY, "--leave"]);
+    expect(outside.code).toBe(EXIT.usage);
+    expect(outside.stderr).toContain("Not inside a workspace");
+    expect(
+      (await run(["timesheet", "day", DAY, "--leave", "-g", "Payments", "-w", "mobile-banking"]))
+        .code,
+    ).toBe(EXIT.usage);
+    expect((await run(["timesheet", "day", DAY, "--leave", "-g", "Ghosts"])).code).toBe(
+      EXIT.noInput,
+    );
+    expect(
+      (
+        await run([
+          "timesheet",
+          "add",
+          "-g",
+          "Ghosts",
+          "-c",
+          "Meeting",
+          "--from",
+          "09:00",
+          "--to",
+          "10:00",
+        ])
+      ).code,
+    ).toBe(EXIT.noInput);
+  });
+
   test("a day's place, leave and tasks are set and shown", async () => {
     expect(
-      await run(["timesheet", "day", DAY, "--place", "Office", "--tasks", "Login: fixed."]),
+      await run(
+        ["timesheet", "day", DAY, "--place", "Office", "--tasks", "Login: fixed."],
+        {},
+        mobile,
+      ),
     ).toMatchObject({ code: EXIT.ok, stdout: `✓ Changed ${DAY}\n` });
-    await run(["timesheet", "day", DAY, "--leave"]);
-    expect((await run(["timesheet", DAY])).stdout).toBe(
-      "7 September 2026  0m\n  Leave\n  At Office\n  Tasks: Login: fixed.\n  Nothing tracked.\n",
+    await run(["timesheet", "day", DAY, "--leave", "-w", "mobile-banking"]);
+    expect((await run(["timesheet", DAY], {}, mobile)).stdout).toBe(
+      "Mobile Banking\n7 September 2026  0m\n  Leave\n  At Office\n  Tasks: Login: fixed.\n  Nothing tracked.\n",
     );
-    expect((await run(["timesheet", "day", "--worked"])).code).toBe(EXIT.ok);
+    expect((await run(["timesheet", "day", "--worked"], {}, mobile)).code).toBe(EXIT.ok);
   });
 
   test("a timer's stretch is moved, and only its time can change", async () => {
@@ -878,7 +974,9 @@ describe("runCli: timesheet", () => {
     expect((await run(["timesheet", "week", "nope"])).code).toBe(EXIT.usage);
     expect((await run(["timesheet", "month", "2026-9"])).code).toBe(EXIT.usage);
     expect((await run(["timesheet", "day", "nope", "--leave"])).code).toBe(EXIT.usage);
-    expect((await run(["timesheet", "day", DAY, "--place", "a\u0007"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "day", DAY, "--place", "a\u0007"], {}, mobile)).code).toBe(
+      EXIT.usage,
+    );
     expect((await run(["timesheet", "edit", "ent 1", "--from", "08:00"])).code).toBe(EXIT.usage);
     expect((await run(["timesheet", "edit", "ghost", "--from", "08:00"])).code).toBe(EXIT.noInput);
     expect((await run(["timesheet", "edit", "ghost", "--from", "8"])).code).toBe(EXIT.usage);

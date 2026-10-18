@@ -3,13 +3,16 @@ import fc from "fast-check";
 import type { EntryId, TimerId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { Category, EntryNote } from "../../../../src/domain/timesheet/entry";
+import { groupScope } from "../../../../src/domain/timesheet/scope";
 import {
   entrySpan,
   spanId,
   type TrackedSpan,
   trackedTotals,
+  withScopes,
 } from "../../../../src/domain/timesheet/tracked";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
+import type { GroupName } from "../../../../src/domain/workspace/workspace";
 
 const MINUTE = 60_000;
 const at = (minutes: number) => (minutes * MINUTE) as Timestamp;
@@ -22,6 +25,7 @@ const span = (
 ): TrackedSpan => ({
   source: { kind: "timer", id: "t1" as TimerId, position: 0 },
   workspaceId: workspace as WorkspaceId,
+  scope: { kind: "workspace", workspaceId: workspace as WorkspaceId },
   issueKey: issue as IssueKey | null,
   category: kind as Category | null,
   start: at(start),
@@ -41,21 +45,47 @@ describe("trackedTotals", () => {
       at(0),
       at(100),
     );
-    expect(totals).toEqual([
+    const own = (id: string) => ({ kind: "workspace", workspaceId: id });
+    expect<unknown>(totals).toEqual([
       {
-        workspaceId: "mobile" as WorkspaceId,
-        issueKey: "MOB-1" as IssueKey,
+        scope: own("mobile"),
+        workspaceId: "mobile",
+        issueKey: "MOB-1",
         category: null,
         duration: 60 * MINUTE,
       },
-      { workspaceId: "auth" as WorkspaceId, issueKey: null, category: null, duration: 20 * MINUTE },
       {
-        workspaceId: "mobile" as WorkspaceId,
-        issueKey: "MOB-2" as IssueKey,
+        scope: own("auth"),
+        workspaceId: "auth",
+        issueKey: null,
+        category: null,
+        duration: 20 * MINUTE,
+      },
+      {
+        scope: own("mobile"),
+        workspaceId: "mobile",
+        issueKey: "MOB-2",
         category: null,
         duration: 10 * MINUTE,
       },
-    ] as unknown as ReturnType<typeof trackedTotals>);
+    ]);
+  });
+
+  test("time on a whole group is counted per group", () => {
+    const onGroup = (group: string, start: number, end: number) => ({
+      ...span("mobile", null, start, end, "Meeting"),
+      workspaceId: null,
+      scope: groupScope(group as GroupName),
+    });
+    const totals = trackedTotals(
+      [onGroup("Banking", 0, 20), onGroup("Ops", 20, 30), onGroup("Banking", 30, 40)],
+      at(0),
+      at(60),
+    );
+    expect<unknown>(totals.map((t) => [t.scope, t.workspaceId, t.duration / MINUTE])).toEqual([
+      [{ kind: "group", group: "Banking" }, null, 30],
+      [{ kind: "group", group: "Ops" }, null, 10],
+    ]);
   });
 
   test("cuts spans at the start, counts an open span up to now, and drops empty ones", () => {
@@ -128,6 +158,7 @@ describe("spans", () => {
     const entry = {
       id: "e1" as EntryId,
       workspaceId: "mobile" as WorkspaceId,
+      group: null,
       issueKey: null,
       category: "Meeting" as Category,
       start: at(0),
@@ -137,6 +168,7 @@ describe("spans", () => {
     expect(entrySpan(entry)).toEqual({
       source: { kind: "entry", id: "e1" as EntryId },
       workspaceId: "mobile" as WorkspaceId,
+      scope: { kind: "workspace", workspaceId: "mobile" as WorkspaceId },
       issueKey: null,
       category: "Meeting" as Category,
       start: at(0),
@@ -145,5 +177,34 @@ describe("spans", () => {
     });
     expect(spanId(entrySpan(entry).source)).toBe("e1");
     expect(spanId({ kind: "timer", id: "t1" as TimerId, position: 2 })).toBe("t1:2");
+    expect<unknown>(
+      entrySpan({ ...entry, workspaceId: null, group: "Banking" as GroupName }),
+    ).toMatchObject({ workspaceId: null, scope: { kind: "group", group: "Banking" } });
+  });
+
+  test("spans move to their workspace's group as it is now; one in no group keeps its own", () => {
+    const banking = { group: "Banking" as GroupName };
+    const spans = withScopes(
+      [
+        span("mobile", "MOB-1", 0, 30),
+        span("side", null, 30, 40),
+        span("removed", null, 40, 50),
+        {
+          ...span("mobile", null, 50, 60),
+          workspaceId: null,
+          scope: groupScope("Ops" as GroupName),
+        },
+      ],
+      new Map<string, { group: GroupName | null }>([
+        ["mobile", banking],
+        ["side", { group: null }],
+      ]),
+    );
+    expect<unknown>(spans.map((s) => s.scope)).toEqual([
+      { kind: "group", group: "Banking" },
+      { kind: "workspace", workspaceId: "side" },
+      { kind: "workspace", workspaceId: "removed" },
+      { kind: "group", group: "Ops" },
+    ]);
   });
 });

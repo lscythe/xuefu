@@ -28,6 +28,8 @@ const TimeEntryAddedV1 = defineEvent(
   1,
   z.strictObject({
     entryId: z.string(),
+    /** Set when the entry is on a whole group rather than the event's workspace. */
+    group: z.string().nullable(),
     issueKey: z.string().nullable(),
     category: z.string().nullable(),
     durationMs: z.number().int().positive(),
@@ -52,11 +54,19 @@ const TimerSegmentMovedV1 = defineEvent(
   z.strictObject({ timerId: z.string(), position: z.number().int().nonnegative() }),
 );
 
-/** `tasks` says whether the day has its tasks written, not what they are. */
+/**
+ * `tasks` says whether the day has its tasks written, not what they are. `group` names the group's
+ * timesheet; null when it is the event's workspace's own.
+ */
 const TimesheetDayChangedV1 = defineEvent(
   "TimesheetDayChanged",
   1,
-  z.strictObject({ day: z.string(), leave: z.boolean(), tasks: z.boolean() }),
+  z.strictObject({
+    day: z.string(),
+    group: z.string().nullable(),
+    leave: z.boolean(),
+    tasks: z.boolean(),
+  }),
 );
 
 export type TimerStartedPayload = z.infer<typeof TimerStartedV1.schema>;

@@ -10,11 +10,13 @@ import {
   timeEntry,
 } from "../../../../src/domain/timesheet/entry";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
+import type { GroupName } from "../../../../src/domain/workspace/workspace";
 
 const HOUR = 3_600_000;
 const entry = {
   id: "e1" as EntryId,
   workspaceId: "mobile" as WorkspaceId,
+  group: null,
   issueKey: null,
   category: "Meeting" as Category,
   start: (10 * HOUR) as Timestamp,
@@ -48,6 +50,15 @@ describe("time entries", () => {
     });
     expect(timeEntry({ ...entry, issueKey: "MOB-1" as IssueKey }).ok).toBe(false);
     expect(timeEntry({ ...entry, issueKey: "MOB-1" as IssueKey, category: null }).ok).toBe(true);
+  });
+
+  test("an entry is on a workspace or a whole group, one of them", () => {
+    const onGroup = { ...entry, workspaceId: null, group: "Banking" as GroupName };
+    expect(timeEntry(onGroup)).toEqual({ ok: true, value: onGroup });
+    expect(timeEntry({ ...entry, group: "Banking" as GroupName })).toMatchObject({
+      error: { issues: [{ path: "group", message: "give a workspace or a group, one of them" }] },
+    });
+    expect(timeEntry({ ...entry, workspaceId: null }).ok).toBe(false);
   });
 });
 

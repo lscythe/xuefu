@@ -19,8 +19,10 @@ import {
 import type { NoteId, TimerId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
+import type { Category } from "../../../../src/domain/timesheet/entry";
+import { groupScope } from "../../../../src/domain/timesheet/scope";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
-import type { Workspace } from "../../../../src/domain/workspace/workspace";
+import type { GroupName, Workspace } from "../../../../src/domain/workspace/workspace";
 import { bigClockRows } from "../../../../src/tui/big-clock";
 import type { SectionProps } from "../../../../src/tui/shell/section-props";
 import { cockpitSections } from "../../../../src/tui/shell/sections";
@@ -1316,6 +1318,7 @@ describe("Shell dashboard", () => {
     const span = (issue: string | null, workspace: string, start: number, end: number | null) => ({
       source: { kind: "timer" as const, id: `t${start}` as TimerId, position: 0 },
       workspaceId: workspace as WorkspaceId,
+      scope: { kind: "workspace" as const, workspaceId: workspace as WorkspaceId },
       issueKey: issue as IssueKey | null,
       category: null,
       start: start as Timestamp,
@@ -1333,6 +1336,12 @@ describe("Shell dashboard", () => {
               span("MOB-2799", "mobile-banking", midnight - 600_000, midnight + 1_200_000),
               span(null, "ghost", NOW - 3_600_000, NOW - 1_800_000),
               span("MOB-2841", "mobile-banking", NOW - 60_000, null),
+              {
+                ...span(null, "mobile-banking", NOW - 7_200_000, NOW - 6_600_000),
+                workspaceId: null,
+                scope: groupScope("Banking" as GroupName),
+                category: "Meeting" as Category,
+              },
             ],
             workspaces: new Map(VIEWS.map((v) => [v.workspace.id as string, v.workspace])),
           });
@@ -1347,11 +1356,12 @@ describe("Shell dashboard", () => {
     expect(rowContaining(frame, "MOB-2799")).toContain("MOB-2799  Mobile Banking");
     expect(rowContaining(frame, "MOB-2799")).toContain("20m");
     expect(rowContaining(frame, "MOB-2841")).toContain(" 1m");
-    expect(frame).toContain("─ 51m ─");
+    expect(rowContaining(frame, "Meeting")).toMatch(/● Meeting +Banking +10m/);
+    expect(frame).toContain("─ 1h 01m ─");
     clock.advance(60_000);
     await Bun.sleep(25);
     await shell.waitForFrame(
-      (f) => f.includes("─ 52m ─") && rowContaining(f, "MOB-2841").includes(" 2m"),
+      (f) => f.includes("─ 1h 02m ─") && rowContaining(f, "MOB-2841").includes(" 2m"),
     );
     expect(asked).toHaveLength(1);
   });

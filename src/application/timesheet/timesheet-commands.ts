@@ -6,6 +6,7 @@ import {
   notFound,
   type StorageError,
   type ValidationError,
+  validationError,
 } from "../../domain/shared/errors";
 import { createEvent } from "../../domain/shared/event";
 import { entryId, timerId, type WorkspaceId, workspaceId } from "../../domain/shared/ids";
@@ -13,9 +14,11 @@ import { err, ok, type Result } from "../../domain/shared/result";
 import { type Timestamp, timestamp } from "../../domain/shared/time";
 import { dayTasks, emptyDay, type TimesheetDay, workPlace } from "../../domain/timesheet/day";
 import { category, entryNote, type TimeEntry, timeEntry } from "../../domain/timesheet/entry";
+import { groupScope, scopeOf, type TimesheetScope } from "../../domain/timesheet/scope";
 import { moveSegment, type Timer } from "../../domain/timesheet/timer";
 import { issueKey } from "../../domain/work/issue-key";
 import { findWorkspace } from "../../domain/workspace/registry";
+import { type GroupName, groupName, type Workspace } from "../../domain/workspace/workspace";
 import { type CommandContext, defineCommand } from "../commands/command";
 import type { CommandBus } from "../commands/command-bus";
 import type { IdGenerator } from "../ports/id-generator";
@@ -90,11 +93,39 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
       }),
     );
 
-  const known = (workspace: WorkspaceId): Result<void, TimesheetError> => {
+  const known = (workspace: WorkspaceId): Result<Workspace, TimesheetError> => {
+    const loaded = workspaces.load();
+    return loaded.ok ? findWorkspace(loaded.value, workspace) : loaded;
+  };
+
+  /** A group is known while a workspace is in it. */
+  const knownGroup = (group: GroupName): Result<GroupName, TimesheetError> => {
     const loaded = workspaces.load();
     if (!loaded.ok) return loaded;
-    const found = findWorkspace(loaded.value, workspace);
-    return found.ok ? ok(undefined) : found;
+    return loaded.value.workspaces.some((w) => w.group === group)
+      ? ok(group)
+      : err(notFound("group", group));
+  };
+
+  /** The timesheet named: a group's, or a workspace's, which is its group's when it has one. */
+  const scopeNamed = (input: {
+    readonly workspace?: WorkspaceId | undefined;
+    readonly group?: GroupName | undefined;
+  }): Result<TimesheetScope, TimesheetError> => {
+    const { workspace, group } = input;
+    if (group !== undefined && workspace === undefined) {
+      const found = knownGroup(group);
+      return found.ok ? ok(groupScope(found.value)) : found;
+    }
+    if (workspace !== undefined && group === undefined) {
+      const found = known(workspace);
+      return found.ok ? ok(scopeOf(found.value)) : found;
+    }
+    return err(
+      validationError("Which timesheet is missing", [
+        { path: "group", message: "give a workspace or a group, one of them" },
+      ]),
+    );
   };
 
   const length = (entry: TimeEntry) => entry.end - entry.start;
@@ -104,8 +135,10 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
     title: "Add time",
     category: CATEGORY,
     safety: "safe",
+    // On one workspace, or on a whole group, one of them.
     input: z.strictObject({
-      workspace: domainString(workspaceId),
+      workspace: domainString(workspaceId).optional(),
+      group: domainString(groupName).optional(),
       issue: domainString(issueKey).optional(),
       category: domainString(category).optional(),
       start: moment,
@@ -114,11 +147,12 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
     }),
     handler: (input, context) =>
       unitOfWork.run((tx): Result<TimeEntry, TimesheetError> => {
-        const workspace = known(input.workspace);
-        if (!workspace.ok) return workspace;
+        const owner = scopeNamed(input);
+        if (!owner.ok) return owner;
         const entry = timeEntry({
           id: ids.entryId(),
-          workspaceId: input.workspace,
+          workspaceId: input.workspace ?? null,
+          group: input.group ?? null,
           issueKey: input.issue ?? null,
           category: input.category ?? null,
           start: input.start,
@@ -135,6 +169,7 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
           entry.value.workspaceId,
           {
             entryId: entry.value.id,
+            group: entry.value.group,
             issueKey: entry.value.issueKey,
             category: entry.value.category,
             durationMs: length(entry.value),
@@ -271,13 +306,18 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
       }),
   });
 
-  /** Sets what is given of a day; blank text puts it back to none, or the usual place. */
+  /**
+   * Sets what is given of a day on a group's timesheet, or a workspace's (its group's when it has
+   * one); blank text puts it back to none, or the usual place.
+   */
   const setDay = defineCommand({
     name: "timesheet.day.set",
     title: "Change a day",
     category: CATEGORY,
     safety: "safe",
     input: z.strictObject({
+      workspace: domainString(workspaceId).optional(),
+      group: domainString(groupName).optional(),
       day: domainString(calendarDay),
       place: optionalText(workPlace).optional(),
       leave: z.boolean().optional(),
@@ -285,7 +325,9 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
     }),
     handler: (input, context) =>
       unitOfWork.run((tx): Result<TimesheetDay, TimesheetError> => {
-        const found = timesheet.days(input.day, input.day);
+        const scope = scopeNamed(input);
+        if (!scope.ok) return scope;
+        const found = timesheet.days(scope.value, input.day, input.day);
         if (!found.ok) return found;
         const current = found.value[0] ?? emptyDay(input.day);
         const day: TimesheetDay = Object.freeze({
@@ -294,14 +336,20 @@ export function timesheetCommands(deps: TimesheetCommandDependencies) {
           leave: input.leave ?? current.leave,
           tasks: input.tasks === undefined ? current.tasks : input.tasks,
         });
-        const saved = timesheet.saveDay(day, context.clock.now());
+        const saved = timesheet.saveDay(scope.value, day, context.clock.now());
         if (!saved.ok) return saved;
+        const { value: on } = scope;
         record<"TimesheetDayChanged", TimesheetDayChangedPayload>(
           tx,
           context,
           "TimesheetDayChanged",
-          null,
-          { day: input.day, leave: day.leave, tasks: day.tasks !== null },
+          on.kind === "workspace" ? on.workspaceId : null,
+          {
+            day: input.day,
+            group: on.kind === "group" ? on.group : null,
+            leave: day.leave,
+            tasks: day.tasks !== null,
+          },
         );
         return ok(day);
       }),

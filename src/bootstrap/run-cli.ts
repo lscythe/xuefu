@@ -866,7 +866,10 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
           fail: (error) => fail(out, error),
           print: (text) => print(out, text),
           printJson: (value) => printJson(out, value),
-          workspace: (given) => targetWorkspace(app, out, given),
+          here: () => {
+            const path = absolutePath(out.runtime.cwd);
+            return path.ok ? app.workspaces.which(path.value) : Promise.resolve(path);
+          },
         },
         command,
       );

@@ -79,14 +79,20 @@ const DESCRIPTIONS: Readonly<Record<string, (payload: never) => ActivityDescript
   TimerResumed: () => said("Resumed the timer"),
   TimerStopped: (p: TimerStoppedPayload) => said("Stopped the timer", null, tracked(p)),
   TimeEntryAdded: (p: TimeEntryAddedPayload) =>
-    p.issueKey === null
-      ? said("Added time for", name(p.category ?? ""), lasted(p))
-      : said("Added time for", issue(p.issueKey), lasted(p)),
+    said(
+      "Added time for",
+      p.issueKey === null ? name(p.category ?? "") : issue(p.issueKey),
+      p.group === null ? lasted(p) : `${lasted(p)} in ${p.group}`,
+    ),
   TimeEntryChanged: (p: TimeEntryChangedPayload) => said("Changed added time", null, lasted(p)),
   TimeEntryDeleted: (p: TimeEntryDeletedPayload) => said("Deleted added time", null, lasted(p)),
   TimerSegmentMoved: () => said("Changed the timer's time"),
   TimesheetDayChanged: (p: TimesheetDayChangedPayload) =>
-    said(p.leave ? "Marked as leave" : "Changed the timesheet for", name(p.day)),
+    said(
+      p.leave ? "Marked as leave" : "Changed the timesheet for",
+      name(p.day),
+      p.group === null ? null : `in ${p.group}`,
+    ),
   NoteSaved: (p: NoteSavedPayload) =>
     p.issueKey === null ? said("Saved its note") : said("Saved the note on", issue(p.issueKey)),
   NoteCleared: (p: NoteClearedPayload) =>

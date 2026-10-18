@@ -151,6 +151,7 @@ describe("parseArgs: timer", () => {
 describe("parseArgs: timesheet", () => {
   const noFields = {
     workspace: null,
+    group: null,
     issue: null,
     category: null,
     from: null,
@@ -158,35 +159,54 @@ describe("parseArgs: timesheet", () => {
     date: null,
     note: null,
   };
+  const here = { workspace: null, group: null, all: false };
+  const show = (span: string, when: string | null, extra: object = {}) => ({
+    kind: "timesheet.show",
+    span,
+    when,
+    target: here,
+    json: false,
+    ...extra,
+  });
+  const day = (fields: object) => ({
+    kind: "timesheet.day",
+    target: here,
+    day: null,
+    place: null,
+    leave: null,
+    tasks: null,
+    ...fields,
+  });
 
   test.each([
-    [["timesheet"], { kind: "timesheet.show", span: "day", when: null, json: false }],
+    [["timesheet"], show("day", null)],
+    [["timesheet", "2026-10-16"], show("day", "2026-10-16")],
+    [["timesheet", "day", "2026-10-16", "--json"], show("day", "2026-10-16", { json: true })],
+    [["timesheet", "week"], show("week", null)],
+    [["timesheet", "month", "2026-09"], show("month", "2026-09")],
     [
-      ["timesheet", "2026-10-16"],
-      { kind: "timesheet.show", span: "day", when: "2026-10-16", json: false },
+      ["timesheet", "month", "-g", "Banking"],
+      show("month", null, { target: { ...here, group: "Banking" } }),
     ],
+    [["timesheet", "week", "--all"], show("week", null, { target: { ...here, all: true } })],
     [
-      ["timesheet", "day", "2026-10-16", "--json"],
-      { kind: "timesheet.show", span: "day", when: "2026-10-16", json: true },
-    ],
-    [["timesheet", "week"], { kind: "timesheet.show", span: "week", when: null, json: false }],
-    [
-      ["timesheet", "month", "2026-09"],
-      { kind: "timesheet.show", span: "month", when: "2026-09", json: false },
+      ["timesheet", "day", "-w", "mob", "--json"],
+      show("day", null, { target: { ...here, workspace: "mob" }, json: true }),
     ],
     [
       ["timesheet", "day", "--place", "Office", "--tasks", "Login: fixed."],
-      { kind: "timesheet.day", day: null, place: "Office", leave: null, tasks: "Login: fixed." },
+      day({ place: "Office", tasks: "Login: fixed." }),
     ],
+    [["timesheet", "day", "2026-10-16", "--leave"], day({ day: "2026-10-16", leave: true })],
     [
-      ["timesheet", "day", "2026-10-16", "--leave"],
-      { kind: "timesheet.day", day: "2026-10-16", place: null, leave: true, tasks: null },
-    ],
-    [
-      ["timesheet", "day", "--worked"],
-      { kind: "timesheet.day", day: null, place: null, leave: false, tasks: null },
+      ["timesheet", "day", "--worked", "--group", "Banking"],
+      day({ leave: false, target: { ...here, group: "Banking" } }),
     ],
     [["timesheet", "add"], { kind: "timesheet.add", fields: noFields }],
+    [
+      ["timesheet", "add", "-g", "Banking"],
+      { kind: "timesheet.add", fields: { ...noFields, group: "Banking" } },
+    ],
     [
       [
         "timesheet",
@@ -208,6 +228,7 @@ describe("parseArgs: timesheet", () => {
         kind: "timesheet.add",
         fields: {
           workspace: "mob",
+          group: null,
           issue: null,
           category: "Meeting",
           from: "13:00",
@@ -224,13 +245,15 @@ describe("parseArgs: timesheet", () => {
     [["timesheet", "delete", "ent-1"], { kind: "timesheet.delete", id: "ent-1", yes: false }],
     [["timesheet", "delete", "ent-1", "-y"], { kind: "timesheet.delete", id: "ent-1", yes: true }],
   ] as const)("%p", (argv, command) => {
-    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command as CliCommand) });
   });
 
   test.each([
     [["timesheet", "add", "extra"], "Unexpected argument: extra"],
     [["timesheet", "edit"], "timesheet edit expects <id>"],
     [["timesheet", "edit", "ent-1", "-w", "mob"], "--workspace does not apply to timesheet edit"],
+    [["timesheet", "edit", "ent-1", "-g", "Banking"], "--group does not apply to timesheet edit"],
+    [["timesheet", "add", "--all"], "--all does not apply to timesheet add"],
     [["timesheet", "week", "--place", "x"], "--place does not apply to timesheet week"],
   ])("rejects %p", (argv, message) => {
     const result = parseArgs(argv);

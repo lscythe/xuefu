@@ -5,6 +5,7 @@ import type { Result } from "../../domain/shared/result";
 import type { Timestamp } from "../../domain/shared/time";
 import type { TimesheetDay } from "../../domain/timesheet/day";
 import type { TimeEntry } from "../../domain/timesheet/entry";
+import type { TimesheetScope } from "../../domain/timesheet/scope";
 
 /** Time added by hand, and what the timesheet says of each day. */
 export interface TimesheetRepository {
@@ -14,8 +15,12 @@ export interface TimesheetRepository {
   /** Inserts or replaces the entry. */
   saveEntry(entry: TimeEntry): Result<void, StorageError>;
   removeEntry(id: EntryId): Result<void, StorageError>;
-  /** The days from `from` to `to`, both included, that say anything; in order. */
-  days(from: CalendarDay, to: CalendarDay): Result<TimesheetDay[], StorageError>;
-  /** Keeps the day; one that says nothing is removed. */
-  saveDay(day: TimesheetDay, at: Timestamp): Result<void, StorageError>;
+  /** The scope's days from `from` to `to`, both included, that say anything; in order. */
+  days(
+    scope: TimesheetScope,
+    from: CalendarDay,
+    to: CalendarDay,
+  ): Result<TimesheetDay[], StorageError>;
+  /** Keeps the scope's day; one that says nothing is removed. */
+  saveDay(scope: TimesheetScope, day: TimesheetDay, at: Timestamp): Result<void, StorageError>;
 }

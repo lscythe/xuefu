@@ -18,6 +18,7 @@ const at = (day: number, hour: number, minute = 0) =>
 const timed: TrackedSpan = {
   source: { kind: "timer", id: "t1" as TimerId, position: 0 },
   workspaceId: "mobile" as WorkspaceId,
+  scope: { kind: "workspace", workspaceId: "mobile" as WorkspaceId },
   issueKey: "MOB-1" as IssueKey,
   category: null,
   start: at(0, 22),
@@ -27,6 +28,7 @@ const timed: TrackedSpan = {
 const meeting: TrackedSpan = {
   source: { kind: "entry", id: "ent-1" as EntryId },
   workspaceId: "mobile" as WorkspaceId,
+  scope: { kind: "workspace", workspaceId: "mobile" as WorkspaceId },
   issueKey: null,
   category: "Meeting" as Category,
   start: at(1, 9),

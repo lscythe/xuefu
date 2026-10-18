@@ -105,6 +105,7 @@ describe("SqliteTimerRepository", () => {
     const segment = (position: number, start: number, end: number | null) => ({
       source: { kind: "timer" as const, id: "t2" as TimerId, position },
       workspaceId: "mobile-banking" as WorkspaceId,
+      scope: { kind: "workspace" as const, workspaceId: "mobile-banking" as WorkspaceId },
       issueKey: null,
       category: null,
       start: at(start),

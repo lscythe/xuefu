@@ -448,6 +448,7 @@ function trackedToday(): TrackedTime {
   const span = (workspace: string, issue: string | null, start: number, end: number | null) => ({
     source: { kind: "timer" as const, id: `t${start}` as TimerId, position: 0 },
     workspaceId: workspace as WorkspaceId,
+    scope: { kind: "workspace" as const, workspaceId: workspace as WorkspaceId },
     issueKey: issue as IssueKey | null,
     category: null,
     start: (NOW - start * 60_000) as Timestamp,
