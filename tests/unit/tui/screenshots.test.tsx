@@ -8,7 +8,7 @@ import { PLUGIN_COMMANDS } from "../../../src/bootstrap/plugins";
 import { mcpTools } from "../../../src/cli/mcp-tools";
 import type { Note, NoteBody } from "../../../src/domain/notes/note";
 import { confirmationRequired, storageError } from "../../../src/domain/shared/errors";
-import type { NoteId, WorkspaceId } from "../../../src/domain/shared/ids";
+import type { NoteId, TimerId, WorkspaceId } from "../../../src/domain/shared/ids";
 import { err, ok } from "../../../src/domain/shared/result";
 import type { Timestamp } from "../../../src/domain/shared/time";
 import type { IssueKey } from "../../../src/domain/work/issue-key";
@@ -446,10 +446,14 @@ const ISSUE_NOTE: Note = {
 /** A day's tracked time: MOB-2841 still running, then other work here and elsewhere. */
 function trackedToday(): TrackedTime {
   const span = (workspace: string, issue: string | null, start: number, end: number | null) => ({
+    source: { kind: "timer" as const, id: `t${start}` as TimerId, position: 0 },
     workspaceId: workspace as WorkspaceId,
+    scope: { kind: "workspace" as const, workspaceId: workspace as WorkspaceId },
     issueKey: issue as IssueKey | null,
+    category: null,
     start: (NOW - start * 60_000) as Timestamp,
     end: end === null ? null : ((NOW - end * 60_000) as Timestamp),
+    note: null,
   });
   return {
     spans: [

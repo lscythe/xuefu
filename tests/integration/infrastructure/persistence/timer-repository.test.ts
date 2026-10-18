@@ -97,38 +97,48 @@ describe("SqliteTimerRepository", () => {
     expect(repository.active()).toMatchObject({ ok: false, error: { kind: "storage" } });
   });
 
-  test("tracked time is every segment still open or ended after a moment", () => {
+  test("tracked time is every segment overlapping two moments, or still open", () => {
     const first = unwrap(stopTimer(unwrap(pauseTimer(timer("t1", "MOB-1"), at(60))), at(90)));
     timers.save(first);
     const later = { ...timer("t2"), startedAt: at(100), segments: [{ start: at(100), end: null }] };
     timers.save(unwrap(resumeTimer(unwrap(pauseTimer(later, at(200))), at(300))));
-    expect(timers.trackedSince(at(60))).toEqual({
-      ok: true,
-      value: [
-        {
-          workspaceId: "mobile-banking" as WorkspaceId,
-          issueKey: null,
-          start: at(100),
-          end: at(200),
-        },
-        { workspaceId: "mobile-banking" as WorkspaceId, issueKey: null, start: at(300), end: null },
-      ],
+    const segment = (position: number, start: number, end: number | null) => ({
+      source: { kind: "timer" as const, id: "t2" as TimerId, position },
+      workspaceId: "mobile-banking" as WorkspaceId,
+      scope: { kind: "workspace" as const, workspaceId: "mobile-banking" as WorkspaceId },
+      issueKey: null,
+      category: null,
+      start: at(start),
+      end: end === null ? null : at(end),
+      note: null,
     });
-    expect(timers.trackedSince(at(59))).toMatchObject({
+    expect(timers.tracked(at(60), at(1000))).toEqual({
+      ok: true,
+      value: [segment(0, 100, 200), segment(1, 300, null)],
+    });
+    expect(timers.tracked(at(59), at(1000))).toMatchObject({
       ok: true,
       value: [{ issueKey: "MOB-1", start: at(0), end: at(60) }, {}, {}],
     });
+    // A segment that starts at or after the end is not in it.
+    expect(timers.tracked(at(0), at(100))).toMatchObject({ ok: true, value: [{ end: at(60) }] });
+  });
+
+  test("a timer is found by its id", () => {
+    timers.save(timer("t1", "MOB-1"));
+    expect(timers.timer("t1" as TimerId)).toMatchObject({ ok: true, value: { issueKey: "MOB-1" } });
+    expect(timers.timer("t9" as TimerId)).toEqual({ ok: true, value: null });
   });
 
   test("tracked time from corrupt rows is a storage error", () => {
     timers.save(timer("t1", "MOB-1"));
     db.run("UPDATE timers SET issue_key = 'not a key'");
-    expect(timers.trackedSince(at(0))).toMatchObject({
+    expect(timers.tracked(at(0), at(1000))).toMatchObject({
       ok: false,
       error: { message: "A stored timer is corrupt" },
     });
     db.run("UPDATE timers SET issue_key = NULL, workspace_id = 'Bad Id'");
-    expect(timers.trackedSince(at(0)).ok).toBe(false);
+    expect(timers.tracked(at(0), at(1000)).ok).toBe(false);
   });
 
   test("tracked time from rows of the wrong type is a storage error", () => {
@@ -137,10 +147,14 @@ describe("SqliteTimerRepository", () => {
     fresh.run("CREATE TABLE timer_segments (timer_id, position, start_at, end_at)");
     const repository = new SqliteTimerRepository(fresh);
     repository.save(timer("t1"));
+    // A text start sorts before any number, so it falls inside a window that ends at a text.
     fresh.run("UPDATE timer_segments SET start_at = 'soon'");
-    expect(repository.trackedSince(at(0))).toMatchObject({ ok: false, error: { kind: "storage" } });
+    expect(repository.tracked(at(-1000), "z" as unknown as Timestamp)).toMatchObject({
+      ok: false,
+      error: { kind: "storage" },
+    });
     fresh.run("UPDATE timer_segments SET start_at = 0, end_at = -5");
-    expect(repository.trackedSince(-10 as Timestamp)).toMatchObject({
+    expect(repository.tracked(-10 as Timestamp, at(1000))).toMatchObject({
       ok: false,
       error: { kind: "storage" },
     });
@@ -148,7 +162,7 @@ describe("SqliteTimerRepository", () => {
 
   test("a closed database reports read and save failures", () => {
     db.close();
-    expect(timers.trackedSince(at(0))).toMatchObject({
+    expect(timers.tracked(at(0), at(1000))).toMatchObject({
       ok: false,
       error: { message: "Unable to read tracked time" },
     });

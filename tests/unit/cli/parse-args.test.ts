@@ -148,6 +148,127 @@ describe("parseArgs: timer", () => {
   });
 });
 
+describe("parseArgs: timesheet", () => {
+  const noFields = {
+    workspace: null,
+    group: null,
+    issue: null,
+    category: null,
+    from: null,
+    to: null,
+    date: null,
+    note: null,
+  };
+  const here = { workspace: null, group: null, all: false };
+  const show = (span: string, when: string | null, extra: object = {}) => ({
+    kind: "timesheet.show",
+    span,
+    when,
+    target: here,
+    json: false,
+    ...extra,
+  });
+  const day = (fields: object) => ({
+    kind: "timesheet.day",
+    target: here,
+    day: null,
+    place: null,
+    leave: null,
+    tasks: null,
+    ...fields,
+  });
+
+  test.each([
+    [["timesheet"], show("day", null)],
+    [["timesheet", "2026-10-16"], show("day", "2026-10-16")],
+    [["timesheet", "day", "2026-10-16", "--json"], show("day", "2026-10-16", { json: true })],
+    [["timesheet", "week"], show("week", null)],
+    [["timesheet", "month", "2026-09"], show("month", "2026-09")],
+    [
+      ["timesheet", "month", "-g", "Banking"],
+      show("month", null, { target: { ...here, group: "Banking" } }),
+    ],
+    [["timesheet", "week", "--all"], show("week", null, { target: { ...here, all: true } })],
+    [
+      ["timesheet", "day", "-w", "mob", "--json"],
+      show("day", null, { target: { ...here, workspace: "mob" }, json: true }),
+    ],
+    [
+      ["timesheet", "day", "--place", "Office", "--tasks", "Login: fixed."],
+      day({ place: "Office", tasks: "Login: fixed." }),
+    ],
+    [["timesheet", "day", "2026-10-16", "--leave"], day({ day: "2026-10-16", leave: true })],
+    [
+      ["timesheet", "day", "--worked", "--group", "Banking"],
+      day({ leave: false, target: { ...here, group: "Banking" } }),
+    ],
+    [["timesheet", "add"], { kind: "timesheet.add", fields: noFields }],
+    [
+      ["timesheet", "add", "-g", "Banking"],
+      { kind: "timesheet.add", fields: { ...noFields, group: "Banking" } },
+    ],
+    [
+      [
+        "timesheet",
+        "add",
+        "-w",
+        "mob",
+        "-c",
+        "Meeting",
+        "--from",
+        "13:00",
+        "--to",
+        "13:30",
+        "-d",
+        "2026-10-16",
+        "--note",
+        "Planning",
+      ],
+      {
+        kind: "timesheet.add",
+        fields: {
+          workspace: "mob",
+          group: null,
+          issue: null,
+          category: "Meeting",
+          from: "13:00",
+          to: "13:30",
+          date: "2026-10-16",
+          note: "Planning",
+        },
+      },
+    ],
+    [
+      ["timesheet", "edit", "ent-1", "--issue", "MOB-1"],
+      { kind: "timesheet.edit", id: "ent-1", fields: { ...noFields, issue: "MOB-1" } },
+    ],
+    [["timesheet", "delete", "ent-1"], { kind: "timesheet.delete", id: "ent-1", yes: false }],
+    [["timesheet", "delete", "ent-1", "-y"], { kind: "timesheet.delete", id: "ent-1", yes: true }],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command as CliCommand) });
+  });
+
+  test.each([
+    [["timesheet", "add", "extra"], "Unexpected argument: extra"],
+    [["timesheet", "edit"], "timesheet edit expects <id>"],
+    [["timesheet", "edit", "ent-1", "-w", "mob"], "--workspace does not apply to timesheet edit"],
+    [["timesheet", "edit", "ent-1", "-g", "Banking"], "--group does not apply to timesheet edit"],
+    [["timesheet", "add", "--all"], "--all does not apply to timesheet add"],
+    [["timesheet", "week", "--place", "x"], "--place does not apply to timesheet week"],
+  ])("rejects %p", (argv, message) => {
+    const result = parseArgs(argv);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain(message);
+  });
+
+  test("a word the default subcommand cannot take is an unknown command", () => {
+    expect(parseArgs(["timer", "2026-10-16"])).toMatchObject({
+      ok: false,
+      error: { message: "Unknown timer command: 2026-10-16" },
+    });
+  });
+});
+
 describe("parseArgs: work", () => {
   test.each([
     [["work"], { kind: "work.status", json: false }],

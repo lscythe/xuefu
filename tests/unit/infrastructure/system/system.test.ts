@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { correlationId, eventId, timerId, workId } from "../../../../src/domain/shared/ids";
+import {
+  correlationId,
+  entryId,
+  eventId,
+  timerId,
+  workId,
+} from "../../../../src/domain/shared/ids";
 import { systemClock } from "../../../../src/infrastructure/system/clock";
 import { uuidV7Ids } from "../../../../src/infrastructure/system/ids";
 
@@ -20,8 +26,9 @@ describe("uuidV7Ids", () => {
     expect([...ids].sort()).toEqual(ids);
   });
 
-  test("generates valid correlation, timer and work ids", () => {
+  test("generates valid correlation, timer, work and entry ids", () => {
     expect(correlationId(uuidV7Ids.correlationId()).ok).toBe(true);
+    expect(entryId(uuidV7Ids.entryId()).ok).toBe(true);
     expect(timerId(uuidV7Ids.timerId()).ok).toBe(true);
     expect(workId(uuidV7Ids.workId()).ok).toBe(true);
   });

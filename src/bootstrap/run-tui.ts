@@ -7,6 +7,7 @@ import type { NoteBody } from "../domain/notes/note";
 import { unexpected } from "../domain/shared/errors";
 import { absolutePath } from "../domain/shared/path";
 import { err, ok, type Result } from "../domain/shared/result";
+import type { Timestamp } from "../domain/shared/time";
 import type { Workspace } from "../domain/workspace/workspace";
 import { expandHome } from "../infrastructure/filesystem/safe-path";
 import { systemClock } from "../infrastructure/system/clock";
@@ -174,7 +175,8 @@ export async function runTui(
           ...(issue === null ? {} : { issue }),
           body: text,
         }),
-      loadTracked: (since) => app.timers.trackedSince(since),
+      loadTracked: (since) =>
+        app.timers.tracked(since, (since + 24 * 3_600_000) as Timestamp, null),
       onExternalChange: (listener) => app.changes.watch(listener, CHANGE_POLL_MS),
       onQuit: () => renderer.destroy(),
       agent,

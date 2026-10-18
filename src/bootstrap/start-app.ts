@@ -21,6 +21,11 @@ import {
 } from "../application/timesheet/commands";
 import { TimerQueries } from "../application/timesheet/queries";
 import {
+  registerTimesheetCommands,
+  type TimesheetCommands,
+  timesheetCommands,
+} from "../application/timesheet/timesheet-commands";
+import {
   registerWorkCommands,
   type WorkCommands,
   workCommands,
@@ -57,6 +62,7 @@ import { openDatabase } from "../infrastructure/persistence/sqlite/database";
 import { SqliteEventLedger } from "../infrastructure/persistence/sqlite/event-ledger";
 import { SqliteNoteRepository } from "../infrastructure/persistence/sqlite/note-repository";
 import { SqliteTimerRepository } from "../infrastructure/persistence/sqlite/timer-repository";
+import { SqliteTimesheetRepository } from "../infrastructure/persistence/sqlite/timesheet-repository";
 import { SqliteUnitOfWork } from "../infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkContextRepository } from "../infrastructure/persistence/sqlite/work-context-repository";
 import { SqliteWorkspaceRepository } from "../infrastructure/persistence/sqlite/workspace-repository";
@@ -102,6 +108,7 @@ export interface App {
   readonly workspaces: WorkspaceQueries;
   readonly timerCommands: TimerCommands;
   readonly timers: TimerQueries;
+  readonly timesheetCommands: TimesheetCommands;
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
   readonly activity: ActivityQueries;
@@ -201,6 +208,14 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     unitOfWork,
     ids: uuidV7Ids,
   });
+  const timesheetRepository = new SqliteTimesheetRepository(database);
+  const timesheet = timesheetCommands({
+    timesheet: timesheetRepository,
+    timers: timerRepository,
+    workspaces: workspaceRepository,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
   const workRepository = new SqliteWorkContextRepository(database);
   const work = workCommands({
     contexts: workRepository,
@@ -219,6 +234,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
   const registered = [
     () => registerWorkspaceCommands(commandBus, workspaces),
     () => registerTimerCommands(commandBus, timers),
+    () => registerTimesheetCommands(commandBus, timesheet),
     () => registerWorkCommands(commandBus, work),
     () => registerNoteCommands(commandBus, notes),
   ].reduce<ReturnType<typeof registerWorkCommands>>(
@@ -284,7 +300,8 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
       sessionRepository,
     ),
     timerCommands: timers,
-    timers: new TimerQueries(timerRepository, workspaceRepository),
+    timers: new TimerQueries(timerRepository, timesheetRepository, workspaceRepository),
+    timesheetCommands: timesheet,
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
     activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),

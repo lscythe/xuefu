@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import type { TimerRepository } from "../../../application/ports/timer-repository";
 import { type StorageError, storageError } from "../../../domain/shared/errors";
-import { timerId, workspaceId } from "../../../domain/shared/ids";
+import { type TimerId, timerId, workspaceId } from "../../../domain/shared/ids";
 import { err, ok, type Result } from "../../../domain/shared/result";
 import { type Timestamp, timestamp } from "../../../domain/shared/time";
 import { restoreTimer, type Timer, type TimerSegment } from "../../../domain/timesheet/timer";
@@ -21,6 +21,8 @@ const TimerRowSchema = z.object({
 const SegmentRowSchema = z.object({ start_at: z.number(), end_at: z.number().nullable() });
 
 const TrackedRowSchema = SegmentRowSchema.extend({
+  id: z.string(),
+  position: z.number().int().nonnegative(),
   workspace_id: z.string(),
   issue_key: z.string().nullable(),
 });
@@ -68,13 +70,21 @@ export class SqliteTimerRepository implements TimerRepository {
   constructor(private readonly db: Database) {}
 
   active(): Result<Timer | null, StorageError> {
+    return this.#find("status <> 'stopped'", []);
+  }
+
+  timer(id: TimerId): Result<Timer | null, StorageError> {
+    return this.#find("id = ?", [id]);
+  }
+
+  #find(where: string, values: string[]): Result<Timer | null, StorageError> {
     try {
       const row = this.db
         .query(
           `SELECT id, workspace_id, issue_key, status, started_at, updated_at
-           FROM timers WHERE status <> 'stopped'`,
+           FROM timers WHERE ${where}`,
         )
-        .get();
+        .get(...values);
       if (row === null) return ok(null);
       const parsed = TimerRowSchema.safeParse(row);
       if (!parsed.success) return err(corrupt());
@@ -98,6 +108,7 @@ export class SqliteTimerRepository implements TimerRepository {
              ON CONFLICT (id) DO UPDATE SET
                issue_key = excluded.issue_key,
                status = excluded.status,
+               started_at = excluded.started_at,
                updated_at = excluded.updated_at`,
           )
           .run(
@@ -122,25 +133,27 @@ export class SqliteTimerRepository implements TimerRepository {
     }
   }
 
-  trackedSince(since: Timestamp): Result<TrackedSpan[], StorageError> {
+  tracked(from: Timestamp, to: Timestamp): Result<TrackedSpan[], StorageError> {
     try {
       const rows = this.db
         .query(
-          `SELECT t.workspace_id, t.issue_key, s.start_at, s.end_at
+          `SELECT t.id, s.position, t.workspace_id, t.issue_key, s.start_at, s.end_at
            FROM timer_segments s JOIN timers t ON t.id = s.timer_id
-           WHERE s.end_at IS NULL OR s.end_at > ?
+           WHERE s.start_at < ? AND (s.end_at IS NULL OR s.end_at > ?)
            ORDER BY s.start_at`,
         )
-        .all(since);
+        .all(to, from);
       const spans: TrackedSpan[] = [];
       for (const raw of rows) {
         const row = TrackedRowSchema.safeParse(raw);
         if (!row.success) return err(corrupt());
+        const id = timerId(row.data.id);
         const workspace = workspaceId(row.data.workspace_id);
         const issue = row.data.issue_key === null ? ok(null) : issueKey(row.data.issue_key);
         const start = toTimestamp(row.data.start_at);
         const end = row.data.end_at === null ? null : toTimestamp(row.data.end_at);
         if (
+          !id.ok ||
           !workspace.ok ||
           !issue.ok ||
           start === null ||
@@ -148,7 +161,16 @@ export class SqliteTimerRepository implements TimerRepository {
         ) {
           return err(corrupt());
         }
-        spans.push({ workspaceId: workspace.value, issueKey: issue.value, start, end });
+        spans.push({
+          source: { kind: "timer", id: id.value, position: row.data.position },
+          workspaceId: workspace.value,
+          scope: { kind: "workspace", workspaceId: workspace.value },
+          issueKey: issue.value,
+          category: null,
+          start,
+          end,
+          note: null,
+        });
       }
       return ok(spans);
     } catch (thrown) {

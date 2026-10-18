@@ -144,6 +144,53 @@ export function timerToggle(
   return workspace === null ? null : "start";
 }
 
+/**
+ * Moves where one segment starts and ends, to fix a timer left running or started late. An open
+ * segment's end stays open. The segment may not cross its neighbours, nor end after `now`.
+ */
+export function moveSegment(
+  timer: Timer,
+  position: number,
+  change: { readonly start: Timestamp; readonly end: Timestamp | null },
+  now: Timestamp,
+): Result<Timer, ValidationError> {
+  const segment = timer.segments[position];
+  if (segment === undefined) {
+    return err(
+      validationError("No such stretch of the timer", [
+        { path: "segment", message: `the timer has ${timer.segments.length}` },
+      ]),
+    );
+  }
+  const end = segment.end === null ? null : change.end;
+  const before = timer.segments[position - 1]?.end ?? null;
+  const after = timer.segments[position + 1]?.start ?? null;
+  const problem =
+    segment.end !== null && end === null
+      ? { path: "to", message: "give when it ended" }
+      : end !== null && end <= change.start
+        ? { path: "to", message: "must be after the start" }
+        : (end ?? change.start) > now
+          ? { path: "to", message: "must not be in the future" }
+          : before !== null && change.start < before
+            ? { path: "from", message: "must not be before the stretch ahead of it ends" }
+            : after !== null && end !== null && end > after
+              ? { path: "to", message: "must not be after the next stretch starts" }
+              : null;
+  if (problem !== null) return err(validationError("The timer's time is invalid", [problem]));
+  const segments = timer.segments.map((each, index) =>
+    index === position ? { start: change.start, end } : each,
+  );
+  return ok(
+    timerOf({
+      ...timer,
+      startedAt: segments[0]?.start ?? timer.startedAt,
+      updatedAt: latest(timer.updatedAt, now),
+      segments,
+    }),
+  );
+}
+
 function invalid(problem: string, id: string): ValidationError {
   return validationError("Stored timer is inconsistent", [{ path: "timer", message: problem }], {
     id,

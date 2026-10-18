@@ -53,6 +53,7 @@ import { agentHost } from "./agent-host";
 import { PLUGIN_COMMANDS, PLUGINS } from "./plugins";
 import { runTui, type TuiHost } from "./run-tui";
 import { type App, startApp } from "./start-app";
+import { runTimesheet } from "./timesheet-cli";
 
 /**
  * sysexits(3)-style codes so scripts can tell failure classes apart. `none` (1) means a query
@@ -854,6 +855,24 @@ function runCommand(app: App, out: Output, command: CliCommand): Promise<number>
       return listNotes(app, out, command.json);
     case "work.finish":
       return finishWork(app, out, command);
+    case "timesheet.show":
+    case "timesheet.add":
+    case "timesheet.edit":
+    case "timesheet.delete":
+    case "timesheet.day":
+      return runTimesheet(
+        {
+          app,
+          fail: (error) => fail(out, error),
+          print: (text) => print(out, text),
+          printJson: (value) => printJson(out, value),
+          here: () => {
+            const path = absolutePath(out.runtime.cwd);
+            return path.ok ? app.workspaces.which(path.value) : Promise.resolve(path);
+          },
+        },
+        command,
+      );
     case "plugin":
       return runPluginCommand(app, out, command.invocation);
     default:

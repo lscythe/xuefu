@@ -13,9 +13,11 @@ import { TIMER_EVENTS } from "../../../src/application/timesheet/events";
 import { TimerQueries } from "../../../src/application/timesheet/queries";
 import type { DomainEvent } from "../../../src/domain/shared/event";
 import type { Result } from "../../../src/domain/shared/result";
+import type { Timestamp } from "../../../src/domain/shared/time";
 import { elapsed } from "../../../src/domain/timesheet/timer";
 import { SqliteEventLedger } from "../../../src/infrastructure/persistence/sqlite/event-ledger";
 import { SqliteTimerRepository } from "../../../src/infrastructure/persistence/sqlite/timer-repository";
+import { SqliteTimesheetRepository } from "../../../src/infrastructure/persistence/sqlite/timesheet-repository";
 import { SqliteUnitOfWork } from "../../../src/infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkspaceRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-repository";
 import { migratedMemoryDatabase } from "../../support/database";
@@ -24,6 +26,7 @@ import { SequentialIds } from "../../support/sequential-ids";
 import { testLogger } from "../../support/test-logger";
 
 const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
 
 let db: Database;
 let bus: CommandBus;
@@ -63,7 +66,7 @@ beforeEach(() => {
   });
   const registered = registerTimerCommands(bus, commands);
   if (!registered.ok) throw new Error(registered.error.message);
-  queries = new TimerQueries(timers, workspaces);
+  queries = new TimerQueries(timers, new SqliteTimesheetRepository(db), workspaces);
 });
 afterEach(() => db.close());
 
@@ -281,30 +284,37 @@ test("every recorded event decodes against the catalog", async () => {
   for (const event of page.value.events) expect(catalog.value.decode(event).ok).toBe(true);
 });
 
-describe("trackedSince", () => {
-  test("is the time tracked since a moment, in every workspace, named where it still exists", async () => {
+describe("tracked", () => {
+  const until = (from: Timestamp) => (from + DAY) as Timestamp;
+
+  test("is the time tracked between two moments, in every workspace, named where it still exists", async () => {
     const since = clock.now();
     await bus.invoke(commands.start, { workspace: "mobile-banking", issue: "MOB-7" });
     clock.advance(30 * MINUTE);
     await bus.invoke(commands.start, { workspace: "auth-service" });
     clock.advance(5 * MINUTE);
-    const tracked = unwrap(queries.trackedSince(since));
+    const tracked = unwrap(queries.tracked(since, until(since), null));
     expect<unknown>(tracked.spans.map((s) => [s.workspaceId, s.issueKey, s.end === null])).toEqual([
       ["mobile-banking", "MOB-7", false],
       ["auth-service", null, true],
     ]);
     expect<string | undefined>(tracked.workspaces.get("auth-service")?.name).toBe("Auth Service");
-    expect(unwrap(queries.trackedSince(clock.now())).spans).toHaveLength(1);
+    expect(unwrap(queries.tracked(clock.now(), until(clock.now()), null)).spans).toHaveLength(1);
+    // Nothing yet started is in time that ended before it.
+    expect(unwrap(queries.tracked((since - DAY) as Timestamp, since, null)).spans).toEqual([]);
   });
 
-  test("a failure to read timers or workspaces is a storage error", () => {
+  test("a failure to read timers, entries or workspaces is a storage error", () => {
+    const now = clock.now();
     db.run("DROP TABLE workspaces");
-    expect(queries.trackedSince(clock.now())).toMatchObject({
+    expect(queries.tracked(now, until(now), null)).toMatchObject({
       ok: false,
       error: { kind: "storage" },
     });
+    db.run("DROP TABLE time_entries");
+    expect(queries.tracked(now, until(now), null)).toMatchObject({ ok: false });
     db.run("DROP TABLE timer_segments");
-    expect(queries.trackedSince(clock.now())).toMatchObject({
+    expect(queries.tracked(now, until(now), null)).toMatchObject({
       ok: false,
       error: { kind: "storage" },
     });

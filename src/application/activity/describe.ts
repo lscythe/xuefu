@@ -1,12 +1,16 @@
 import type { DomainEvent } from "../../domain/shared/event";
-import { clockDuration, type Duration } from "../../domain/shared/time";
+import { clockDuration, type Duration, shortDuration } from "../../domain/shared/time";
 import type { EventCatalog, EventDefinition } from "../events/catalog";
 import { NOTE_EVENTS, type NoteClearedPayload, type NoteSavedPayload } from "../notes/events";
 import {
   TIMER_EVENTS,
+  type TimeEntryAddedPayload,
+  type TimeEntryChangedPayload,
+  type TimeEntryDeletedPayload,
   type TimerPausedPayload,
   type TimerStartedPayload,
   type TimerStoppedPayload,
+  type TimesheetDayChangedPayload,
 } from "../timesheet/events";
 import { WORK_EVENTS, type WorkStartedPayload, type WorkStoppedPayload } from "../work/events";
 import {
@@ -52,6 +56,8 @@ const issue = (text: string): ActivitySubject => ({ kind: "issue", text });
 const name = (text: string): ActivitySubject => ({ kind: "name", text });
 const tracked = (payload: { readonly elapsedMs: number }) =>
   clockDuration(payload.elapsedMs as Duration);
+const lasted = (payload: { readonly durationMs: number }) =>
+  shortDuration(payload.durationMs as Duration);
 
 // Typed by the payload each schema guarantees; `never` lets the table hold them all.
 const DESCRIPTIONS: Readonly<Record<string, (payload: never) => ActivityDescription>> = {
@@ -72,6 +78,21 @@ const DESCRIPTIONS: Readonly<Record<string, (payload: never) => ActivityDescript
   TimerPaused: (p: TimerPausedPayload) => said("Paused the timer", null, tracked(p)),
   TimerResumed: () => said("Resumed the timer"),
   TimerStopped: (p: TimerStoppedPayload) => said("Stopped the timer", null, tracked(p)),
+  TimeEntryAdded: (p: TimeEntryAddedPayload) =>
+    said(
+      "Added time for",
+      p.issueKey === null ? name(p.category ?? "") : issue(p.issueKey),
+      p.group === null ? lasted(p) : `${lasted(p)} in ${p.group}`,
+    ),
+  TimeEntryChanged: (p: TimeEntryChangedPayload) => said("Changed added time", null, lasted(p)),
+  TimeEntryDeleted: (p: TimeEntryDeletedPayload) => said("Deleted added time", null, lasted(p)),
+  TimerSegmentMoved: () => said("Changed the timer's time"),
+  TimesheetDayChanged: (p: TimesheetDayChangedPayload) =>
+    said(
+      p.leave ? "Marked as leave" : "Changed the timesheet for",
+      name(p.day),
+      p.group === null ? null : `in ${p.group}`,
+    ),
   NoteSaved: (p: NoteSavedPayload) =>
     p.issueKey === null ? said("Saved its note") : said("Saved the note on", issue(p.issueKey)),
   NoteCleared: (p: NoteClearedPayload) =>

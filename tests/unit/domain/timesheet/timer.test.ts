@@ -5,6 +5,7 @@ import type { Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import {
   elapsed,
+  moveSegment,
   pauseTimer,
   restoreTimer,
   resumeTimer,
@@ -176,6 +177,57 @@ describe("restoreTimer", () => {
     expect(restoreTimer({ ...base, ...change })).toMatchObject({
       ok: false,
       error: { kind: "validation", issues: [{ message: problem }], context: { id: "t1" } },
+    });
+  });
+});
+
+describe("moveSegment", () => {
+  // Ran 0-60, paused, ran 120-180, stopped.
+  const twice = () =>
+    unwrap(stopTimer(unwrap(resumeTimer(unwrap(pauseTimer(fresh(0), at(60))), at(120))), at(180)));
+  const move = (timer: Timer, position: number, start: number, end: number | null) =>
+    moveSegment(timer, position, { start: at(start), end: end === null ? null : at(end) }, at(500));
+
+  test("moves where a stretch starts and ends, and the timer's start with its first", () => {
+    const moved = unwrap(move(twice(), 0, -30, 50));
+    expect(moved.segments).toEqual([
+      { start: at(-30), end: at(50) },
+      { start: at(120), end: at(180) },
+    ]);
+    expect(moved.startedAt).toBe(at(-30));
+    expect(moved.updatedAt).toBe(at(500));
+    expect(unwrap(move(twice(), 1, 70, 400)).segments[1]).toEqual({ start: at(70), end: at(400) });
+  });
+
+  test("an open stretch keeps running; only where it started moves", () => {
+    const running = fresh(100);
+    expect(unwrap(move(running, 0, 40, 300)).segments).toEqual([{ start: at(40), end: null }]);
+  });
+
+  test.each([
+    ["a stretch the timer does not have", 2, 0, 10, "segment", "the timer has 2"],
+    ["an end before the start", 0, 50, 50, "to", "must be after the start"],
+    ["an end in the future", 1, 120, 600, "to", "must not be in the future"],
+    [
+      "crossing the stretch ahead",
+      1,
+      30,
+      180,
+      "from",
+      "must not be before the stretch ahead of it ends",
+    ],
+    ["crossing the stretch after", 0, 0, 130, "to", "must not be after the next stretch starts"],
+  ])("refuses %s", (_, position, start, end, path, message) => {
+    expect(move(twice(), position, start, end)).toMatchObject({
+      ok: false,
+      error: { kind: "validation", issues: [{ path, message }] },
+    });
+  });
+
+  test("a closed stretch must keep an end", () => {
+    expect(move(twice(), 0, 0, null)).toMatchObject({
+      ok: false,
+      error: { issues: [{ path: "to", message: "give when it ended" }] },
     });
   });
 });

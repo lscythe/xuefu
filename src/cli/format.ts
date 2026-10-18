@@ -62,6 +62,31 @@ Commands:
                                   -w, --workspace <id>  another workspace than this folder's
                                   --issue <key>      the issue (default: the work in progress)
   timer pause | resume | stop   Pause, resume or stop the timer
+  timesheet [day] [date]        Show a day's time: what was timed and added, and totals
+                                  (a timesheet is a group's, over all its workspaces;
+                                  by default the group of this folder's workspace)
+                                  -g, --group <name>  another group's timesheet
+                                  -w, --workspace <id>  that workspace's group's timesheet
+                                  --all              every timesheet together
+                                  --json             machine-readable output
+  timesheet week [date]         Show a week, Monday first, with each day's total
+  timesheet month [YYYY-MM]     Show a month: each day's place, leave, tasks and total
+  timesheet add                 Add time no timer ran for, such as a meeting
+                                  --from <HH:MM> --to <HH:MM>  when, today unless --date
+                                  --issue <key> | -c, --category <name>  what it was on
+                                  -d, --date <YYYY-MM-DD>  another day than today
+                                  --note <text>      what was done
+                                  -g, --group <name>  on a group (default: this folder's)
+                                  -w, --workspace <id>  on one workspace instead
+  timesheet edit <id>           Change added time, or a timer's stretch (<timer>:<n>)
+                                  (takes the flags add does, but -g and -w)
+  timesheet delete <id>         Delete added time
+                                  -y, --yes          confirm without asking
+  timesheet day [date]          Say where a day was worked, whether it was leave, what was done
+                                  (on the timesheet -g or -w names, or this folder's)
+                                  --place <name>     where (blank: the usual place)
+                                  --leave | --worked a day off, or not
+                                  --tasks <text>     what was done (blank: none)
   work [status]                 Show the work in progress in every workspace
                                   --json             machine-readable output
   work start <issue>            Work on an issue here and time it; finishes other work here

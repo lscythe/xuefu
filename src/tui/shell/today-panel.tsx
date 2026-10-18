@@ -4,6 +4,7 @@ import type { Clock } from "../../application/ports/clock";
 import type { TrackedTime } from "../../application/timesheet/queries";
 import type { Result } from "../../domain/shared/result";
 import { type Duration, shortDuration, type Timestamp } from "../../domain/shared/time";
+import { scopeName } from "../../domain/timesheet/scope";
 import { type TrackedTotal, trackedTotals } from "../../domain/timesheet/tracked";
 import { ErrorLine } from "../error-line";
 import { PALETTE, SERIES } from "../theme/palette";
@@ -65,17 +66,22 @@ function shares(totals: readonly TrackedTotal[], total: number, width: number): 
 export function TodayPanel(props: TodayPanelProps) {
   const now = useNow(props.clock, props.tickMs);
   const view = () => (props.tracked.ok ? todayView(props.tracked.value, props.since, now()) : null);
-  const name = (total: TrackedTotal) =>
-    (props.tracked.ok ? props.tracked.value.workspaces.get(total.workspaceId)?.name : null) ??
-    total.workspaceId;
+  // A workspace's name, or the group's for time added on a whole group.
+  const name = (total: TrackedTotal) => {
+    const names = props.tracked.ok ? props.tracked.value.workspaces : new Map();
+    return total.workspaceId === null
+      ? scopeName(total.scope, names)
+      : (names.get(total.workspaceId)?.name ?? total.workspaceId);
+  };
   const room = () => props.width - DOT_WIDTH - TIME_WIDTH - 1;
   const shown = () => (view()?.totals ?? []).slice(0, Math.max(1, props.rows - CHROME_ROWS));
   const row = (total: TrackedTotal) => {
-    const label = total.issueKey ?? name(total);
+    const label = total.issueKey ?? total.category ?? name(total);
     const keyWidth = Math.min(room(), Math.max(KEY_WIDTH, Bun.stringWidth(label) + 1));
     const whatWidth = room() - keyWidth;
     // A workspace name cut shorter than this says nothing, so the column is left empty.
-    const what = total.issueKey === null || whatWidth < MIN_WHAT ? "" : name(total);
+    const named = total.issueKey === null && total.category === null;
+    const what = named || whatWidth < MIN_WHAT ? "" : name(total);
     return {
       label: truncateToWidth(label, keyWidth).padEnd(keyWidth),
       what: truncateToWidth(what, Math.max(1, whatWidth)).padEnd(whatWidth),

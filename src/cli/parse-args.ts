@@ -29,6 +29,25 @@ export type CliCommand =
       readonly issue: string | null;
     }
   | { readonly kind: "timer.change"; readonly action: "pause" | "resume" | "stop" }
+  | {
+      readonly kind: "timesheet.show";
+      readonly span: "day" | "week" | "month";
+      /** A day, or a month for "month"; null means today, or this month. */
+      readonly when: string | null;
+      readonly target: TimesheetTarget;
+      readonly json: boolean;
+    }
+  | { readonly kind: "timesheet.add"; readonly fields: TimeFields }
+  | { readonly kind: "timesheet.edit"; readonly id: string; readonly fields: TimeFields }
+  | { readonly kind: "timesheet.delete"; readonly id: string; readonly yes: boolean }
+  | {
+      readonly kind: "timesheet.day";
+      readonly target: TimesheetTarget;
+      readonly day: string | null;
+      readonly place: string | null;
+      readonly leave: boolean | null;
+      readonly tasks: string | null;
+    }
   | { readonly kind: "work.status"; readonly json: boolean }
   | {
       readonly kind: "work.start";
@@ -93,7 +112,36 @@ interface CommandSpec {
   build(args: readonly string[], values: Values): CliCommand;
 }
 
+/**
+ * Whose timesheet: a group's, a workspace's (its group's when it has one), or with `all` every
+ * one together. Nothing given means the timesheet of the workspace containing the current folder.
+ */
+export interface TimesheetTarget {
+  readonly workspace: string | null;
+  readonly group: string | null;
+  readonly all: boolean;
+}
+
+/** Time as typed: when, and against what; null where not given. */
+export interface TimeFields {
+  /**
+   * The workspace, or the whole group, the time is on. Neither means the current folder's
+   * workspace's group, or the workspace itself when it is in none.
+   */
+  readonly workspace: string | null;
+  readonly group: string | null;
+  readonly issue: string | null;
+  readonly category: string | null;
+  /** "13:00"; on `date`, or today. */
+  readonly from: string | null;
+  readonly to: string | null;
+  readonly date: string | null;
+  readonly note: string | null;
+}
+
 const GLOBAL_FLAGS = new Set(["help", "version", "debug", "log-level"]);
+
+const TIME_FLAGS = ["workspace", "group", "issue", "category", "from", "to", "date", "note"];
 
 const text = (values: Values, key: string): string | null => {
   const value = values[key];
@@ -101,6 +149,39 @@ const text = (values: Values, key: string): string | null => {
 };
 const flag = (values: Values, key: string): boolean => values[key] === true;
 const arg = (args: readonly string[], index: number): string => args[index] ?? "";
+
+const timesheetTarget = (values: Values): TimesheetTarget => ({
+  workspace: text(values, "workspace"),
+  group: text(values, "group"),
+  all: flag(values, "all"),
+});
+
+const timeFields = (values: Values): TimeFields => ({
+  workspace: text(values, "workspace"),
+  group: text(values, "group"),
+  issue: text(values, "issue"),
+  category: text(values, "category"),
+  from: text(values, "from"),
+  to: text(values, "to"),
+  date: text(values, "date"),
+  note: text(values, "note"),
+});
+
+function timesheetShow(span: "day" | "week" | "month"): CommandSpec {
+  return {
+    usage: span === "month" ? "[YYYY-MM]" : "[YYYY-MM-DD]",
+    minArgs: 0,
+    maxArgs: 1,
+    flags: ["json", "workspace", "group", "all"],
+    build: (args, values) => ({
+      kind: "timesheet.show",
+      span,
+      when: args[0] ?? null,
+      target: timesheetTarget(values),
+      json: flag(values, "json"),
+    }),
+  };
+}
 
 function timerChange(action: "pause" | "resume" | "stop"): CommandSpec {
   return {
@@ -116,6 +197,7 @@ function timerChange(action: "pause" | "resume" | "stop"): CommandSpec {
 const GROUPS: Readonly<Record<string, string>> = {
   workspace: "list",
   timer: "status",
+  timesheet: "day",
   work: "status",
   note: "show",
 };
@@ -308,6 +390,53 @@ const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     flags: [],
     build: () => ({ kind: "mcp" }),
   },
+  "timesheet day": {
+    ...timesheetShow("day"),
+    flags: ["json", "workspace", "group", "all", "place", "leave", "worked", "tasks"],
+    build: (args, values) => {
+      const changes = ["place", "leave", "worked", "tasks"].some((key) => key in values);
+      if (!changes) return timesheetShow("day").build(args, values);
+      return {
+        kind: "timesheet.day",
+        target: timesheetTarget(values),
+        day: args[0] ?? null,
+        place: text(values, "place"),
+        leave: flag(values, "leave") ? true : flag(values, "worked") ? false : null,
+        tasks: text(values, "tasks"),
+      };
+    },
+  },
+  "timesheet week": timesheetShow("week"),
+  "timesheet month": timesheetShow("month"),
+  "timesheet add": {
+    usage: "",
+    minArgs: 0,
+    maxArgs: 0,
+    flags: TIME_FLAGS,
+    build: (_args, values) => ({ kind: "timesheet.add", fields: timeFields(values) }),
+  },
+  "timesheet edit": {
+    usage: "<id>",
+    minArgs: 1,
+    maxArgs: 1,
+    flags: TIME_FLAGS.filter((name) => name !== "workspace" && name !== "group"),
+    build: (args, values) => ({
+      kind: "timesheet.edit",
+      id: arg(args, 0),
+      fields: timeFields(values),
+    }),
+  },
+  "timesheet delete": {
+    usage: "<id>",
+    minArgs: 1,
+    maxArgs: 1,
+    flags: ["yes"],
+    build: (args, values) => ({
+      kind: "timesheet.delete",
+      id: arg(args, 0),
+      yes: flag(values, "yes"),
+    }),
+  },
   "timer pause": timerChange("pause"),
   "timer resume": timerChange("resume"),
   "timer stop": timerChange("stop"),
@@ -389,8 +518,14 @@ function resolveCommand(
     const [sub = fallback, ...args] = rest;
     const name = `${command} ${sub}`;
     const spec = lookup(name);
-    if (spec === undefined) return err(usage(`Unknown ${command} command: ${sub}`));
-    return ok({ name, spec, args });
+    if (spec !== undefined) return ok({ name, spec, args });
+    // `timesheet 2026-10-16` is the default subcommand's argument, when it takes one.
+    const named = `${command} ${fallback}`;
+    const otherwise = lookup(named);
+    if (otherwise !== undefined && otherwise.maxArgs > 0) {
+      return ok({ name: named, spec: otherwise, args: rest });
+    }
+    return err(usage(`Unknown ${command} command: ${sub}`));
   }
   const spec = lookup(command);
   if (spec === undefined || command.includes(" ")) {
@@ -409,12 +544,22 @@ const CORE_OPTIONS: Readonly<OptionTable> = {
   json: { type: "boolean" },
   name: { type: "string" },
   id: { type: "string" },
-  group: { type: "string" },
+  group: { type: "string", short: "g" },
+  all: { type: "boolean" },
   yes: { type: "boolean", short: "y" },
   workspace: { type: "string", short: "w" },
   issue: { type: "string" },
   title: { type: "string" },
   limit: { type: "string", short: "n" },
+  category: { type: "string", short: "c" },
+  from: { type: "string" },
+  to: { type: "string" },
+  date: { type: "string", short: "d" },
+  note: { type: "string" },
+  place: { type: "string" },
+  leave: { type: "boolean" },
+  worked: { type: "boolean" },
+  tasks: { type: "string" },
 };
 
 /** The core's flags plus every plugin's; a plugin reusing a core flag must use it the same way. */

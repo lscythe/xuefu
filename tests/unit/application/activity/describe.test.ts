@@ -106,6 +106,68 @@ describe("describeEvent", () => {
     });
   });
 
+  test("the timesheet: time added on an issue or in a category, changed, and days", () => {
+    expect(
+      describes("TimeEntryAdded", {
+        entryId: "e",
+        group: null,
+        issueKey: null,
+        category: "Meeting",
+        durationMs: 30 * 60_000,
+      }),
+    ).toEqual({
+      action: "Added time for",
+      subject: { kind: "name", text: "Meeting" },
+      detail: "30m",
+    });
+    expect(
+      describes("TimeEntryAdded", {
+        entryId: "e",
+        group: "Payments",
+        issueKey: null,
+        category: "Meeting",
+        durationMs: 30 * 60_000,
+      }),
+    ).toMatchObject({ detail: "30m in Payments" });
+    expect(
+      describes("TimeEntryAdded", {
+        entryId: "e",
+        group: null,
+        issueKey: "MOB-1",
+        category: null,
+        durationMs: 90 * 60_000,
+      }),
+    ).toMatchObject({ subject: { kind: "issue", text: "MOB-1" }, detail: "1h 30m" });
+    expect(describes("TimeEntryDeleted", { entryId: "e", durationMs: 60_000 })).toMatchObject({
+      action: "Deleted added time",
+      detail: "1m",
+    });
+    expect(
+      describes("TimesheetDayChanged", {
+        day: "2026-09-10",
+        group: null,
+        leave: true,
+        tasks: false,
+      }),
+    ).toEqual({
+      action: "Marked as leave",
+      subject: { kind: "name", text: "2026-09-10" },
+      detail: null,
+    });
+    expect(
+      describes("TimesheetDayChanged", {
+        day: "2026-09-10",
+        group: "Payments",
+        leave: false,
+        tasks: true,
+      }),
+    ).toEqual({
+      action: "Changed the timesheet for",
+      subject: { kind: "name", text: "2026-09-10" },
+      detail: "in Payments",
+    });
+  });
+
   test("an event it cannot read is shown as such, never dropped", () => {
     const unrecognised = {
       action: "Unrecognised event",
@@ -135,6 +197,17 @@ describe("describeEvent", () => {
       TimerStopped: { timerId: "t", elapsedMs: 0 },
       NoteSaved: { noteId: "n", workspaceId: "m", issueKey: null, characters: 1 },
       NoteCleared: { noteId: "n", workspaceId: "m", issueKey: null },
+      TimeEntryAdded: {
+        entryId: "e",
+        group: null,
+        issueKey: "MOB-1",
+        category: null,
+        durationMs: 1,
+      },
+      TimeEntryChanged: { entryId: "e", durationMs: 1 },
+      TimeEntryDeleted: { entryId: "e", durationMs: 1 },
+      TimerSegmentMoved: { timerId: "t", position: 0 },
+      TimesheetDayChanged: { day: "2026-09-01", group: null, leave: false, tasks: true },
     };
     expect(Object.keys(samples).sort()).toEqual(RECORDED_EVENTS.map((e) => e.type).sort());
     for (const [type, payload] of Object.entries(samples)) {

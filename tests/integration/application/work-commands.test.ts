@@ -16,6 +16,7 @@ import { WorkQueries } from "../../../src/application/work/queries";
 import type { Result } from "../../../src/domain/shared/result";
 import { SqliteEventLedger } from "../../../src/infrastructure/persistence/sqlite/event-ledger";
 import { SqliteTimerRepository } from "../../../src/infrastructure/persistence/sqlite/timer-repository";
+import { SqliteTimesheetRepository } from "../../../src/infrastructure/persistence/sqlite/timesheet-repository";
 import { SqliteUnitOfWork } from "../../../src/infrastructure/persistence/sqlite/unit-of-work";
 import { SqliteWorkContextRepository } from "../../../src/infrastructure/persistence/sqlite/work-context-repository";
 import { SqliteWorkspaceRepository } from "../../../src/infrastructure/persistence/sqlite/workspace-repository";
@@ -64,7 +65,7 @@ beforeEach(() => {
   const registered = registerWorkCommands(bus, commands);
   if (!registered.ok) throw new Error(registered.error.message);
   work = new WorkQueries(contexts, workspaces);
-  timers = new TimerQueries(timerRepository, workspaces);
+  timers = new TimerQueries(timerRepository, new SqliteTimesheetRepository(db), workspaces);
 });
 afterEach(() => db.close());
 
