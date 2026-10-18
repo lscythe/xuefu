@@ -758,6 +758,139 @@ describe("runCli: work", () => {
   });
 });
 
+describe("runCli: timesheet", () => {
+  const DAY = "2026-09-07";
+  let mobile: string;
+  beforeEach(async () => {
+    mobile = join(realpathSync(dir.path), "mobile");
+    mkdirSync(mobile);
+    await run(["workspace", "add", mobile, "--name", "Mobile Banking"]);
+  });
+
+  /** Adds time on DAY and gives back its id. */
+  async function add(...flags: string[]): Promise<string> {
+    const added = await run(["timesheet", "add", "-d", DAY, ...flags], {}, mobile);
+    expect(added).toMatchObject({ code: EXIT.ok, stderr: "" });
+    return /\((.+)\)\n$/.exec(added.stdout)?.[1] ?? "";
+  }
+
+  test("time is added, shown by day, week and month, changed and deleted", async () => {
+    const added = await run(
+      ["timesheet", "add", "-d", DAY, "--from", "09:00", "--to", "09:30", "-c", "Meeting"],
+      {},
+      mobile,
+    );
+    expect(added.stdout).toMatch(/^✓ Added 30m for Meeting \(.+\)\n$/);
+    const id = await add("--from", "23:00", "--to", "01:00", "--issue", "MOB-1", "--note", "Fix");
+
+    const day = await run(["timesheet", DAY]);
+    expect(day.code).toBe(EXIT.ok);
+    expect(day.stdout).toStartWith("7 September 2026  1h 30m\n");
+    expect(day.stdout).toMatch(/09:00-09:30 +30m +Meeting/);
+    expect(day.stdout).toMatch(new RegExp(`23:00-24:00 +1h 00m +MOB-1 +Fix +${id}`));
+    const next = await run(["timesheet", "day", "2026-09-08", "--json"]);
+    expect(JSON.parse(next.stdout)).toMatchObject({
+      day: "2026-09-08",
+      spans: [{ id, kind: "entry", issueKey: "MOB-1", note: "Fix", durationMs: 2 * 3_600_000 }],
+    });
+
+    const week = await run(["timesheet", "week", DAY]);
+    expect(week.stdout).toMatch(/^DATE +TIME +NOTES\n7 September 2026 +1h 30m/);
+    expect(week.stdout).toMatch(/13 September 2026 +-/);
+    expect(week.stdout).toMatch(/Total +2h 30m/);
+    const month = JSON.parse((await run(["timesheet", "month", "2026-09", "--json"])).stdout);
+    expect(month).toHaveLength(30);
+
+    expect(await run(["timesheet", "edit", id, "--to", "23:45", "--note", ""])).toMatchObject({
+      code: EXIT.ok,
+      stdout: `✓ Changed ${id}\n`,
+    });
+    expect((await run(["timesheet", DAY])).stdout).toMatch(/23:00-23:45 +45m +MOB-1 +\S+\n/);
+
+    const asked = await run(["timesheet", "delete", id]);
+    expect(asked.code).toBe(EXIT.usage);
+    expect(asked.stderr).toContain("Re-run with --yes to confirm.");
+    expect(await run(["timesheet", "delete", id, "-y"])).toMatchObject({
+      code: EXIT.ok,
+      stdout: `✓ Deleted ${id}\n`,
+    });
+    expect((await run(["timesheet", DAY])).stdout).toStartWith("7 September 2026  30m\n");
+  });
+
+  test("a day's place, leave and tasks are set and shown", async () => {
+    expect(
+      await run(["timesheet", "day", DAY, "--place", "Office", "--tasks", "Login: fixed."]),
+    ).toMatchObject({ code: EXIT.ok, stdout: `✓ Changed ${DAY}\n` });
+    await run(["timesheet", "day", DAY, "--leave"]);
+    expect((await run(["timesheet", DAY])).stdout).toBe(
+      "7 September 2026  0m\n  Leave\n  At Office\n  Tasks: Login: fixed.\n  Nothing tracked.\n",
+    );
+    expect((await run(["timesheet", "day", "--worked"])).code).toBe(EXIT.ok);
+  });
+
+  test("a timer's stretch is moved, and only its time can change", async () => {
+    await run(["timer", "start"], {}, mobile);
+    await run(["timer", "stop"]);
+    const today = JSON.parse((await run(["timesheet", "--json"])).stdout);
+    const stretch: string = today.spans[0].id;
+    expect(stretch).toMatch(/:0$/);
+
+    expect(
+      await run(["timesheet", "edit", stretch, "-d", DAY, "--from", "08:00", "--to", "08:30"]),
+    ).toMatchObject({ code: EXIT.ok, stdout: `✓ Changed ${stretch}\n` });
+    expect((await run(["timesheet", DAY])).stdout).toMatch(
+      new RegExp(`08:00-08:30 +30m +Mobile Banking +timed +${stretch}`),
+    );
+    expect(await run(["timesheet", "edit", stretch, "-d", DAY, "--to", "08:15"])).toMatchObject({
+      code: EXIT.ok,
+    });
+    expect((await run(["timesheet", DAY])).stdout).toMatch(/08:00-08:15 +15m/);
+
+    const refused = await run(["timesheet", "edit", stretch, "--note", "x"]);
+    expect(refused.code).toBe(EXIT.usage);
+    expect(refused.stderr).toContain("Only a timer's time can change");
+    const [timer] = stretch.split(":");
+    expect((await run(["timesheet", "edit", `${timer}:4`, "--from", "08:00"])).code).toBe(
+      EXIT.noInput,
+    );
+  });
+
+  test("bad input and unknown time are reported", async () => {
+    const missing = await run(["timesheet", "add", "-c", "Meeting"], {}, mobile);
+    expect(missing.code).toBe(EXIT.usage);
+    expect(missing.stderr).toContain("When is missing");
+    const late = await run(["timesheet", "add", "--from", "25:00", "--to", "26:00"], {}, mobile);
+    expect(late.stderr).toContain("--from is not a time of day");
+    expect(
+      (await run(["timesheet", "add", "--from", "09:00", "--to", "nine"], {}, mobile)).stderr,
+    ).toContain("--to is not a time of day");
+    expect(
+      (await run(["timesheet", "add", "-d", "2026-02-30", "--from", "09:00", "--to", "10:00"]))
+        .code,
+    ).toBe(EXIT.usage);
+    expect(
+      (await run(["timesheet", "add", "--from", "09:00", "--to", "10:00", "-c", "Meeting"])).stderr,
+    ).toContain("Not inside a workspace");
+    expect(
+      (await run(["timesheet", "add", "--from", "09:00", "--to", "10:00"], {}, mobile)).code,
+    ).toBe(EXIT.usage);
+    expect((await run(["timesheet", "2026-13-01"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "week", "nope"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "month", "2026-9"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "day", "nope", "--leave"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "day", DAY, "--place", "a\u0007"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "edit", "ent 1", "--from", "08:00"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "edit", "ghost", "--from", "08:00"])).code).toBe(EXIT.noInput);
+    expect((await run(["timesheet", "edit", "ghost", "--from", "8"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "edit", " :0", "--from", "08:00"])).code).toBe(EXIT.usage);
+    expect((await run(["timesheet", "edit", "ghost:0", "--from", "08:00"])).code).toBe(
+      EXIT.noInput,
+    );
+    expect((await run(["timesheet", "delete", "ghost", "-y"])).code).toBe(EXIT.noInput);
+    expect((await run(["timesheet", "month"])).code).toBe(EXIT.ok);
+  });
+});
+
 describe("runCli: activity", () => {
   const line = (text: string) => new RegExp(`^ {2}\\d\\d:\\d\\d {2}${text}$`);
 

@@ -148,6 +148,104 @@ describe("parseArgs: timer", () => {
   });
 });
 
+describe("parseArgs: timesheet", () => {
+  const noFields = {
+    workspace: null,
+    issue: null,
+    category: null,
+    from: null,
+    to: null,
+    date: null,
+    note: null,
+  };
+
+  test.each([
+    [["timesheet"], { kind: "timesheet.show", span: "day", when: null, json: false }],
+    [
+      ["timesheet", "2026-10-16"],
+      { kind: "timesheet.show", span: "day", when: "2026-10-16", json: false },
+    ],
+    [
+      ["timesheet", "day", "2026-10-16", "--json"],
+      { kind: "timesheet.show", span: "day", when: "2026-10-16", json: true },
+    ],
+    [["timesheet", "week"], { kind: "timesheet.show", span: "week", when: null, json: false }],
+    [
+      ["timesheet", "month", "2026-09"],
+      { kind: "timesheet.show", span: "month", when: "2026-09", json: false },
+    ],
+    [
+      ["timesheet", "day", "--place", "Office", "--tasks", "Login: fixed."],
+      { kind: "timesheet.day", day: null, place: "Office", leave: null, tasks: "Login: fixed." },
+    ],
+    [
+      ["timesheet", "day", "2026-10-16", "--leave"],
+      { kind: "timesheet.day", day: "2026-10-16", place: null, leave: true, tasks: null },
+    ],
+    [
+      ["timesheet", "day", "--worked"],
+      { kind: "timesheet.day", day: null, place: null, leave: false, tasks: null },
+    ],
+    [["timesheet", "add"], { kind: "timesheet.add", fields: noFields }],
+    [
+      [
+        "timesheet",
+        "add",
+        "-w",
+        "mob",
+        "-c",
+        "Meeting",
+        "--from",
+        "13:00",
+        "--to",
+        "13:30",
+        "-d",
+        "2026-10-16",
+        "--note",
+        "Planning",
+      ],
+      {
+        kind: "timesheet.add",
+        fields: {
+          workspace: "mob",
+          issue: null,
+          category: "Meeting",
+          from: "13:00",
+          to: "13:30",
+          date: "2026-10-16",
+          note: "Planning",
+        },
+      },
+    ],
+    [
+      ["timesheet", "edit", "ent-1", "--issue", "MOB-1"],
+      { kind: "timesheet.edit", id: "ent-1", fields: { ...noFields, issue: "MOB-1" } },
+    ],
+    [["timesheet", "delete", "ent-1"], { kind: "timesheet.delete", id: "ent-1", yes: false }],
+    [["timesheet", "delete", "ent-1", "-y"], { kind: "timesheet.delete", id: "ent-1", yes: true }],
+  ] as const)("%p", (argv, command) => {
+    expect(parseArgs([...argv])).toEqual({ ok: true, value: run(command) });
+  });
+
+  test.each([
+    [["timesheet", "add", "extra"], "Unexpected argument: extra"],
+    [["timesheet", "edit"], "timesheet edit expects <id>"],
+    [["timesheet", "edit", "ent-1", "-w", "mob"], "--workspace does not apply to timesheet edit"],
+    [["timesheet", "week", "--place", "x"], "--place does not apply to timesheet week"],
+  ])("rejects %p", (argv, message) => {
+    const result = parseArgs(argv);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain(message);
+  });
+
+  test("a word the default subcommand cannot take is an unknown command", () => {
+    expect(parseArgs(["timer", "2026-10-16"])).toMatchObject({
+      ok: false,
+      error: { message: "Unknown timer command: 2026-10-16" },
+    });
+  });
+});
+
 describe("parseArgs: work", () => {
   test.each([
     [["work"], { kind: "work.status", json: false }],
