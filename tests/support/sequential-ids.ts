@@ -1,13 +1,21 @@
 import type { IdGenerator } from "../../src/application/ports/id-generator";
-import type { CorrelationId, EventId, NoteId, TimerId, WorkId } from "../../src/domain/shared/ids";
+import type {
+  CorrelationId,
+  EntryId,
+  EventId,
+  NoteId,
+  TimerId,
+  WorkId,
+} from "../../src/domain/shared/ids";
 
-/** Predictable ids for assertions: evt-1, evt-2, …, corr-1, corr-2, …, tmr-N, wrk-N and not-N */
+/** Predictable ids for assertions: evt-1, evt-2, …, corr-1, corr-2, …, tmr-N, wrk-N, not-N, ent-N */
 export class SequentialIds implements IdGenerator {
   #event = 0;
   #correlation = 0;
   #timer = 0;
   #work = 0;
   #note = 0;
+  #entry = 0;
 
   eventId(): EventId {
     this.#event += 1;
@@ -32,5 +40,10 @@ export class SequentialIds implements IdGenerator {
   noteId(): NoteId {
     this.#note += 1;
     return `not-${this.#note}` as NoteId;
+  }
+
+  entryId(): EntryId {
+    this.#entry += 1;
+    return `ent-${this.#entry}` as EntryId;
   }
 }

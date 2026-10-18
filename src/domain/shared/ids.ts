@@ -9,6 +9,7 @@ export type WorkspaceId = Brand<string, "WorkspaceId">;
 export type TimerId = Brand<string, "TimerId">;
 export type WorkId = Brand<string, "WorkId">;
 export type NoteId = Brand<string, "NoteId">;
+export type EntryId = Brand<string, "EntryId">;
 
 const TOKEN_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const WORKSPACE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -43,6 +44,10 @@ export function workId(raw: string): Result<WorkId, ValidationError> {
 
 export function noteId(raw: string): Result<NoteId, ValidationError> {
   return parseId("NoteId", TOKEN_ID, "1-128 characters from [A-Za-z0-9_-]", raw);
+}
+
+export function entryId(raw: string): Result<EntryId, ValidationError> {
+  return parseId("EntryId", TOKEN_ID, "1-128 characters from [A-Za-z0-9_-]", raw);
 }
 
 export function workspaceId(raw: string): Result<WorkspaceId, ValidationError> {

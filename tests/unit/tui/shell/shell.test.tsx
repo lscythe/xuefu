@@ -16,7 +16,7 @@ import {
   processError,
   storageError,
 } from "../../../../src/domain/shared/errors";
-import type { NoteId, WorkspaceId } from "../../../../src/domain/shared/ids";
+import type { NoteId, TimerId, WorkspaceId } from "../../../../src/domain/shared/ids";
 import { err, ok, type Result } from "../../../../src/domain/shared/result";
 import type { Timestamp } from "../../../../src/domain/shared/time";
 import type { IssueKey } from "../../../../src/domain/work/issue-key";
@@ -1314,10 +1314,13 @@ describe("Shell dashboard", () => {
     const midnight = Date.UTC(2026, 9, 6) as Timestamp;
     const asked: Timestamp[] = [];
     const span = (issue: string | null, workspace: string, start: number, end: number | null) => ({
+      source: { kind: "timer" as const, id: `t${start}` as TimerId, position: 0 },
       workspaceId: workspace as WorkspaceId,
       issueKey: issue as IssueKey | null,
+      category: null,
       start: start as Timestamp,
       end: end as Timestamp | null,
+      note: null,
     });
     const shell = await renderShell(
       {

@@ -2,7 +2,9 @@ import type { IdGenerator } from "../../application/ports/id-generator";
 import {
   type CorrelationId,
   correlationId,
+  type EntryId,
   type EventId,
+  entryId,
   eventId,
   type NoteId,
   noteId,
@@ -28,4 +30,5 @@ export const uuidV7Ids: IdGenerator = {
   timerId: (): TimerId => mustParse(timerId, Bun.randomUUIDv7()),
   workId: (): WorkId => mustParse(workId, Bun.randomUUIDv7()),
   noteId: (): NoteId => mustParse(noteId, Bun.randomUUIDv7()),
+  entryId: (): EntryId => mustParse(entryId, Bun.randomUUIDv7()),
 };
