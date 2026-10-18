@@ -108,6 +108,7 @@ export class SqliteTimerRepository implements TimerRepository {
              ON CONFLICT (id) DO UPDATE SET
                issue_key = excluded.issue_key,
                status = excluded.status,
+               started_at = excluded.started_at,
                updated_at = excluded.updated_at`,
           )
           .run(

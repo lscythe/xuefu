@@ -21,6 +21,11 @@ import {
 } from "../application/timesheet/commands";
 import { TimerQueries } from "../application/timesheet/queries";
 import {
+  registerTimesheetCommands,
+  type TimesheetCommands,
+  timesheetCommands,
+} from "../application/timesheet/timesheet-commands";
+import {
   registerWorkCommands,
   type WorkCommands,
   workCommands,
@@ -103,6 +108,7 @@ export interface App {
   readonly workspaces: WorkspaceQueries;
   readonly timerCommands: TimerCommands;
   readonly timers: TimerQueries;
+  readonly timesheetCommands: TimesheetCommands;
   readonly workCommands: WorkCommands;
   readonly work: WorkQueries;
   readonly activity: ActivityQueries;
@@ -203,6 +209,13 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     ids: uuidV7Ids,
   });
   const timesheetRepository = new SqliteTimesheetRepository(database);
+  const timesheet = timesheetCommands({
+    timesheet: timesheetRepository,
+    timers: timerRepository,
+    workspaces: workspaceRepository,
+    unitOfWork,
+    ids: uuidV7Ids,
+  });
   const workRepository = new SqliteWorkContextRepository(database);
   const work = workCommands({
     contexts: workRepository,
@@ -221,6 +234,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
   const registered = [
     () => registerWorkspaceCommands(commandBus, workspaces),
     () => registerTimerCommands(commandBus, timers),
+    () => registerTimesheetCommands(commandBus, timesheet),
     () => registerWorkCommands(commandBus, work),
     () => registerNoteCommands(commandBus, notes),
   ].reduce<ReturnType<typeof registerWorkCommands>>(
@@ -287,6 +301,7 @@ export async function startApp(options: StartOptions): Promise<Result<App, BootE
     ),
     timerCommands: timers,
     timers: new TimerQueries(timerRepository, timesheetRepository, workspaceRepository),
+    timesheetCommands: timesheet,
     workCommands: work,
     work: new WorkQueries(workRepository, workspaceRepository),
     activity: new ActivityQueries(ledger, workspaceRepository, catalog.value),
